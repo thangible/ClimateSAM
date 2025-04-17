@@ -33,10 +33,8 @@ class PromptGenerator(nn.Module):
             )
             # Fuse the three features:
             # The concatenation will have 3*fused_channels channels.
-            # For block 2 and block 4 (i.e. block_idx==1 or 3), use stride=2 to downsample the spatial dims.
-            stride = 2 if block_idx % 2 == 1 else 1
             self.block_fuse_convs.append(
-                nn.Conv2d(3 * fused_channels, fused_channels, kernel_size=3, padding=1, stride=stride)
+                nn.Conv2d(3 * fused_channels, fused_channels, kernel_size=3, padding=1, stride=2)
             )
             # After fusion, if this is not the first block, we will concatenate with the previous block's
             # upsampled output. That doubles the channels from fused_channels to 2*fused_channels.

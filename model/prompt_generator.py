@@ -22,10 +22,20 @@ class PromptGenerator(nn.Module):
         # Define transpose convolution upsamplers for each feature level.
         # Here we assume all features are upsampled from a smaller spatial size to the target size.
         # You may adjust kernel_size/stride as appropriate for your resolution differences.
-        self.upsamplers = nn.ModuleList([
-            nn.ConvTranspose2d(fused_channels, fused_channels, kernel_size=2, stride=2)
-            for _ in in_channels_list
-        ])
+        self.upsamplers = nn.ModuleList()
+        for i in range(len(in_channels_list)):
+            if i < 3:
+                num_layers = 1
+            elif i < 6:
+                num_layers = 2
+            elif i < 9:
+                num_layers = 3
+            else:
+                num_layers = 4
+            conv_layers = [nn.ConvTranspose2d(fused_channels, fused_channels, kernel_size=2, stride=2)
+                        for _ in range(num_layers)]
+            
+            self.upsamplers.append(nn.Sequential(*conv_layers))
 
         self.fuse_conv = nn.Conv2d(len(in_channels_list)*fused_channels, fused_channels, kernel_size=3, padding=1)
         
@@ -80,7 +90,7 @@ class PromptGenerator(nn.Module):
 #             layers = []
 #             for _ in range(i):
 #                 layers.append(
-#                     nn.ConvTranspose2d(in_channels, in_channels, kernel_size=4, stride=2, padding=1)
+#                     nn.ConvTranspose2d(in_channels, in_channels, kernel_size=3, stride=1, padding=0)
 #                 )
 #             self.branch_blocks.append(nn.Sequential(*layers))
         
