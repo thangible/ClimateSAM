@@ -1,12 +1,16 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from module import LayerNorm2d
 
 class PromptGenerator(nn.Module):
     def __init__(self, pool_size: tuple = (2, 2)):
         super(PromptGenerator, self).__init__()
-        # Here fused_channels is 768
-        fused_channels = 768
+        fused_channels = 256
+        in_channels = 768
+        out_channels = 256
+        
+        
         self.pool = nn.AdaptiveAvgPool2d(pool_size)
         
         # Create four blocks.
@@ -17,18 +21,22 @@ class PromptGenerator(nn.Module):
         #   For blocks 2 and 4, we downsample spatially (stride=2) during fusion.
         # - block_out_trans: After fusion (and possible concatenation with previous block output), 
         #   upsample the fused feature for the next block.
+        self.input_reduction = nn.ModuleList()
         self.block_feature_upsamplers = nn.ModuleList()
         self.block_fuse_convs = nn.ModuleList()
         self.block_out_trans = nn.ModuleList()
         
         for block_idx in range(4):
+            self.input_reduction.append(
+                nn.Conv2d(in_channels, fused_channels, kernel_size=1, padding=0, bias=False)
+            )
             num_layers = block_idx + 1
             # Each input feature is assumed to have fused_channels channels.
             # Upsample each feature (by a factor of 2 each ConvTranspose2d)
             self.block_feature_upsamplers.append(
                 nn.Sequential(*[
                     nn.ConvTranspose2d(fused_channels, fused_channels, kernel_size=2, stride=2)
-                    for _ in range(num_layers)
+                    for i in range(num_layers)
                 ])
             )
             # Fuse the three features:
@@ -38,10 +46,10 @@ class PromptGenerator(nn.Module):
             )
             # After fusion, if this is not the first block, we will concatenate with the previous block's
             # upsampled output. That doubles the channels from fused_channels to 2*fused_channels.
-            in_channels = fused_channels if block_idx == 0 else fused_channels * 2
+            up_in_channels = fused_channels if block_idx == 0 else fused_channels * 2
             # Extra upsampling: always upsample by a factor of 2.
             self.block_out_trans.append(
-                nn.ConvTranspose2d(in_channels, fused_channels, kernel_size=2, stride=2)
+                nn.ConvTranspose2d(up_in_channels, fused_channels, kernel_size=2, stride=2)
             )
         
         # Update box_mlp to accept 4 pooled features.
@@ -49,7 +57,18 @@ class PromptGenerator(nn.Module):
         self.box_mlp = nn.Sequential(
             nn.Linear(mlp_in_dim, fused_channels),
             nn.ReLU(),
-            nn.Linear(fused_channels, fused_channels)
+            nn.Linear(fused_channels, out_channels)
+        )
+        
+        self.neck = nn.Sequential(
+            nn.Conv2d(
+                fused_channels,
+                out_channels,
+                kernel_size=1,
+                padding=0,
+                bias=False,
+            ),
+            LayerNorm2d(out_channels)            
         )
 
     def forward(self, feat_list):
@@ -67,10 +86,13 @@ class PromptGenerator(nn.Module):
         box_queries_list = []
         prev_up = None
         for block_idx in range(4):
+            
             # Get group of 3 features for this block.
             group = reversed_feats[block_idx*3:(block_idx+1)*3]
+            # reduce the input channels to fused_channels.
+            reduced_group = [self.input_reduction[block_idx](f) for f in group]
             # Upsample each feature using the corresponding block upsampler.
-            upsampled_group = [self.block_feature_upsamplers[block_idx](f) for f in group]
+            upsampled_group = [self.block_feature_upsamplers[block_idx](f) for f in reduced_group]
             # Concatenate along the channel dimension.
             group_concat = torch.cat(upsampled_group, dim=1)  # shape: (B, 3*256, H, W)
             # Fuse the concatenated features.
@@ -90,5 +112,5 @@ class PromptGenerator(nn.Module):
         box_out = self.box_mlp(box_concat)
         
         # The final fused feature is the output from the last block.
-        fused_feats = prev_up
+        fused_feats = self.neck(prev_up)
         return fused_feats, box_out
