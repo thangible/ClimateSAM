@@ -5,8 +5,8 @@ import torch.nn.functional as F
 class PromptGenerator(nn.Module):
     def __init__(self, pool_size: tuple = (2, 2)):
         super(PromptGenerator, self).__init__()
-        # Here fused_channels is 256
-        fused_channels = 256
+        # Here fused_channels is 768
+        fused_channels = 768
         self.pool = nn.AdaptiveAvgPool2d(pool_size)
         
         # Create four blocks.
@@ -55,12 +55,14 @@ class PromptGenerator(nn.Module):
     def forward(self, feat_list):
         """
         Args:
-            feat_list: list of 12 feature maps, each of shape (B, 256, 64, 64)
+            feat_list: list of 12 feature maps, each of shape (B, 64, 64, 768)
         Returns:
             fused_feats: final upsampled feature from last block.
             box_out: output from box_mlp.
         """
         # Reverse the feature list and process in groups of 3.
+        # Permute feature maps from (B, 64, 64, 768) to (B, 768, 64, 64)
+        feat_list = [f.permute(0, 3, 1, 2) for f in feat_list]
         reversed_feats = feat_list[::-1]
         box_queries_list = []
         prev_up = None
