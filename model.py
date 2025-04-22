@@ -4,6 +4,7 @@ from torch import nn
 from model.image_encoder import ClimateSAMImageEncoder
 from model.prompt_encoder import PromptEncoderWrapper
 from model.mask_decoder import MaskDecoderHQ
+from model.prompt_generator import PromptGenerator
 from model.segment_anything_ext.build_sam import sam_model_registry
 from typing import Union, List, Tuple
 
@@ -30,26 +31,28 @@ class ClimateSAM(nn.Module):
         self.sam_img_size = (self.ori_sam.image_encoder.img_size, self.ori_sam.image_encoder.img_size)
 
         # ClimateSAM model
-        self.input_adapt = nn.Conv2d(17, 3, kernel_size=1, stride=1, padding=0)
+        self.input_adapt = nn.Sequential(
+            nn.Conv2d(16, 3, kernel_size=1, stride=1, padding=0),
+            nn.Upsample(size=self.sam_img_size, mode='bilinear', align_corners=False)
+        )
+        
         self.image_encoder = ClimateSAMImageEncoder(ori_sam=self.ori_sam, fix=True)
+        self.prompt_generator = PromptGenerator()
         self.prompt_encoder = PromptEncoderWrapper(ori_sam=self.ori_sam, fix=True)
         self.mask_decoder = MaskDecoderHQ(
             model_type, self.ori_sam.mask_decoder.state_dict()
         )
         
         #set weights for input adaptation:
-        with torch.no_grad():
-            # Zero out all weights
-                self.input_adapt.weight.zero_()
-                
-                # Define the channels where you want high weights
-                if input_weight is None:
-                    input_weight = [0, 5, 7]
-                
-                # For instance, set those weights to 1.0 for every output channel
-                for out_ch in range(self.input_adapt.weight.shape[0]):
-                    for in_ch in high_channels:
-                        self.input_adapt.weight[out_ch, in_ch, 0, 0] = 1.0    
+        # Zero out all weights 
+        # Define the channels where you want high weights
+        self.input_adapt.weight.zero_()  
+        if input_weight is None:
+            input_weight = [0, 1, 2] # for 'TMQ', 'U850', 'V850'
+        # For instance, set those weights to 1.0 for every output channel
+        for out_ch in range(self.input_adapt.weight.shape[0]):
+            for in_ch in input_weight:
+                self.input_adapt.weight[out_ch, in_ch, 0, 0] = 1.0    
         
     def train(self, mode: bool = True):
         # set train status for this class: disable all but the prompt-related modules
@@ -74,8 +77,43 @@ class ClimateSAM(nn.Module):
     ):
         img = self.input_adapt(input)
         image_embeddings, interm_embeddings = self.image_encoder(img)
+        mask = self.prompt_generator(interm_embeddings)
+        tc_mask, ar_mask = mask[:, 0:1, :, :].squeeze(), mask[:, 1:2, :, :].squeeze()
+        
+        batch_size = len(image_embeddings)
+        tc_mask_embeded = self.prompt_encoder(mask=tc_mask)
+        ar_mask_embeded = self.prompt_encoder(mask=ar_mask)
+        
+        # _, _, masks = self.convert_raw_prompts_to_triple(
+        #     point_coords=None, 
+        #     point_labels=None,
+        #     box_coords=None, 
+        #     noisy_masks=mask, 
+        #     batch_size=batch_size
+        # )
         
         
+    # @staticmethod
+    # def convert_mask_to_triple(masks):
+    #     for i in range(len(masks)):
+    #         masks_idx = None
+    #         if masks[i] is not None:
+    #             masks_idx = masks[i]
+    #             if len(masks_idx.shape) == 2:
+    #                 masks_idx = masks_idx[None, None, :, :]
+    #             if len(masks_idx.shape) == 3:
+    #                 masks_idx = masks_idx[None, :, :]
+    #             if len(masks_idx.shape) != 4:
+    #                 raise RuntimeError(
+    #                     "Each mask in the list must be in the shape of (N, 1, 256, 256) "
+    #                     "where N is the number of output masks!"
+    #                 )
+    #             if masks_idx.size(1) != 1:
+    #                 raise RuntimeError("Please only give one mask for each output!")
+    #             if masks_idx.size(-2) != 256 or masks_idx.size(-1) != 256:
+    #                 raise RuntimeError("Each mask must have width and height of 256!")
+    #         masks[i] = masks_idx
+                
         
 
     # def preprocess(self, imgs):

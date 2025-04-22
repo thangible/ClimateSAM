@@ -13,16 +13,16 @@ import pytest
 # 3. Optionally, run the tests via pytest's main block.
 
 import torch.nn as nn
-from prompter import PromptGenerator
+from prompt_generator import PromptGenerator
 
 
 def test_promptgenerator_forward():
-    B = 2
+    B = 3
     # Create 12 dummy feature maps with shape (B, 64, 64, 768)
     dummy_feats = [torch.rand(B, 64, 64, 768) for _ in range(12)]
     pg = PromptGenerator()
     
-    fused_feats, box_out = pg(dummy_feats)
+    fused_feats = pg(dummy_feats)
     
     # Expected output shapes:
     # fused_feats should be (B, 768, 1024, 1024) based on the upsampling in 4 blocks:
@@ -31,13 +31,11 @@ def test_promptgenerator_forward():
     #   Block2: 64 -> 512 -> fuse -> 256 -> out_trans -> 512
     #   Block3: 64 -> 1024 -> fuse -> 512 -> out_trans -> 1024
     # box_out is produced by box_mlp with output shape (B, 768)
-    expected_fused_shape = (B, 256, 1024, 1024)
-    expected_box_shape = (B, 256)
+    expected_fused_shape = (B, 2, 1024, 1024)
+    # expected_box_shape = (B, 2)
     
     assert fused_feats.shape == expected_fused_shape, \
         f"Expected fused_feats shape {expected_fused_shape}, got {fused_feats.shape}"
-    assert box_out.shape == expected_box_shape, \
-        f"Expected box_out shape {expected_box_shape}, got {box_out.shape}"
 
 
 if __name__ == '__main__':
