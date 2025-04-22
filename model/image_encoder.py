@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from module import Adapter, DConvAdapter
+from .module import Adapter
 
 class SAMImageEncodeWrapper(nn.Module):
 
@@ -19,9 +19,10 @@ class SAMImageEncodeWrapper(nn.Module):
 class ClimateSAMImageEncoder(SAMImageEncodeWrapper):
 
     def __init__(
-            self, ori_sam, hq_token: torch.Tensor,
+            self, ori_sam, hq_token: torch.Tensor, fix: bool = True,
     ):
         super(ClimateSAMImageEncoder, self).__init__(ori_sam=ori_sam, fix=True)
+        
         self.hq_token = hq_token
 
         total_p_layer = len(self.sam_img_encoder.blocks)
@@ -43,8 +44,7 @@ class ClimateSAMImageEncoder(SAMImageEncodeWrapper):
         interm_embeddings = []
         for i, blk in enumerate(self.sam_img_encoder.blocks):
             x = blk(x, hq_prompt_tokens[i])
-            if blk.window_size == 0:
-                interm_embeddings.append(x)
+            interm_embeddings.append(x)
 
         x = self.sam_img_encoder.neck(x.permute(0, 3, 1, 2))
         return x, interm_embeddings

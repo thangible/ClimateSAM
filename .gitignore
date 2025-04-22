@@ -1,2 +1,7 @@
 pretrained/
 model/__pycache__/
+dataset/__pycache__
+model/segment_anything_ext/__pycache__
+model/segment_anything_ext/modeling/__pycache__
+/model/segment_anything_ext/modeling/__pycache__
+test.ipynb

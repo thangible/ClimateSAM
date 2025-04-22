@@ -27,7 +27,7 @@ class ClimateSAM(nn.Module):
         
         # ORI SAM model
         self.ori_sam = sam_model_registry[model_type](sam_ckpt_path_dict[model_type])
-        del self.ori_sam.mask_decoder # remove the mask decoder in original SAM to avoid redundant params in model object
+        
         self.sam_img_size = (self.ori_sam.image_encoder.img_size, self.ori_sam.image_encoder.img_size)
 
         # ClimateSAM model
@@ -36,23 +36,26 @@ class ClimateSAM(nn.Module):
             nn.Upsample(size=self.sam_img_size, mode='bilinear', align_corners=False)
         )
         
-        self.image_encoder = ClimateSAMImageEncoder(ori_sam=self.ori_sam, fix=True)
-        self.prompt_generator = PromptGenerator()
-        self.prompt_encoder = PromptEncoderWrapper(ori_sam=self.ori_sam, fix=True)
         self.mask_decoder = MaskDecoderHQ(
             model_type, self.ori_sam.mask_decoder.state_dict()
         )
+        self.image_encoder = ClimateSAMImageEncoder(ori_sam=self.ori_sam, fix=True, hq_token=self.mask_decoder.hf_token.weight)
+        self.prompt_generator = PromptGenerator()
+        self.prompt_encoder = PromptEncoderWrapper(ori_sam=self.ori_sam, fix=True)
         
         #set weights for input adaptation:
         # Zero out all weights 
         # Define the channels where you want high weights
-        self.input_adapt.weight.zero_()  
-        if input_weight is None:
-            input_weight = [0, 1, 2] # for 'TMQ', 'U850', 'V850'
-        # For instance, set those weights to 1.0 for every output channel
-        for out_ch in range(self.input_adapt.weight.shape[0]):
-            for in_ch in input_weight:
-                self.input_adapt.weight[out_ch, in_ch, 0, 0] = 1.0    
+        with torch.no_grad():
+            self.input_adapt[0].weight.zero_()  
+            if input_weights is None:
+                input_weights = [0, 1, 2] # for 'TMQ', 'U850', 'V850'
+            # For instance, set those weights to 1.0 for every output channel
+            for out_ch in range(self.input_adapt[0].weight.shape[0]):
+                for in_ch in input_weights:
+                    self.input_adapt[0].weight[out_ch, in_ch, 0, 0] = 1.0    
+                
+        del self.ori_sam.mask_decoder # remove the mask decoder in original SAM to avoid redundant params in model object
         
     def train(self, mode: bool = True):
         # set train status for this class: disable all but the prompt-related modules
@@ -77,13 +80,17 @@ class ClimateSAM(nn.Module):
     ):
         img = self.input_adapt(input)
         image_embeddings, interm_embeddings = self.image_encoder(img)
-        mask = self.prompt_generator(interm_embeddings)
-        tc_mask, ar_mask = mask[:, 0:1, :, :].squeeze(), mask[:, 1:2, :, :].squeeze()
         
-        batch_size = len(image_embeddings)
-        tc_mask_embeded = self.prompt_encoder(mask=tc_mask)
-        ar_mask_embeded = self.prompt_encoder(mask=ar_mask)
+        # Print the shapes of the embeddings for debugging
+        print(f"Image embeddings shape: {image_embeddings[0].shape}")
+        print(f"Intermediate embeddings shape: {interm_embeddings[0].shape}")
+
+        masks = self.prompt_generator(interm_embeddings)
+        tc_mask, ar_mask = torch.chunk(masks, 2, dim=1)
+        return tc_mask, ar_mask
         
+        
+        # Convert the mask to the format expected by the prompt encoder
         # _, _, masks = self.convert_raw_prompts_to_triple(
         #     point_coords=None, 
         #     point_labels=None,
