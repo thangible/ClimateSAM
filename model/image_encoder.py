@@ -16,12 +16,12 @@ class SAMImageEncodeWrapper(nn.Module):
         return x
       
 
-class ClimateSAMEncoder(SAMImageEncodeWrapper):
+class ClimateSAMImageEncoder(SAMImageEncodeWrapper):
 
     def __init__(
             self, ori_sam, hq_token: torch.Tensor,
     ):
-        super(ClimateSAMEncoder, self).__init__(ori_sam=ori_sam, fix=True)
+        super(ClimateSAMImageEncoder, self).__init__(ori_sam=ori_sam, fix=True)
         self.hq_token = hq_token
 
         total_p_layer = len(self.sam_img_encoder.blocks)

@@ -11,7 +11,7 @@ from cat_sam.datasets.transforms import Compose
 import cv2
 
 class ClimateDataset(Dataset):
-    def __init__(self, data_dir, train_flag=True, transforms=None, **prompt_kwargs):
+    def __init__(self, data_dir, train_flag=True, reset_flag = False, transforms=None,  **prompt_kwargs):
         """
         Parameters:
             data_dir (str): Directory containing the .nc files.
@@ -36,15 +36,23 @@ class ClimateDataset(Dataset):
         shot_num = prompt_kwargs.pop("shot_num", None)
         if shot_num is not None:
             self.files = self.files[:shot_num]
+            
+            
+        self.reset_flag = reset_flag
+        self.climatenet_label = None
+        self.variables = ['TMQ', 'U850', 'V850', 'UBOT', 'VBOT', 'QREFHT', 'PS', 'PSL', 
+                        'T200', 'T500', 'PRECT', 'TS', 'TREFHT', 'Z1000', 'Z200', 'ZBOT']
         
+        
+        # Define the path to save the mean and std values.
         self.mean_std_path = os.path.join(data_dir, "mean_std.npy")
-        self.mean_std_dict = self.calculate_mean_std()    
+        self.mean_std_dict = self.calculate_mean_std()
 
     def calculate_mean_std(self):
         """
         Calculate the mean and std of the data across all the files.
         """
-        if os.path.exists(self.mean_std_path):
+        if os.path.exists(self.mean_std_path) and self.reset_flag is False:
             print(f"Loading mean/std from {self.mean_std_path}")
             return np.load(self.mean_std_path, allow_pickle=True).item()
 
@@ -54,7 +62,7 @@ class ClimateDataset(Dataset):
         
         for file in self.files:
             dataset = xr.load_dataset(file)
-            data = dataset.to_array().values.squeeze()
+            data = dataset.to_array().sel(variable=self.variables).values.squeeze()
             means.append(np.mean(data, axis=(1,2)))  # Mean for each of the 16 channels
             stds.append(np.std(data, axis=(1,2)))    # Std for each of the 16 channels
         
@@ -116,9 +124,14 @@ class ClimateDataset(Dataset):
         prompt_kwargs = self.prompt_kwargs.copy() 
         
         # Generate the binary mask from the dataset.
-        climatenet_label = prompt_kwargs.pop("climatenet_label", 'cyclone')
-        mask = self.get_labels(dataset, label_name=climatenet_label)  # see function below
-        data = dataset.to_array().values.squeeze()
+        
+        mask = self.get_labels(dataset)  # see function below
+        
+        # Generate inputs
+        
+        
+        data = dataset.to_array().sel(variable=self.variables).values.squeeze()
+                
         
         # Apply Z-normalization to the data
         data = self.z_normalize_and_scale(data)
@@ -133,6 +146,9 @@ class ClimateDataset(Dataset):
             "index_name": index_name
         }
     
+    def get_variables(self):
+        return self.variables
+        
 
     def to_image(self, dataset, var_1='TMQ', var_2='U850', var_3='V850'):
         """
@@ -162,19 +178,20 @@ class ClimateDataset(Dataset):
 
         return rgb_image
 
-    def get_labels(self, dataset, label_name='cyclone'):
+    def get_labels(self, dataset, label_name= None):
         """
         Extract and binarize the segmentation mask from the dataset.
         """
-        if label_name == 'cyclone':
-            mask_description = 1
-        elif label_name == 'river':
-            mask_description = 2
-        else:
-            raise ValueError(f"Unknown label name: {label_name}")
+        # if label_name == 'cyclone':
+        #     mask_description = 1
+        # elif label_name == 'river':
+        #     mask_description = 2
+        # else:
+        #     raise ValueError(f"Unknown label name: {label_name}")
             
         mask = dataset['LABELS'].values
-        mask = (mask == mask_description).astype(np.uint8)  # Convert to a binary mask.
+        # if label_name is not None:
+        #     mask = (mask == mask_description).astype(np.uint8)  # Convert to a binary mask.
         # mask = np.ascontiguousarray(mask)
         # mask = cv2.UMat(mask)  # Ensure the mask is a numpy array
         # print("Mask shape:", mask.shape)
