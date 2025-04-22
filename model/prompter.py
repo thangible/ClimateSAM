@@ -6,9 +6,9 @@ from module import LayerNorm2d
 class PromptGenerator(nn.Module):
     def __init__(self, pool_size: tuple = (2, 2)):
         super(PromptGenerator, self).__init__()
-        fused_channels = 256
+        fused_channels = 128
         in_channels = 768
-        out_channels = 256
+        out_channels = 2
         
         
         self.pool = nn.AdaptiveAvgPool2d(pool_size)
@@ -49,27 +49,27 @@ class PromptGenerator(nn.Module):
             up_in_channels = fused_channels if block_idx == 0 else fused_channels * 2
             # Extra upsampling: always upsample by a factor of 2.
             self.block_out_trans.append(
-                nn.ConvTranspose2d(up_in_channels, fused_channels, kernel_size=2, stride=2)
+                nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
             )
         
         # Update box_mlp to accept 4 pooled features.
-        mlp_in_dim = 4 * fused_channels * pool_size[0] * pool_size[1]
-        self.box_mlp = nn.Sequential(
-            nn.Linear(mlp_in_dim, fused_channels),
-            nn.ReLU(),
-            nn.Linear(fused_channels, out_channels)
-        )
+        # mlp_in_dim = 4 * fused_channels * pool_size[0] * pool_size[1]
+        # self.box_mlp = nn.Sequential(
+        #     nn.Linear(mlp_in_dim, fused_channels),
+        #     nn.ReLU(),
+        #     nn.Linear(fused_channels, out_channels)
+        # )
         
-        self.neck = nn.Sequential(
-            nn.Conv2d(
-                fused_channels,
-                out_channels,
-                kernel_size=1,
-                padding=0,
-                bias=False,
-            ),
-            LayerNorm2d(out_channels)            
-        )
+        # self.neck = nn.Sequential(
+        #     # nn.Conv2d(
+        #     #     fused_channels,
+        #     #     out_channels,
+        #     #     kernel_size=1,
+        #     #     padding=0,
+        #     #     bias=False,
+        #     # ),
+        #     LayerNorm2d(out_channels)            
+        # )
 
     def forward(self, feat_list):
         """
@@ -83,7 +83,7 @@ class PromptGenerator(nn.Module):
         # Permute feature maps from (B, 64, 64, 768) to (B, 768, 64, 64)
         feat_list = [f.permute(0, 3, 1, 2) for f in feat_list]
         reversed_feats = feat_list[::-1]
-        box_queries_list = []
+        # box_queries_list = []
         prev_up = None
         for block_idx in range(4):
             
@@ -98,7 +98,7 @@ class PromptGenerator(nn.Module):
             # Fuse the concatenated features.
             fused = self.block_fuse_convs[block_idx](group_concat)  # shape: (B, 256, H', W')
             # Save the fused feature for later pooling.
-            box_queries_list.append(fused)
+            # box_queries_list.append(fused)
             # For blocks after the first, concatenate with the previous block’s upsampled output.
             if prev_up is not None:
                 fused = torch.cat([prev_up, fused], dim=1)  # shape: (B, 512, H', W')
@@ -107,10 +107,10 @@ class PromptGenerator(nn.Module):
             prev_up = up
 
         # Process each saved fused feature through the adaptive pool and flatten.
-        pooled = [self.pool(feat).reshape(feat.shape[0], -1) for feat in box_queries_list]
-        box_concat = torch.cat(pooled, dim=1)
-        box_out = self.box_mlp(box_concat)
+        # pooled = [self.pool(feat).reshape(feat.shape[0], -1) for feat in box_queries_list]
+        # concat_token = torch.cat(pooled, dim=1)
+        # classifier_tokens = self.box_mlp(concat_token)
         
         # The final fused feature is the output from the last block.
-        fused_feats = self.neck(prev_up)
-        return fused_feats, box_out
+        aux_mask = self.neck(prev_up)
+        return aux_mask
