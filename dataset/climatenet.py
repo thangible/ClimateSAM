@@ -139,12 +139,13 @@ class ClimateDataset(Dataset):
         rgb_image = self.to_image(dataset, var_1='TMQ', var_2='U850', var_3='V850')
         # Return a dictionary that matches the expected format.
         return {
-            "file_name": os.path.splitext(index_name)[0],  # file name without the .nc extension,
-            "images": rgb_image,
             "input": data,
             "gt_masks": mask,     # binary mask.
             "index_name": index_name
         }
+        
+    def get_file_names(self, index_name):
+        return os.path.splitext(index_name)[0] # file name without the .nc extension,
     
     def get_variables(self):
         return self.variables
@@ -220,14 +221,8 @@ class ClimateDataset(Dataset):
             for key, value in sample.items():
                 batch_dict[key].append(value)
 
-        # Convert images to tensors: (H, W, 3) → (3, H, W)
-        batch_dict['images'] = [
-            torch.from_numpy(img).permute(2, 0, 1).float() for img in batch_dict['images']
-        ]
-
         # Convert inputs and masks to tensors
         batch_dict['input'] = torch.stack([torch.from_numpy(inp).float() for inp in batch_dict['input']])
-
         batch_dict['gt_masks'] = [torch.from_numpy(mask).long() for mask in batch_dict['gt_masks']]
 
         # Optional: Stack if all are same shape (e.g., during training with fixed size)

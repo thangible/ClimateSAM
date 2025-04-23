@@ -19,7 +19,7 @@ def parse():
              "Default to be 1 for one-shot and 4 for 16- and full-shot."
     )
     parser.add_argument(
-        '--train_bs', default=None, type=int,
+        '--train_bs', default= 4, type=int,
         help="The batch size for the training dataloader. Default to be 1 for one-shot and 4 for 16- and full-shot."
     )
     parser.add_argument(
@@ -36,10 +36,6 @@ def parse():
     parser.add_argument(
         '--sam_type', default='vit_l', type=str, choices=['vit_b', 'vit_l', 'vit_h'],
         help='The type of the backbone SAM model. Default to be vit_l.'
-    )
-    parser.add_argument(
-        '--cat_type', required=True, type=str, choices=['cat-a', 'cat-t'],
-        help='The type of the CAT-SAM model. This argument is required.'
     )
     
     parser.add_argument(
@@ -69,7 +65,7 @@ def parse():
         help="Flag to enable Weights & Biases logging. Default is False."
     )
     parser.add_argument(
-        '--project_name', type=str, default="cat-sam-climatenet",
+        '--project_name', type=str, default="climate-sam",
         help="Project name for Weights & Biases logging."
     )
     parser.add_argument(

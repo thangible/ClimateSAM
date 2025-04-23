@@ -68,11 +68,15 @@ def batch_to_cuda(batch, device):
     for key in batch.keys():
         if key == 'input':
             # input is already a single tensor (B, C, H, W)
+            # batch[key] = torch.from_numpy(batch[key])
             batch[key] = batch[key].to(device=device, dtype=torch.float32)
         
         elif key in ["gt_masks"]:
             batch[key] = [
-                item.to(device=device, dtype=torch.float32) if item is not None else None for item in batch[key]
+                torch.from_numpy(item).to(device=device, dtype=torch.float32)
+                if isinstance(item, np.ndarray)
+                else item.to(device=device, dtype=torch.float32) if item is not None else None
+                for item in batch[key]
             ]
     return batch
 

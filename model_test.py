@@ -10,7 +10,7 @@ def test_mask_shapes():
     # Use the SAM image size from the model for consistency.
     batch_size = 3
     channels = 16
-    height, width = model.sam_img_size # 1024, 1024
+    height, width = 768, 1152
     dummy_input = torch.randn(batch_size, channels, height, width) #
 
     # Run a forward pass

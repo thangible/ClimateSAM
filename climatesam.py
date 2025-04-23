@@ -34,7 +34,6 @@ class ClimateSAM(nn.Module):
         # ClimateSAM model
         self.input_adapt = nn.Sequential(
             nn.Conv2d(16, 3, kernel_size=1, stride=1, padding=0),
-            nn.Upsample(size=self.sam_img_size, mode='bilinear', align_corners=False)
         )
         
         self.mask_decoder = MaskDecoderHQ(
@@ -79,13 +78,13 @@ class ClimateSAM(nn.Module):
             hq_token_weight: torch.Tensor = None,
             return_all_hq_masks: bool = False
     ):
-        imgs = self.input_adapt(input) # from 16x768x768 to 3x1024x1024
-        ori_img_size = [(imgs[i].shape[-2], imgs[i].shape[-1]) for i in range(len(imgs))]
-        # Normalize colors to match the original SAM preprocessing
-        pixel_mean = self.ori_sam.pixel_mean.clone().detach().to(imgs.device).view(1, 3, 1, 1)
-        pixel_std  = self.ori_sam.pixel_std.clone().detach().to(imgs.device).view(1, 3, 1, 1)
-        imgs = (imgs - pixel_mean) / pixel_std
-        
+        ori_img_size = [(input[i].shape[-2], input[i].shape[-1]) for i in range(len(input))]
+        input = self.interpolate_input(input) # from 16x768x1152 to 16x1024x1024
+        print(f"Input shape after interpolation: {input.shape}")
+        imgs = self.input_adapt(input) # from 16x1024x1024 to 3x1024x1024
+        print(f"Input to imgs after adapt: {imgs.shape}")
+        imgs = self.preprocess(imgs) # normalize the input images
+        print(f"Shape of imgs after preprocessing: {imgs.shape}")
         # encode the images
         image_embeddings, interm_embeddings = self.image_encoder(imgs) # shape batch x [256, 64, 64] and 12 x torch.Size([batch, 64, 64, 768])
         batch_size = len(image_embeddings)
@@ -164,6 +163,21 @@ class ClimateSAM(nn.Module):
             )
         return output_masks
 
+    def interpolate_input(self, input: torch.Tensor):
+        # Check if input size matches self.sam_img_size
+        if input.shape[-2:] != self.sam_img_size:
+            input = F.interpolate(input, size=self.sam_img_size, mode='bilinear', align_corners=False)
+            
+        # print(f"Input shape after preprocessing: {input.shape}")
+        
+        return input
+    
+    def preprocess(self, input: Union[List[torch.Tensor], None]):
+        # Normalize colors to match the original SAM preprocessing
+        pixel_mean = self.ori_sam.pixel_mean.clone().detach().to(input.device).view(1, 3, 1, 1)
+        pixel_std  = self.ori_sam.pixel_std.clone().detach().to(input.device).view(1, 3, 1, 1)
+        input = (input - pixel_mean) / pixel_std
+        return input
         
         
         

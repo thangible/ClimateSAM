@@ -5,6 +5,8 @@ import os
 import torch.distributed as dist
 import torch.multiprocessing as mp
 import torch.nn.functional as F
+from functools import partial
+from torch.utils.data import DataLoader
 from train_util import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, calculate_dice_loss
 from tqdm import tqdm
 from contextlib import nullcontext
@@ -62,10 +64,6 @@ def setup_device_and_distributed(worker_id, worker_args):
 
     
 def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num):
-    if hasattr(train_dataloader.sampler, 'set_epoch'):
-        train_dataloader.sampler.set_epoch(epoch)
-        
-        
     train_pbar = tqdm(total=len(train_dataloader), desc='train', leave=False) if local_rank == 0 else None
     for train_step, batch in enumerate(train_dataloader):
         batch = batch_to_cuda(batch, device)
@@ -73,8 +71,8 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         
         ar_mask, tc_mask = model(batch['input'])
         masks_gt = batch['gt_masks']
-        masks_ar_gt = (masks_gt == 2).to(torch.uint8)
-        masks_tc_gt = (masks_gt == 1).to(torch.uint8)
+        masks_ar_gt = [ (mask == 2).to(torch.uint8) for mask in masks_gt ]
+        masks_tc_gt = [ (mask == 1).to(torch.uint8) for mask in masks_gt ]
         
         # some processing to make sure the masks are in the right shape
         for masks in [masks_ar_gt, masks_tc_gt, ar_mask, tc_mask]:
@@ -108,11 +106,13 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
             
         bce_loss_ar = sum(bce_loss_list_ar) / len(bce_loss_list_ar)
         bce_loss_tc = sum(bce_loss_list_tc) / len(bce_loss_list_tc)
+        bce_loss = bce_loss_ar + bce_loss_tc
         dice_loss_ar = sum(dice_loss_list_ar) / len(dice_loss_list_ar)
         dice_loss_tc = sum(dice_loss_list_tc) / len(dice_loss_list_tc)
+        dice_loss = dice_loss_ar + dice_loss_tc
         total_loss_ar = bce_loss_ar + dice_loss_ar
         total_loss_tc = bce_loss_tc + dice_loss_tc
-        total_loss = total_loss_ar + total_loss_tc
+        total_loss = bce_loss + dice_loss
         loss_dict = dict(
             total_loss=total_loss.clone().detach(),
             total_loss_ar=total_loss_ar.clone().detach(),
@@ -121,6 +121,8 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
             bce_loss_tc=bce_loss_tc.clone().detach(),
             dice_loss_ar=dice_loss_ar.clone().detach(),
             dice_loss_tc=dice_loss_tc.clone().detach(),
+            bce_loss=bce_loss.clone().detach(),
+            dice_loss=dice_loss.clone().detach()
         )
         
         backward_context = nullcontext
@@ -159,12 +161,33 @@ def main_worker(worker_id, worker_args):
     device, local_rank = setup_device_and_distributed(worker_id, worker_args)
     
     # PREPARE DATASET
-    dataset_dir = os.path.join(worker_args.data_dir, worker_args.dataset)
+    dataset_dir = worker_args.data_dir
     train_dataset = ClimateDataset(
         data_dir=dataset_dir, train_flag=True, shot_num=worker_args.shot_num,
         transforms=None
     )
     val_dataset = ClimateDataset(data_dir=dataset_dir, train_flag=False)
+    
+    # DataLoader
+    train_bs = worker_args.train_bs if worker_args.train_bs else (1 if worker_args.shot_num == 1 else 4)
+    val_bs = worker_args.val_bs if worker_args.val_bs else 2
+    train_workers, val_workers = 1 if worker_args.shot_num == 1 else 4, 2
+    if worker_args.num_workers is not None:
+        train_workers, val_workers = worker_args.num_workers, worker_args.num_workers
+        
+    sampler = None
+    if torch.distributed.is_initialized():
+        sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
+        train_bs = int(train_bs / torch.distributed.get_world_size())
+    train_dataloader = DataLoader(
+        dataset=train_dataset, batch_size=train_bs, shuffle=sampler is None, num_workers=train_workers,
+        sampler=sampler, drop_last=False, collate_fn=train_dataset.collate_fn,
+        worker_init_fn=partial(worker_init_fn, base_seed=3407)
+    )
+    val_dataloader = DataLoader(
+        dataset=val_dataset, batch_size=val_bs, shuffle=False, num_workers=val_workers,
+        drop_last=False, collate_fn=val_dataset.collate_fn
+    )
     
     # SET UP MODEL
     model = ClimateSAM(model_type=worker_args.sam_type).to(device=device)
@@ -184,7 +207,7 @@ def main_worker(worker_id, worker_args):
     iou_eval  = StreamSegMetrics(class_names=['Background', 'Foreground'])
     
     for epoch in range(1, max_epoch_num + 1):
-        train_one_epoch(epoch, train_dataset, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num)
+        train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num)
         
     
     
