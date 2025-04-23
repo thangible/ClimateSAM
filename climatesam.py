@@ -22,10 +22,10 @@ class ClimateSAM(nn.Module):
     It includes a Vision Transformer (ViT) encoder and a mask decoder, with additional features for climate data processing.
     """
 
-    def __init__(self, model_type: str, input_weights: List[float] = None):
+    def __init__(self, model_type: str, input_weights: List[float] = None, verbose = False):
         super(ClimateSAM, self).__init__()
         assert model_type in ['vit_b', 'vit_l', 'vit_h'], f"invalid model_type: {model_type}!"
-        
+        self.verbose = verbose
         # ORI SAM model
         self.ori_sam = sam_model_registry[model_type](sam_ckpt_path_dict[model_type])
         
@@ -80,31 +80,32 @@ class ClimateSAM(nn.Module):
     ):
         ori_img_size = [(input[i].shape[-2], input[i].shape[-1]) for i in range(len(input))]
         input = self.interpolate_input(input) # from 16x768x1152 to 16x1024x1024
-        print(f"Input shape after interpolation: {input.shape}")
+        
+        # print(f"Input shape after interpolation: {input.shape}")
         imgs = self.input_adapt(input) # from 16x1024x1024 to 3x1024x1024
-        print(f"Input to imgs after adapt: {imgs.shape}")
+        # print(f"Input to imgs after adapt: {imgs.shape}")
         imgs = self.preprocess(imgs) # normalize the input images
-        print(f"Shape of imgs after preprocessing: {imgs.shape}")
+        # print(f"Shape of imgs after preprocessing: {imgs.shape}")
         # encode the images
         image_embeddings, interm_embeddings = self.image_encoder(imgs) # shape batch x [256, 64, 64] and 12 x torch.Size([batch, 64, 64, 768])
         batch_size = len(image_embeddings)
         # Print the shapes of the embeddings for debugging
-        print(f"Image embeddings shape: {image_embeddings[0].shape}")
-        print(f"Intermediate embeddings shape: {interm_embeddings[0].shape}")
+        # print(f"Image embeddings shape: {image_embeddings[0].shape}")
+        # print(f"Intermediate embeddings shape: {interm_embeddings[0].shape}")
 
         masks = self.prompt_generator(interm_embeddings) # shape: batch x 2 x 256 x 256
         tc_masks, ar_masks = torch.chunk(masks, 2, dim=1) # shape: batch x 1 x 256 x 256 each
 
 
-        print(f"TC masks shape: {tc_masks.shape}")
-        print(f"AR masks shape: {ar_masks.shape}")
+        # print(f"TC masks shape: {tc_masks.shape}")
+        # print(f"AR masks shape: {ar_masks.shape}")
         
         tc_sparse_embeddings, tc_dense_embeddings = self.prompt_encoder(masks=tc_masks)
         ar_sparse_embeddings, ar_dense_embeddings = self.prompt_encoder(masks=ar_masks)
-        print(f"TC mask embedding shape: {tc_dense_embeddings.shape}")
-        print(f"AR mask embedding shape: {ar_dense_embeddings.shape}")
-        print(f"TC sparse embedding shape: {tc_sparse_embeddings.shape}")
-        print(f"AR sparse embedding shape: {ar_sparse_embeddings.shape}")
+        # print(f"TC mask embedding shape: {tc_dense_embeddings.shape}")
+        # print(f"AR mask embedding shape: {ar_dense_embeddings.shape}")
+        # print(f"TC sparse embedding shape: {tc_sparse_embeddings.shape}")
+        # print(f"AR sparse embedding shape: {ar_sparse_embeddings.shape}")
 
         _, tc_pred_masks = self.mask_decoder(
             image_embeddings=image_embeddings,
@@ -128,10 +129,10 @@ class ClimateSAM(nn.Module):
             return_all_hq_masks=return_all_hq_masks
         )
         
-        print(f"TC predicted masks shape: {tc_pred_masks[0].shape}")
-        print(f"Length of TC predicted masks list: {len(tc_pred_masks)}")
-        print(f"AR predicted masks shape: {ar_pred_masks[0].shape}")
-        print(f"Length of AR predicted masks list: {len(ar_pred_masks)}")
+        # print(f"TC predicted masks shape: {tc_pred_masks[0].shape}")
+        # print(f"Length of TC predicted masks list: {len(tc_pred_masks)}")
+        # print(f"AR predicted masks shape: {ar_pred_masks[0].shape}")
+        # print(f"Length of AR predicted masks list: {len(ar_pred_masks)}")
         
         # rescale the mask size back to original image size
         tc_postprocess_masks_hq = [m_hq.clone() for m_hq in tc_pred_masks]
@@ -143,9 +144,9 @@ class ClimateSAM(nn.Module):
             ar_postprocess_masks_hq[i] = self.postprocess(output_masks=ar_postprocess_masks_hq[i], ori_img_size=ori_img_size[i])
         
         # Print the shapes of the postprocessed masks for debugging
-        for i, (tc_mask, ar_mask) in enumerate(zip(tc_postprocess_masks_hq, ar_postprocess_masks_hq)):
-            print(f"Postprocessed TC mask {i} shape: {tc_mask.shape}")
-            print(f"Postprocessed AR mask {i} shape: {ar_mask.shape}")
+        # for i, (tc_mask, ar_mask) in enumerate(zip(tc_postprocess_masks_hq, ar_postprocess_masks_hq)):
+        #     print(f"Postprocessed TC mask {i} shape: {tc_mask.shape}")
+        #     print(f"Postprocessed AR mask {i} shape: {ar_mask.shape}")
             
         return tc_postprocess_masks_hq, ar_postprocess_masks_hq
     

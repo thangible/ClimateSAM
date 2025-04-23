@@ -67,7 +67,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
     train_pbar = tqdm(total=len(train_dataloader), desc='train', leave=False) if local_rank == 0 else None
     for train_step, batch in enumerate(train_dataloader):
         batch = batch_to_cuda(batch, device)
-        print(f"batch['input'] shape: {batch['input'].shape}") 
+        # print(f"batch['input'] shape: {batch['input'].shape}") 
         
         ar_mask, tc_mask = model(batch['input'])
         masks_gt = batch['gt_masks']
@@ -148,9 +148,9 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
             )
             train_pbar.set_postfix_str(str_step_info)
             
-        scheduler.step()
-        if train_pbar:
-            train_pbar.clear()
+    scheduler.step()
+    if train_pbar:
+        train_pbar.clear()
 
         
 def main_worker(worker_id, worker_args):
