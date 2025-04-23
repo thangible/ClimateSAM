@@ -86,7 +86,6 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
                     
         bce_loss_list_tc, bce_loss_list_ar = [], []
         dice_loss_list_tc, dice_loss_list_ar = [], []
-        focal_loss_list_tc, focal_loss_list_ar = [], []
         for i in range(len(masks_ar_gt)):
             # ar
             pred_ar, label_ar = ar_mask[i], masks_ar_gt[i]
@@ -125,6 +124,8 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
             dice_loss=dice_loss.clone().detach()
         )
         
+        # print(f"BCE Loss AR: {bce_loss_ar:.4f}, BCE Loss TC: {bce_loss_tc:.4f}, Dice Loss AR: {dice_loss_ar:.4f}, Dice Loss TC: {dice_loss_tc:.4f}")
+        
         backward_context = nullcontext
         if torch.distributed.is_initialized():
             backward_context = model.no_sync
@@ -152,6 +153,45 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
     if train_pbar:
         train_pbar.clear()
 
+def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num):
+    model.eval()
+    valid_pbar = tqdm(total=len(val_dataloader), desc='valid', leave=False)
+    for val_step, batch in enumerate(val_dataloader):
+        batch = batch_to_cuda(batch, device)
+        val_model = model
+        with torch.no_grad():
+            ar_masks, tc_masks = val_model(batch['input'])
+            masks_gt = batch['gt_masks']
+            masks_ar_gt = [ (mask == 2).to(torch.uint8) for mask in masks_gt ]
+            masks_tc_gt = [ (mask == 1).to(torch.uint8) for mask in masks_gt ]
+            # some processing to make sure the masks are in the right shape
+            for masks in [masks_ar_gt, masks_tc_gt, ar_masks, tc_masks]:
+                    for i in range(len(masks)):
+                        if len(masks[i].shape) == 2:
+                            masks[i] = masks[i][None, None, :]
+                        if len(masks[i].shape) == 3:
+                            masks[i] = masks[i][:, None, :]
+                        if len(masks[i].shape) != 4:
+                            raise RuntimeError
+                        
+            ar_metrics.update(ar_masks, masks_ar_gt,  batch['index_name'])
+            tc_metrics.update(tc_masks, masks_tc_gt,  batch['index_name'])
+            valid_pbar.update(1)
+            str_step_info = "Epoch: {epoch}/{epochs:4}.".format(
+                epoch=epoch, epochs=max_epoch_num
+            )
+            valid_pbar.set_postfix_str(str_step_info)
+        miou_ar = ar_metrics.compute()[0]['Mean Foreground IoU']
+        miou_tc = tc_metrics.compute()[0]['Mean Foreground IoU']
+        ar_metrics.reset()
+        tc_metrics.reset()
+        
+        return miou_tc, miou_ar
+        
+            
+            
+        
+    
         
 def main_worker(worker_id, worker_args):
     set_randomness()
@@ -159,6 +199,7 @@ def main_worker(worker_id, worker_args):
     if isinstance(worker_id, str):
         worker_id = int(worker_id)
     device, local_rank = setup_device_and_distributed(worker_id, worker_args)
+    print(f"Worker {worker_id} initialized on device {device} with local rank {local_rank}.")
     
     # PREPARE DATASET
     dataset_dir = worker_args.data_dir
@@ -203,14 +244,24 @@ def main_worker(worker_id, worker_args):
             
     # Optimizer and scheduler
     optimizer, scheduler = setup_optimizer_and_scheduler(model, worker_args)
-    best_miou = 0
-    iou_eval  = StreamSegMetrics(class_names=['Background', 'Foreground'])
+    best_miou_tc = 0
+    best_miou_ar = 0
+    ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+    tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+    
+    print(f"Validation will be performed every {worker_args.valid_per_epochs} epochs.")
     
     for epoch in range(1, max_epoch_num + 1):
         train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num)
-        
-    
-    
+        if epoch % worker_args.valid_per_epochs == 0 and local_rank == 0:
+            miou_tc, miou_ar = validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num)
+            print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}")
+            if miou_tc > best_miou_tc:
+                best_miou_tc = miou_tc
+                print(f'Best mIoU TC has been updated to {best_miou_tc:.2%}!')
+            if miou_ar > best_miou_ar:
+                best_miou_ar = miou_ar
+                print(f'Best mIoU AR has been updated to {best_miou_ar:.2%}!')
     
     
 if __name__ == '__main__':
