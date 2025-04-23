@@ -31,7 +31,7 @@ def test_promptgenerator_forward():
     #   Block2: 64 -> 512 -> fuse -> 256 -> out_trans -> 512
     #   Block3: 64 -> 1024 -> fuse -> 512 -> out_trans -> 1024
     # box_out is produced by box_mlp with output shape (B, 768)
-    expected_fused_shape = (B, 512, 64, 64)
+    expected_fused_shape = (B, 2, 256, 256)
     # expected_box_shape = (B, 2)
     
     assert fused_feats.shape == expected_fused_shape, \

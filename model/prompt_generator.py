@@ -4,7 +4,7 @@ import torch.nn.functional as F
 # from module import LayerNorm2d
 
 class PromptGenerator(nn.Module):
-    def __init__(self, pool_size: tuple = (2, 2), fused_channels: int = 64, in_channels: int = 768, out_channels: int = 256):
+    def __init__(self, pool_size: tuple = (2, 2), fused_channels: int = 64, in_channels: int = 768, out_channels: int = 2):
         super(PromptGenerator, self).__init__()  
              
         self.pool = nn.AdaptiveAvgPool2d(pool_size)
@@ -56,9 +56,9 @@ class PromptGenerator(nn.Module):
         # )
         
         self.neck = nn.Sequential(
-            nn.Conv2d(4 * fused_channels, 2, kernel_size=1, padding=0), # 2x 1024 x 1024
+            nn.Conv2d(4 * fused_channels, fused_channels, kernel_size=1, padding=0),  # fused_channelsx1024x1024
             nn.Sigmoid(),
-            nn.Conv2d(2, 2*out_channels, kernel_size=16, stride=16, groups=2, padding=0),
+            nn.Conv2d(fused_channels, out_channels, kernel_size=4, stride=4, groups=2, padding=0),  # 2x256x256
             nn.ReLU()
         )
         

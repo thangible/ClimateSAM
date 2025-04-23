@@ -7,6 +7,7 @@ from model.mask_decoder import MaskDecoderHQ
 from model.prompt_generator import PromptGenerator
 from model.segment_anything_ext.build_sam import sam_model_registry
 from typing import Union, List, Tuple
+import torch.nn.functional as F
 
 
 sam_ckpt_path_dict = dict(
@@ -78,71 +79,91 @@ class ClimateSAM(nn.Module):
             hq_token_weight: torch.Tensor = None,
             return_all_hq_masks: bool = False
     ):
-        img = self.input_adapt(input)
-        image_embeddings, interm_embeddings = self.image_encoder(img)
+        imgs = self.input_adapt(input) # from 16x768x768 to 3x1024x1024
+        ori_img_size = [(imgs[i].shape[-2], imgs[i].shape[-1]) for i in range(len(imgs))]
+        # Normalize colors to match the original SAM preprocessing
+        pixel_mean = self.ori_sam.pixel_mean.clone().detach().to(imgs.device).view(1, 3, 1, 1)
+        pixel_std  = self.ori_sam.pixel_std.clone().detach().to(imgs.device).view(1, 3, 1, 1)
+        imgs = (imgs - pixel_mean) / pixel_std
         
+        # encode the images
+        image_embeddings, interm_embeddings = self.image_encoder(imgs) # shape batch x [256, 64, 64] and 12 x torch.Size([batch, 64, 64, 768])
+        batch_size = len(image_embeddings)
         # Print the shapes of the embeddings for debugging
         print(f"Image embeddings shape: {image_embeddings[0].shape}")
         print(f"Intermediate embeddings shape: {interm_embeddings[0].shape}")
 
-        masks = self.prompt_generator(interm_embeddings)
-        tc_mask, ar_mask = torch.chunk(masks, 2, dim=1)
-        return tc_mask, ar_mask
-        
-        
-        # Convert the mask to the format expected by the prompt encoder
-        # _, _, masks = self.convert_raw_prompts_to_triple(
-        #     point_coords=None, 
-        #     point_labels=None,
-        #     box_coords=None, 
-        #     noisy_masks=mask, 
-        #     batch_size=batch_size
-        # )
-        
-        
-    # @staticmethod
-    # def convert_mask_to_triple(masks):
-    #     for i in range(len(masks)):
-    #         masks_idx = None
-    #         if masks[i] is not None:
-    #             masks_idx = masks[i]
-    #             if len(masks_idx.shape) == 2:
-    #                 masks_idx = masks_idx[None, None, :, :]
-    #             if len(masks_idx.shape) == 3:
-    #                 masks_idx = masks_idx[None, :, :]
-    #             if len(masks_idx.shape) != 4:
-    #                 raise RuntimeError(
-    #                     "Each mask in the list must be in the shape of (N, 1, 256, 256) "
-    #                     "where N is the number of output masks!"
-    #                 )
-    #             if masks_idx.size(1) != 1:
-    #                 raise RuntimeError("Please only give one mask for each output!")
-    #             if masks_idx.size(-2) != 256 or masks_idx.size(-1) != 256:
-    #                 raise RuntimeError("Each mask must have width and height of 256!")
-    #         masks[i] = masks_idx
-                
-        
+        masks = self.prompt_generator(interm_embeddings) # shape: batch x 2 x 256 x 256
+        tc_masks, ar_masks = torch.chunk(masks, 2, dim=1) # shape: batch x 1 x 256 x 256 each
 
-    # def preprocess(self, imgs):
-    #     ori_img_size = [(imgs[i].shape[-2], imgs[i].shape[-1]) for i in range(len(imgs))]
-    #     imgs_return = copy.deepcopy(imgs)
-    #     for i in range(len(ori_img_size)):
-    #         # skip the one with the same size as SAM input
-    #         if ori_img_size[i] == self.sam_img_size:
-    #             continue
 
-    #         if imgs_return is not None:
-    #             # bilinear will produce non-deterministic gradients during training. For exact reproduction, please
-    #             # change the mode from bilinear to nearest
-    #             imgs_return[i] = F.interpolate(
-    #                 imgs_return[i], self.sam_img_size, mode="bilinear", align_corners=False,
-    #             )
-    #             # Normalize colors to match the original SAM preprocessing
-    #             imgs_return[i] = (imgs_return[i] - self.ori_sam.pixel_mean) / self.ori_sam.pixel_std
-
-    #         h_scale = self.sam_img_size[0] / ori_img_size[i][0]
-    #         w_scale = self.sam_img_size[1] / ori_img_size[i][1]
+        print(f"TC masks shape: {tc_masks.shape}")
+        print(f"AR masks shape: {ar_masks.shape}")
         
+        tc_sparse_embeddings, tc_dense_embeddings = self.prompt_encoder(masks=tc_masks)
+        ar_sparse_embeddings, ar_dense_embeddings = self.prompt_encoder(masks=ar_masks)
+        print(f"TC mask embedding shape: {tc_dense_embeddings.shape}")
+        print(f"AR mask embedding shape: {ar_dense_embeddings.shape}")
+        print(f"TC sparse embedding shape: {tc_sparse_embeddings.shape}")
+        print(f"AR sparse embedding shape: {ar_sparse_embeddings.shape}")
+
+        _, tc_pred_masks = self.mask_decoder(
+            image_embeddings=image_embeddings,
+            image_pe=[self.prompt_encoder.get_dense_pe() for _ in range(batch_size)],
+            sparse_prompt_embeddings=tc_sparse_embeddings.unsqueeze(1),
+            dense_prompt_embeddings=tc_dense_embeddings,
+            multimask_output=False,
+            interm_embeddings=interm_embeddings,
+            hq_token_weight=hq_token_weight,
+            return_all_hq_masks=return_all_hq_masks
+        )
+        
+        _, ar_pred_masks = self.mask_decoder(
+            image_embeddings=image_embeddings,
+            image_pe=[self.prompt_encoder.get_dense_pe() for _ in range(batch_size)],
+            sparse_prompt_embeddings=ar_sparse_embeddings.unsqueeze(1),
+            dense_prompt_embeddings= ar_dense_embeddings,
+            multimask_output=False,
+            interm_embeddings=interm_embeddings,
+            hq_token_weight=hq_token_weight,
+            return_all_hq_masks=return_all_hq_masks
+        )
+        
+        print(f"TC predicted masks shape: {tc_pred_masks[0].shape}")
+        print(f"Length of TC predicted masks list: {len(tc_pred_masks)}")
+        print(f"AR predicted masks shape: {ar_pred_masks[0].shape}")
+        print(f"Length of AR predicted masks list: {len(ar_pred_masks)}")
+        
+        # rescale the mask size back to original image size
+        tc_postprocess_masks_hq = [m_hq.clone() for m_hq in tc_pred_masks]
+        for i in range(len(tc_postprocess_masks_hq)):
+            tc_postprocess_masks_hq[i] = self.postprocess(output_masks=tc_postprocess_masks_hq[i], ori_img_size=ori_img_size[i])
+        
+        ar_postprocess_masks_hq = [m_hq.clone() for m_hq in ar_pred_masks]
+        for i in range(len(ar_postprocess_masks_hq)):
+            ar_postprocess_masks_hq[i] = self.postprocess(output_masks=ar_postprocess_masks_hq[i], ori_img_size=ori_img_size[i])
+        
+        # Print the shapes of the postprocessed masks for debugging
+        for i, (tc_mask, ar_mask) in enumerate(zip(tc_postprocess_masks_hq, ar_postprocess_masks_hq)):
+            print(f"Postprocessed TC mask {i} shape: {tc_mask.shape}")
+            print(f"Postprocessed AR mask {i} shape: {ar_mask.shape}")
+            
+        return tc_postprocess_masks_hq, ar_postprocess_masks_hq
+    
+    @staticmethod
+    def postprocess(output_masks: torch.Tensor, ori_img_size: Tuple):
+        # rescale the mask size back to original image size
+        output_mask_size = (output_masks.size(-2), output_masks.size(-1))
+        if output_mask_size != ori_img_size:
+            if len(output_masks.shape) == 3:
+                output_masks = output_masks.unsqueeze(1)
+            # bilinear will produce non-deterministic gradients during training. For exact reproduction, please
+            # change the mode from bilinear to nearest
+            output_masks = F.interpolate(
+                output_masks, ori_img_size, mode="bilinear", align_corners=False,
+            )
+        return output_masks
+
         
         
         

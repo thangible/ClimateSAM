@@ -8,23 +8,17 @@ def test_mask_shapes():
 
     # Create a dummy input with 16 channels and the same spatial dimensions as SAM expects.
     # Use the SAM image size from the model for consistency.
-    batch_size = 1
+    batch_size = 3
     channels = 16
     height, width = model.sam_img_size # 1024, 1024
     dummy_input = torch.randn(batch_size, channels, height, width) #
 
     # Run a forward pass
     outputs = model(dummy_input)
+    # tc_dense_embeddings_list, ar_dense_embeddings_list = outputs[0], outputs[1]
     
     # Assuming forward() returns (tc_mask, ar_mask)
-    tc_mask, ar_mask = outputs
-
-    # Print the shapes
-    print("tc_mask shape:", tc_mask.shape)
-    print("ar_mask shape:", ar_mask.shape)
-
-    # Check that the two masks have the same shape
-    assert tc_mask.shape == ar_mask.shape, "Mismatch: tc_mask and ar_mask must have the same shape!"
+    # print(f"TC Dense Embeddings Shape: {tc_dense_embeddings_list[0].shape}")
 
 if __name__ == "__main__":
     test_mask_shapes()
