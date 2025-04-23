@@ -14,6 +14,7 @@ from train_parser import parse
 from climatesam import ClimateSAM
 from dataset.climatenet import ClimateDataset
 from evaluator import StreamSegMetrics
+import wandb
 
 def worker_init_fn(worker_id: int, base_seed: int, same_worker_seed: bool = True):
     """
@@ -124,7 +125,8 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
             dice_loss=dice_loss.clone().detach()
         )
         
-        # print(f"BCE Loss AR: {bce_loss_ar:.4f}, BCE Loss TC: {bce_loss_tc:.4f}, Dice Loss AR: {dice_loss_ar:.4f}, Dice Loss TC: {dice_loss_tc:.4f}")
+        if worker_args.wandb:
+            wandb.log({f"train/{key}": value.item() for key, value in loss_dict.items()})
         
         backward_context = nullcontext
         if torch.distributed.is_initialized():
@@ -153,7 +155,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
     if train_pbar:
         train_pbar.clear()
 
-def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num):
+def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args):
     model.eval()
     valid_pbar = tqdm(total=len(val_dataloader), desc='valid', leave=False)
     for val_step, batch in enumerate(val_dataloader):
@@ -185,6 +187,13 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
         miou_tc = tc_metrics.compute()[0]['Mean Foreground IoU']
         ar_metrics.reset()
         tc_metrics.reset()
+        
+        if worker_args.wandb:
+            wandb.log({
+                "valid/miou_ar": miou_ar,
+                "valid/miou_tc": miou_tc,
+                "epoch": epoch
+            })
         
         return miou_tc, miou_ar
         
@@ -254,7 +263,7 @@ def main_worker(worker_id, worker_args):
     for epoch in range(1, max_epoch_num + 1):
         train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num)
         if epoch % worker_args.valid_per_epochs == 0 and local_rank == 0:
-            miou_tc, miou_ar = validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num)
+            miou_tc, miou_ar = validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args)
             print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}")
             if miou_tc > best_miou_tc:
                 best_miou_tc = miou_tc
@@ -270,7 +279,7 @@ if __name__ == '__main__':
     if hasattr(args, 'wandb') and args.wandb:
         project_name = args.project_name if hasattr(args, 'project_name') else "climate-sam"
         run_name = args.run_name if hasattr(args, 'run_name') else None
-        # wandb.init(project=project_name, name=run_name, config=vars(args))
+        wandb.init(project=project_name, name=run_name, config=vars(args))
 
 
     if torch.cuda.is_available():

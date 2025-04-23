@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from .module import Adapter
+from .layer_module import Adapter
 
 class SAMImageEncodeWrapper(nn.Module):
 

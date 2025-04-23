@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-# from module import LayerNorm2d
+from .layer_module import LayerNorm2d
 
 class PromptGenerator(nn.Module):
-    def __init__(self, pool_size: tuple = (2, 2), fused_channels: int = 64, in_channels: int = 768, out_channels: int = 2):
+    def __init__(self, pool_size: tuple = (2, 2), fused_channels: int = 32, in_channels: int = 768, out_channels: int = 2):
         super(PromptGenerator, self).__init__()  
              
         self.pool = nn.AdaptiveAvgPool2d(pool_size)
@@ -23,7 +23,10 @@ class PromptGenerator(nn.Module):
         
         for block_idx in range(4):
             self.input_reduction.append(
-                nn.Conv2d(in_channels, fused_channels, kernel_size=1, padding=0, bias=False)
+                nn.Sequential(
+                nn.Conv2d(in_channels, fused_channels, kernel_size=1, padding=0, bias=False),
+                nn.ReLU()
+                )
             )
             num_layers = block_idx + 1
             # Each input feature is assumed to have fused_channels channels.
@@ -37,7 +40,14 @@ class PromptGenerator(nn.Module):
             # Fuse the three features:
             # The concatenation will have 3*fused_channels channels.
             self.block_fuse_convs.append(
-                nn.Conv2d(3 * fused_channels, fused_channels, kernel_size=3, padding=1, stride=2)
+                nn.Sequential(
+                    nn.Conv2d(3 * fused_channels, fused_channels, kernel_size=1),
+                    LayerNorm2d(fused_channels),
+                    nn.ReLU(),
+                    nn.Conv2d(fused_channels, fused_channels, kernel_size=3, padding=1, stride=2),
+                    LayerNorm2d(fused_channels),
+                    nn.ReLU()
+                )
             )
             # After fusion, if this is not the first block, we will concatenate with the previous block's
             # upsampled output. That doubles the channels from fused_channels to 2*fused_channels.
@@ -46,19 +56,13 @@ class PromptGenerator(nn.Module):
             self.block_out_trans.append(
                 nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
             )
-        
-        # Update box_mlp to accept 4 pooled features.
-        # mlp_in_dim = 4 * fused_channels * pool_size[0] * pool_size[1]
-        # self.box_mlp = nn.Sequential(
-        #     nn.Linear(mlp_in_dim, fused_channels),
-        #     nn.ReLU(),
-        #     nn.Linear(fused_channels, out_channels)
-        # )
-        
+
         self.neck = nn.Sequential(
             nn.Conv2d(4 * fused_channels, fused_channels, kernel_size=1, padding=0),  # fused_channelsx1024x1024
-            nn.Sigmoid(),
-            nn.Conv2d(fused_channels, out_channels, kernel_size=4, stride=4, groups=2, padding=0),  # 2x256x256
+            nn.ReLU(),
+            nn.Conv2d(fused_channels, fused_channels, kernel_size=4, stride=2, groups=2, padding=1),  # 2x518x518
+            nn.ReLU(),
+            nn.Conv2d(fused_channels, out_channels, kernel_size=4, stride=2, groups=2, padding=1),  # 2x256x256
             nn.ReLU()
         )
         
