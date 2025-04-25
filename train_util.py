@@ -14,32 +14,86 @@ from packaging.version import parse as V
 
 import cv2
 
+import cv2
+import torch
+import numpy as np
 
 
-def process_points_and_boxes(masks:torch.Tensor, connectivity = 8, threshold = 50):
+
+
+def extract_point_and_bbox_prompts_from_climatenet_mask(masks, connectivity = 8, threshold = 50):
     # Convert the PyTorch tensor to a NumPy array
     masks = masks.cpu().numpy() if isinstance(masks, torch.Tensor) else masks
     
     
-    # masks_ar_gt = [ (mask == 2).to(torch.uint8) for mask in masks_gt ]
-    # masks_tc_gt = [ (mask == 1).to(torch.uint8) for mask in masks_gt ]
+    ar_masks = [ (mask == 2) for mask in masks ]
+    tc_masks = [ (mask == 1)  for mask in masks ]
     #noisy_masks 
+    ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = [], [], [], []
+    for index in range(len(ar_masks)):
+        ar_mask = ar_masks[index]
+        tc_mask = tc_masks[index]
+        ar_positive_points, ar_bboxes = get_point_and_bbox_from_binary_mask(ar_mask, connectivity, threshold)
+        tc_positive_points, tc_bboxes = get_point_and_bbox_from_binary_mask(tc_mask, connectivity, threshold)
+
+        
+        # print("AR Positive Points:", ar_positive_points)
+        # print("AR Bounding Boxes:", ar_bboxes)
+        # print("TC Positive Points:", tc_positive_points)
+        # print("TC Bounding Boxes:", tc_bboxes)
+        
+        if len(ar_positive_points) == 0 and len(tc_positive_points) == 0:
+            pass
+        
+        elif len(ar_positive_points) == 0:
+            tc_point_labels = np.ones(len(tc_positive_points))
+            current_tc_point_prompts = (tc_positive_points, tc_point_labels)
+            tc_point_prompts.append(current_tc_point_prompts)
+            tc_bbox_prompts.append(np.array(tc_bboxes))
+        elif len(tc_positive_points) == 0:
+            ar_point_labels = np.ones(len(ar_positive_points))
+            current_ar_point_prompt = (ar_positive_points, ar_point_labels)
+            ar_point_prompts.append(current_ar_point_prompt)
+            ar_bbox_prompts.append(np.array(ar_bboxes))
+        else:
+            ar_point_labels = np.concatenate([
+                np.ones(len(ar_positive_points)), 
+                np.zeros(len(tc_positive_points))
+            ])
+            tc_point_labels = np.concatenate([
+                np.ones(len(tc_positive_points)), 
+                np.zeros(len(ar_positive_points))
+            ])
+            ar_points =  np.concatenate((ar_positive_points, tc_positive_points), axis=0)
+            tc_points = np.concatenate((tc_positive_points, ar_positive_points), axis=0)
+            current_ar_point_prompt = (ar_points, ar_point_labels)
+            current_tc_point_prompts = (tc_points, tc_point_labels)
+            current_ar_bboxes = np.array(ar_bboxes)
+            current_tc_bboxes = np.array(tc_bboxes)
+            ar_point_prompts.append(current_ar_point_prompt)
+            tc_point_prompts.append(current_tc_point_prompts)
+            ar_bbox_prompts.append(current_ar_bboxes)
+            tc_bbox_prompts.append(current_tc_bboxes)
+
+    ar_bbox_prompts = np.array(ar_bbox_prompts)
+    tc_bbox_prompts = np.array(tc_bbox_prompts)
     
-    # FIND OBJECTS FROM MASKS
+    return ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts
+    
+
+
+def get_point_and_bbox_from_binary_mask(binary_mask, connectivity = 8, threshold = 50):
+
+    # Convert the PyTorch tensor to a NumPy array
+    masks = binary_mask.cpu().numpy() if isinstance(binary_mask, torch.Tensor) else binary_mask
     object_count, integrated_label, per_object_stats, per_label_centroids = cv2.connectedComponentsWithStats(
         image=masks.astype(np.uint8), connectivity=connectivity)
-    
-    # # Ignore background
-    # object_count = object_count - 1 # subtract 1 to ignore the background
-    # per_object_stats, per_label_centroids = per_object_stats[1:], per_label_centroids[1:] # remove background
     
     if object_count-1 == 0:
         return None, None
     
-    ar_bounding_boxes = []
-    tc_bounding_boxes = []
-    ar_points = []
-    tc_points = []
+    bboxes = []
+    points = []
     for obj_index in range(1, object_count): # loop through each object ignore background
         # stat[0] = leftmost pixel
         # stat[1] = topmost pixel
@@ -72,20 +126,12 @@ def process_points_and_boxes(masks:torch.Tensor, connectivity = 8, threshold = 5
             else:
                 chosen_point = random_point
             # Append to list
-            if integrated_label[obj_index] == 1:
-                tc_bounding_boxes.append(bounding_box)
-                tc_points.append([chosen_point])
-            elif integrated_label[obj_index] == 2:
-                ar_bounding_boxes.append(bounding_box)
-                ar_points.append([chosen_point])
-            else:
-                raise ValueError(f"Unknown label {integrated_label[obj_index]} for object {obj_index}")
-    
 
-            
+            bboxes.append(bounding_box)
+            points.append(chosen_point)
 
-    return ar_bounding_boxes, tc_bounding_boxes, ar_points, tc_points
-    
+    return np.array(points), np.array(bboxes)
+
 
 
 
