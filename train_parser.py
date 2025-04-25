@@ -19,7 +19,7 @@ def parse():
              "Default to be 1 for one-shot and 4 for 16- and full-shot."
     )
     parser.add_argument(
-        '--train_bs', default= 4, type=int,
+        '--train_bs', default= 16, type=int,
         help="The batch size for the training dataloader. Default to be 1 for one-shot and 4 for 16- and full-shot."
     )
     parser.add_argument(

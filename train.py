@@ -7,7 +7,7 @@ import torch.multiprocessing as mp
 import torch.nn.functional as F
 from functools import partial
 from torch.utils.data import DataLoader
-from train_util import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, calculate_dice_loss
+from train_util import process_points_and_boxes, batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, calculate_dice_loss
 from tqdm import tqdm
 from contextlib import nullcontext
 from train_parser import parse
@@ -69,7 +69,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
     for train_step, batch in enumerate(train_dataloader):
         batch = batch_to_cuda(batch, device)
         # print(f"batch['input'] shape: {batch['input'].shape}") 
-        
+        points, boxes = process_points_and_boxes(batch['gt_masks'])
         ar_mask, tc_mask = model(batch['input'])
         masks_gt = batch['gt_masks']
         masks_ar_gt = [ (mask == 2).to(torch.uint8) for mask in masks_gt ]
@@ -126,7 +126,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         )
         
         if worker_args.wandb:
-            wandb.log({f"train/{key}": value.item() for key, value in loss_dict.items()})
+            wandb.log({f"train/{key}": value.item() for key, value in loss_dict.items()}, step=epoch)
         
         backward_context = nullcontext
         if torch.distributed.is_initialized():

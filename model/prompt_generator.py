@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from .layer_module import LayerNorm2d
 
 class PromptGenerator(nn.Module):
-    def __init__(self, pool_size: tuple = (2, 2), fused_channels: int = 32, in_channels: int = 768, out_channels: int = 2):
+    def __init__(self, pool_size: tuple = (2, 2), fused_channels: int = 128, in_channels: int = 768, out_channels: int = 2):
         super(PromptGenerator, self).__init__()  
              
         self.pool = nn.AdaptiveAvgPool2d(pool_size)
@@ -25,7 +25,7 @@ class PromptGenerator(nn.Module):
             self.input_reduction.append(
                 nn.Sequential(
                 nn.Conv2d(in_channels, fused_channels, kernel_size=1, padding=0, bias=False),
-                nn.ReLU()
+                nn.ReLU(),
                 )
             )
             num_layers = block_idx + 1
@@ -42,8 +42,8 @@ class PromptGenerator(nn.Module):
             self.block_fuse_convs.append(
                 nn.Sequential(
                     nn.Conv2d(3 * fused_channels, fused_channels, kernel_size=1),
-                    LayerNorm2d(fused_channels),
-                    nn.ReLU(),
+                    # LayerNorm2d(fused_channels),
+                    # nn.ReLU(),
                     nn.Conv2d(fused_channels, fused_channels, kernel_size=3, padding=1, stride=2),
                     LayerNorm2d(fused_channels),
                     nn.ReLU()
@@ -59,13 +59,18 @@ class PromptGenerator(nn.Module):
 
         self.neck = nn.Sequential(
             nn.Conv2d(4 * fused_channels, fused_channels, kernel_size=1, padding=0),  # fused_channelsx1024x1024
-            nn.ReLU(),
-            nn.Conv2d(fused_channels, fused_channels, kernel_size=4, stride=2, groups=2, padding=1),  # 2x518x518
-            nn.ReLU(),
-            nn.Conv2d(fused_channels, out_channels, kernel_size=4, stride=2, groups=2, padding=1),  # 2x256x256
             nn.ReLU()
         )
         
+        self.mask1_conv =  nn.Sequential(
+            nn.Conv2d(fused_channels, fused_channels, kernel_size=4, stride=2, groups=2, padding=1),  # 2x518x518
+            nn.Conv2d(fused_channels, 1, kernel_size=4, stride=2,  padding=1)  # 2x256x256
+            )
+        
+        self.mask2_conv = nn.Sequential(
+            nn.Conv2d(fused_channels, fused_channels, kernel_size=4, stride=2, groups=2, padding=1),  # 2x518x518
+            nn.Conv2d(fused_channels, 1, kernel_size=4, stride=2, padding=1)  # 2x256x256
+            )
 
     def forward(self, feat_list):
         """
@@ -108,7 +113,8 @@ class PromptGenerator(nn.Module):
         # classifier_tokens = self.box_mlp(concat_token)
         
         # The final fused feature is the output from the last block.
-        masks = self.neck(prev_up)
-
+        neck_out = self.neck(prev_up)
+        tc_mask = self.mask1_conv(neck_out)
+        ar_mask = self.mask2_conv(neck_out)
         
-        return masks
+        return tc_mask, ar_mask

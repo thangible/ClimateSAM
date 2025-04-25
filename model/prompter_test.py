@@ -22,7 +22,7 @@ def test_promptgenerator_forward():
     dummy_feats = [torch.rand(B, 64, 64, 768) for _ in range(12)]
     pg = PromptGenerator()
     
-    fused_feats = pg(dummy_feats)
+    tc_mask, ar_mask = pg(dummy_feats)
     
     # Expected output shapes:
     # fused_feats should be (B, 768, 1024, 1024) based on the upsampling in 4 blocks:
@@ -31,11 +31,11 @@ def test_promptgenerator_forward():
     #   Block2: 64 -> 512 -> fuse -> 256 -> out_trans -> 512
     #   Block3: 64 -> 1024 -> fuse -> 512 -> out_trans -> 1024
     # box_out is produced by box_mlp with output shape (B, 768)
-    expected_fused_shape = (B, 2, 256, 256)
+    expected_fused_shape = (B, 1, 256, 256)
     # expected_box_shape = (B, 2)
     
-    assert fused_feats.shape == expected_fused_shape, \
-        f"Expected fused_feats shape {expected_fused_shape}, got {fused_feats.shape}"
+    assert tc_mask.shape == expected_fused_shape, \
+        f"Expected fused_feats shape {expected_fused_shape}, got {tc_mask.shape}"
 
 
 if __name__ == '__main__':

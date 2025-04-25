@@ -6,7 +6,7 @@ from model.prompt_encoder import PromptEncoderWrapper
 from model.mask_decoder import MaskDecoderHQ
 from model.prompt_generator import PromptGenerator
 from model.segment_anything_ext.build_sam import sam_model_registry
-from typing import Union, List, Tuple
+from typing import Union, List, Tuple, Optional
 import torch.nn.functional as F
 
 
@@ -54,6 +54,7 @@ class ClimateSAM(nn.Module):
             for out_ch in range(self.input_adapt[0].weight.shape[0]):
                 for in_ch in input_weights:
                     self.input_adapt[0].weight[out_ch, in_ch, 0, 0] = 1.0    
+        self.input_adapt[0].weight.requires_grad = False # freeze the input adaptation layer
                 
         del self.ori_sam.mask_decoder # remove the mask decoder in original SAM to avoid redundant params in model object
         
@@ -76,6 +77,9 @@ class ClimateSAM(nn.Module):
             self,
             input: Union[List[torch.Tensor], None],
             hq_token_weight: torch.Tensor = None,
+            points:  Optional[Tuple[torch.Tensor, torch.Tensor]]= None,
+            boxes: Optional[torch.Tensor] = None,
+            phase: int = 0,
             return_all_hq_masks: bool = False
     ):
         ori_img_size = [(input[i].shape[-2], input[i].shape[-1]) for i in range(len(input))]
@@ -93,15 +97,24 @@ class ClimateSAM(nn.Module):
         # print(f"Image embeddings shape: {image_embeddings[0].shape}")
         # print(f"Intermediate embeddings shape: {interm_embeddings[0].shape}")
 
-        masks = self.prompt_generator(interm_embeddings) # shape: batch x 2 x 256 x 256
-        tc_masks, ar_masks = torch.chunk(masks, 2, dim=1) # shape: batch x 1 x 256 x 256 each
-
+        tc_masks, ar_masks = self.prompt_generator(interm_embeddings) # shape: batch x 2 x 256 x 256
+        # tc_masks, ar_masks = torch.chunk(masks, 2, dim=1) # shape: batch x 1 x 256 x 256 each
 
         # print(f"TC masks shape: {tc_masks.shape}")
         # print(f"AR masks shape: {ar_masks.shape}")
         
-        tc_sparse_embeddings, tc_dense_embeddings = self.prompt_encoder(masks=tc_masks)
-        ar_sparse_embeddings, ar_dense_embeddings = self.prompt_encoder(masks=ar_masks)
+        phase = 0
+        if phase == 0: # train image encoder, freeze imput adaptation, not use prompt generator
+            points = None
+            boxes = None
+        elif phase == 1: # train prompt generator, freeze image encoder, freeze input adaptation
+            points = None
+            boxes = None
+        elif phase == 2: # train input adaptation, freeze image encoder, freeze prompt generator
+            pass
+            
+        tc_sparse_embeddings, tc_dense_embeddings = self.prompt_encoder(masks=tc_masks, points=points, boxes=boxes)
+        ar_sparse_embeddings, ar_dense_embeddings = self.prompt_encoder(masks=ar_masks, points=points, boxes=boxes)
         # print(f"TC mask embedding shape: {tc_dense_embeddings.shape}")
         # print(f"AR mask embedding shape: {ar_dense_embeddings.shape}")
         # print(f"TC sparse embedding shape: {tc_sparse_embeddings.shape}")
