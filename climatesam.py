@@ -8,7 +8,8 @@ from model.prompt_generator import PromptGenerator
 from model.segment_anything_ext.build_sam import sam_model_registry
 from typing import Union, List, Tuple, Optional
 import torch.nn.functional as F
-
+# from climatesam_util import extract_point_and_bbox_prompts_from_climatenet_mask
+import numpy as np
 
 sam_ckpt_path_dict = dict(
     vit_b='./pretrained/sam_vit_b_01ec64.pth',
@@ -76,11 +77,16 @@ class ClimateSAM(nn.Module):
     def forward(
             self,
             input: Union[List[torch.Tensor], None],
+            
             hq_token_weight: torch.Tensor = None,
             points:  Optional[Tuple[torch.Tensor, torch.Tensor]]= None,
             boxes: Optional[torch.Tensor] = None,
-            phase: int = 0,
-            return_all_hq_masks: bool = False
+            unfreeze_prompt_generator: bool = False,
+            return_all_hq_masks: bool = False,
+            ar_point_prompts: Optional[List[Tuple[np.ndarray, np.ndarray]]] = None,
+            tc_point_prompts: Optional[List[Tuple[np.ndarray, np.ndarray]]] = None,
+            ar_bbox_prompts: Optional[np.ndarray] = None,
+            tc_bbox_prompts: Optional[np.ndarray] = None
     ):
         ori_img_size = [(input[i].shape[-2], input[i].shape[-1]) for i in range(len(input))]
         input = self.interpolate_input(input) # from 16x768x1152 to 16x1024x1024
@@ -97,24 +103,17 @@ class ClimateSAM(nn.Module):
         # print(f"Image embeddings shape: {image_embeddings[0].shape}")
         # print(f"Intermediate embeddings shape: {interm_embeddings[0].shape}")
 
-        tc_masks, ar_masks = self.prompt_generator(interm_embeddings) # shape: batch x 2 x 256 x 256
+        tc_masks, ar_masks = None, None
+        if unfreeze_prompt_generator:
+            tc_masks, ar_masks = self.prompt_generator(interm_embeddings) # shape: batch x 2 x 256 x 256
+            ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = None, None, None, None
         # tc_masks, ar_masks = torch.chunk(masks, 2, dim=1) # shape: batch x 1 x 256 x 256 each
 
         # print(f"TC masks shape: {tc_masks.shape}")
         # print(f"AR masks shape: {ar_masks.shape}")
-        
-        phase = 0
-        if phase == 0: # train image encoder, freeze imput adaptation, not use prompt generator
-            points = None
-            boxes = None
-        elif phase == 1: # train prompt generator, freeze image encoder, freeze input adaptation
-            points = None
-            boxes = None
-        elif phase == 2: # train input adaptation, freeze image encoder, freeze prompt generator
-            pass
             
-        tc_sparse_embeddings, tc_dense_embeddings = self.prompt_encoder(masks=tc_masks, points=points, boxes=boxes)
-        ar_sparse_embeddings, ar_dense_embeddings = self.prompt_encoder(masks=ar_masks, points=points, boxes=boxes)
+        tc_sparse_embeddings, tc_dense_embeddings = self.prompt_encoder(masks=tc_masks, points=points, boxes=tc_bbox_prompts, points = tc_point_prompts)
+        ar_sparse_embeddings, ar_dense_embeddings = self.prompt_encoder(masks=ar_masks, points=points, boxes=ar_bbox_prompts, points = ar_point_prompts)
         # print(f"TC mask embedding shape: {tc_dense_embeddings.shape}")
         # print(f"AR mask embedding shape: {ar_dense_embeddings.shape}")
         # print(f"TC sparse embedding shape: {tc_sparse_embeddings.shape}")

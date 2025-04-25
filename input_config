@@ -1,12 +1,12 @@
 [PATH]
-; exp_dir = ./exp
+exp_dir = ./exp
 data_dir = '/home/aiworker2/thang/climateNet'
 project_name = climate-sam
 run_name = test
 
 [BATCH CONFIG]
 ; num_workers = None
-train_bs = 4
+train_bs = 16
 ; val_bs = None
 ; weight_decay = 1e-4
 lr = 1e-3

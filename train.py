@@ -7,7 +7,7 @@ import torch.multiprocessing as mp
 import torch.nn.functional as F
 from functools import partial
 from torch.utils.data import DataLoader
-from train_util import process_points_and_boxes, batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, calculate_dice_loss
+from train_util import extract_point_and_bbox_prompts_from_climatenet_mask, batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, calculate_dice_loss
 from tqdm import tqdm
 from contextlib import nullcontext
 from train_parser import parse
@@ -69,8 +69,15 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
     for train_step, batch in enumerate(train_dataloader):
         batch = batch_to_cuda(batch, device)
         # print(f"batch['input'] shape: {batch['input'].shape}") 
-        points, boxes = process_points_and_boxes(batch['gt_masks'])
-        ar_mask, tc_mask = model(batch['input'])
+        ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = \
+            extract_point_and_bbox_prompts_from_climatenet_mask(batch['gt_masks'])
+        ar_mask, tc_mask = model(batch['input'],
+                                 ar_point_prompts = ar_point_prompts,
+                                tc_point_prompts = tc_point_prompts, 
+                                ar_bbox_prompts = ar_bbox_prompts, 
+                                tc_bbox_prompts= tc_bbox_prompts)
+        
+        
         masks_gt = batch['gt_masks']
         masks_ar_gt = [ (mask == 2).to(torch.uint8) for mask in masks_gt ]
         masks_tc_gt = [ (mask == 1).to(torch.uint8) for mask in masks_gt ]
@@ -255,6 +262,7 @@ def main_worker(worker_id, worker_args):
     optimizer, scheduler = setup_optimizer_and_scheduler(model, worker_args)
     best_miou_tc = 0
     best_miou_ar = 0
+    best_miou_total = 0
     ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     
@@ -271,7 +279,15 @@ def main_worker(worker_id, worker_args):
             if miou_ar > best_miou_ar:
                 best_miou_ar = miou_ar
                 print(f'Best mIoU AR has been updated to {best_miou_ar:.2%}!')
-    
+            if (miou_tc + miou_ar) / 2 > best_miou_total:
+                best_miou_total = (miou_tc + miou_ar) / 2
+                print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
+                if worker_args.save_model:
+                    save_path = os.path.join(worker_args.exp_dir, f"best_model_epoch_{epoch}.pth")
+                    torch.save(model.state_dict(), save_path)
+                    print(f"Model saved to {save_path}")
+                    wandb.save(save_path)
+                    print(f"Model saved to wandb: {save_path}")
     
 if __name__ == '__main__':
     args = parse()
