@@ -70,13 +70,13 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         batch = batch_to_cuda(batch, device)
         # print(f"batch['input'] shape: {batch['input'].shape}") 
         ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = \
-            extract_point_and_bbox_prompts_from_climatenet_mask(batch['gt_masks'])
+            extract_point_and_bbox_prompts_from_climatenet_mask(batch['gt_masks'], device)
+        
         ar_mask, tc_mask = model(batch['input'],
-                                 ar_point_prompts = ar_point_prompts,
+                                ar_point_prompts = ar_point_prompts,
                                 tc_point_prompts = tc_point_prompts, 
                                 ar_bbox_prompts = ar_bbox_prompts, 
                                 tc_bbox_prompts= tc_bbox_prompts)
-        
         
         masks_gt = batch['gt_masks']
         masks_ar_gt = [ (mask == 2).to(torch.uint8) for mask in masks_gt ]

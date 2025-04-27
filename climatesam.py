@@ -112,8 +112,33 @@ class ClimateSAM(nn.Module):
         # print(f"TC masks shape: {tc_masks.shape}")
         # print(f"AR masks shape: {ar_masks.shape}")
             
-        tc_sparse_embeddings, tc_dense_embeddings = self.prompt_encoder(masks=tc_masks,  boxes=tc_bbox_prompts, points = tc_point_prompts)
-        ar_sparse_embeddings, ar_dense_embeddings = self.prompt_encoder(masks=ar_masks,  boxes=ar_bbox_prompts, points = ar_point_prompts)
+        tc_sparse_embeddings, tc_dense_embeddings = [], []
+        ar_sparse_embeddings, ar_dense_embeddings = [], []
+        for batch_idx in range(batch_size):
+            print(f"ar_point_prompts shape: {ar_point_prompts[batch_idx][0].shape}")
+            print(f"tc_point_prompts shape: {tc_point_prompts[batch_idx][0].shape}")
+            print(f"ar_point_prompts label shape: {ar_point_prompts[batch_idx][1].shape}")
+            print(f"tc_point_prompts label shape: {tc_point_prompts[batch_idx][1].shape}")
+            print(f"ar_bbox_prompts shape: {ar_bbox_prompts[batch_idx].shape}")
+            print(f"tc_bbox_prompts shape: {tc_bbox_prompts[batch_idx].shape}")
+            current_tc_sparse_embedding, current_dense_embeddings = self.prompt_encoder(
+                points=tc_point_prompts[batch_idx] if tc_point_prompts is not None else None,
+                boxes=tc_bbox_prompts[batch_idx] if tc_bbox_prompts is not None else None,
+                masks= tc_masks[batch_idx] if tc_masks is not None else None,
+            )
+            
+            current_ar_sparse_embedding, current_dense_embeddings = self.prompt_encoder(
+                points=ar_point_prompts[batch_idx] if ar_point_prompts is not None else None,
+                boxes=ar_bbox_prompts[batch_idx] if ar_bbox_prompts is not None else None,
+                masks= ar_masks[batch_idx] if ar_masks is not None else None,
+            )
+            
+            tc_sparse_embeddings.append(current_tc_sparse_embedding)
+            ar_sparse_embeddings.append(current_ar_sparse_embedding)
+            tc_dense_embeddings.append(current_dense_embeddings)
+            ar_dense_embeddings.append(current_dense_embeddings)
+
+        
         # print(f"TC mask embedding shape: {tc_dense_embeddings.shape}")
         # print(f"AR mask embedding shape: {ar_dense_embeddings.shape}")
         # print(f"TC sparse embedding shape: {tc_sparse_embeddings.shape}")
@@ -122,7 +147,7 @@ class ClimateSAM(nn.Module):
         _, tc_pred_masks = self.mask_decoder(
             image_embeddings=image_embeddings,
             image_pe=[self.prompt_encoder.get_dense_pe() for _ in range(batch_size)],
-            sparse_prompt_embeddings=tc_sparse_embeddings.unsqueeze(1),
+            sparse_prompt_embeddings=tc_sparse_embeddings,
             dense_prompt_embeddings=tc_dense_embeddings,
             multimask_output=False,
             interm_embeddings=interm_embeddings,
@@ -133,7 +158,7 @@ class ClimateSAM(nn.Module):
         _, ar_pred_masks = self.mask_decoder(
             image_embeddings=image_embeddings,
             image_pe=[self.prompt_encoder.get_dense_pe() for _ in range(batch_size)],
-            sparse_prompt_embeddings=ar_sparse_embeddings.unsqueeze(1),
+            sparse_prompt_embeddings=ar_sparse_embeddings,
             dense_prompt_embeddings= ar_dense_embeddings,
             multimask_output=False,
             interm_embeddings=interm_embeddings,

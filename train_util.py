@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import os
 import random
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Optional
 
 import numpy as np
 import torch
@@ -22,7 +22,10 @@ import numpy as np
 
 
 
-def extract_point_and_bbox_prompts_from_climatenet_mask(masks, connectivity = 8, threshold = 50):
+def extract_point_and_bbox_prompts_from_climatenet_mask(masks, device = None, connectivity = 8, threshold = 50) -> Tuple[List[Union[Tuple[torch.Tensor, torch.Tensor],
+                                                                                                                     None]], 
+                                                                                                          List[Union[Tuple[torch.Tensor,torch.Tensor], None]],
+                                                                                                          List[Union[torch.Tensor, None]], List[Union[torch.Tensor, None]]]:
     # Convert the PyTorch tensor to a NumPy array
     masks = masks.cpu().numpy() if isinstance(masks, torch.Tensor) else masks
     
@@ -41,43 +44,50 @@ def extract_point_and_bbox_prompts_from_climatenet_mask(masks, connectivity = 8,
         tc_positive_points, tc_bboxes = get_point_and_bbox_from_binary_mask(tc_mask, connectivity, threshold)
 
         
-        print("AR Positive Points:", ar_positive_points)
-        print("AR Bounding Boxes:", ar_bboxes)
-        print("TC Positive Points:", tc_positive_points)
-        print("TC Bounding Boxes:", tc_bboxes)
-        print("AR Positive Points Shape:", ar_positive_points.shape if ar_positive_points is not None else "None")
-        print("AR Bounding Boxes Length:", len(ar_bboxes) if ar_bboxes is not None else "None")
-        print("TC Positive Points Shape:", tc_positive_points.shape if tc_positive_points is not None else "None")
-        print("TC Bounding Boxes Length:", len(tc_bboxes) if tc_bboxes is not None else "None")
+        # print("AR Positive Points:", ar_positive_points)
+        # print("AR Bounding Boxes:", ar_bboxes)
+        # print("TC Positive Points:", tc_positive_points)
+        # print("TC Bounding Boxes:", tc_bboxes)
+        # print("AR Positive Points Shape:", ar_positive_points.shape if ar_positive_points is not None else "None")
+        # print("AR Bounding Boxes Length:", len(ar_bboxes) if ar_bboxes is not None else "None")
+        # print("TC Positive Points Shape:", tc_positive_points.shape if tc_positive_points is not None else "None")
+        # print("TC Bounding Boxes Length:", len(tc_bboxes) if tc_bboxes is not None else "None")
+        
+        ar_point_count = ar_positive_points.shape[1] if ar_positive_points is not None else 0
+        tc_point_count = tc_positive_points.shape[1] if tc_positive_points is not None else 0
         
         if ar_positive_points is None and tc_positive_points is None: # IN CASE OF NO PROMPTS
-            current_ar_point_prompt = None
-            current_tc_point_prompts = None
+            current_ar_point_prompt = (None, None)
+            current_tc_point_prompts = (None, None)
         
         elif ar_positive_points is None: # IN CASE OF TC ONLY
             # create tc_point_labels a tensor of ones with the same length as tc_positive_points
-            tc_point_labels = torch.ones(len(tc_positive_points), dtype=torch.float32)
+            tc_point_labels = torch.ones(tc_point_count, dtype=torch.float32).unsqueeze(0)
             current_tc_point_prompts: Tuple[torch.Tensor, torch.Tensor] = (tc_positive_points, tc_point_labels)
             current_ar_point_prompt = None
             
         elif tc_positive_points is None: # IN CASE OF AR ONLY
-            ar_point_labels = torch.ones(len(ar_positive_points), dtype=torch.float32)
+            ar_point_labels = torch.ones(ar_point_count, dtype=torch.float32).unsqueeze(0)
+
             current_ar_point_prompt: Tuple[torch.Tensor, torch.Tensor] = (ar_positive_points,       ar_point_labels)
             current_tc_point_prompts = None
             
         else: # IN CASE OF BOTH AR AND TC
             ar_point_labels: torch.Tensor = torch.concat([
-                torch.ones(len(ar_positive_points), dtype=torch.float32), 
-                torch.zeros(len(tc_positive_points), dtype=torch.float32)
-            ])
-            tc_point_labels: torch.Tensor = torch.concat([
-                torch.ones(len(tc_positive_points), dtype=torch.float32), 
-                torch.zeros(len(ar_positive_points), dtype=torch.float32)
-            ])
+                torch.ones(ar_point_count, dtype=torch.float32).unsqueeze(0), 
+                torch.zeros(tc_point_count, dtype=torch.float32).unsqueeze(0)
+            ], axis = 1)
             
-            ar_points: torch.Tensor =  torch.concat((ar_positive_points, tc_positive_points), axis=0)
-            tc_points: torch.Tensor = torch.concat((tc_positive_points, ar_positive_points), axis=0)
-
+            
+            
+            tc_point_labels: torch.Tensor = torch.concat([
+                torch.ones(tc_point_count, dtype=torch.float32).unsqueeze(0), 
+                torch.zeros(ar_point_count, dtype=torch.float32).unsqueeze(0)
+            ], axis = 1)
+            
+            ar_points: torch.Tensor =  torch.concat((ar_positive_points, tc_positive_points), axis=1)
+            tc_points: torch.Tensor = torch.concat((tc_positive_points, ar_positive_points), axis=1)
+            
             
             current_ar_point_prompt: Tuple[torch.Tensor, torch.Tensor] = (ar_points, ar_point_labels)
             current_tc_point_prompts: Tuple[torch.Tensor, torch.Tensor] = (tc_points, tc_point_labels)
@@ -88,13 +98,43 @@ def extract_point_and_bbox_prompts_from_climatenet_mask(masks, connectivity = 8,
         ar_bbox_prompts.append(ar_bboxes)
         tc_bbox_prompts.append(tc_bboxes)
 
-    print("AR Point Prompts:", ar_point_prompts, "AR Point Prompts Length:", len(ar_point_prompts))
-    print("TC Point Prompts:", tc_point_prompts, "TC Point Prompts Length:", len(tc_point_prompts))
-    print("AR Bounding Boxes:", ar_bbox_prompts, "AR Bounding Boxes Length:", len(ar_bbox_prompts))
-    print("TC Bounding Boxes:", tc_bbox_prompts, "TC Bounding Boxes Length:", len(tc_bbox_prompts))
+    # print("AR Point Prompts:", ar_point_prompts, "AR Point Prompts Length:", len(ar_point_prompts))
+    # print("TC Point Prompts:", tc_point_prompts, "TC Point Prompts Length:", len(tc_point_prompts))
+    # print("AR Bounding Boxes:", ar_bbox_prompts, "AR Bounding Boxes Length:", len(ar_bbox_prompts))
+    # print("TC Bounding Boxes:", tc_bbox_prompts, "TC Bounding Boxes Length:", len(tc_bbox_prompts))
+    # ar_point_prompts = postprocess_prompts(ar_point_prompts)
+    # tc_point_prompts = postprocess_prompts(tc_point_prompts)
+    if device is not None:
+        ar_point_prompts = [(prompt[0].to(device), prompt[1].to(device)) if prompt is not None else None for prompt in ar_point_prompts]
+        tc_point_prompts = [(prompt[0].to(device), prompt[1].to(device)) if prompt is not None else None for prompt in tc_point_prompts]
+        ar_bbox_prompts = [prompt.to(device) if prompt is not None else None for prompt in ar_bbox_prompts]
+        tc_bbox_prompts = [prompt.to(device) if prompt is not None else None for prompt in tc_bbox_prompts]
     
     return ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts
     
+
+def postprocess_prompts(prompts: List[Optional[Tuple[torch.Tensor, torch.Tensor]]]) -> Tuple[Optional[List[torch.Tensor]], Optional[List[torch.Tensor]]]:
+    """
+    Merges a list of prompts (each is a tuple of (points, labels) or None)
+    into a tuple of two lists:
+      - list of points (torch.Tensor) if available, else None,
+      - list of labels (torch.Tensor) if available, else None.
+    """
+    all_points: List[Optional[torch.Tensor]] = []
+    all_labels: List[Optional[torch.Tensor]]= []
+    
+    for item in prompts:
+        if item is not None:
+            points, labels = item
+            all_points.append(points)
+            all_labels.append(labels)
+        else:
+            all_points.append(None)
+            all_labels.append(None)
+            
+    points = np.array(all_points, dtype = object) if all_points else None
+    labels = np.array(all_labels, dtype = object) if all_labels else None
+    return (points, labels)
 
 
 def get_point_and_bbox_from_binary_mask(binary_mask, connectivity = 8, threshold = 50) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[None, None]]:
@@ -146,8 +186,10 @@ def get_point_and_bbox_from_binary_mask(binary_mask, connectivity = 8, threshold
             points.append(chosen_point)
                 
     torch_points = torch.from_numpy(np.array(points)).to(torch.float32)
-    torch_bboxes = torch.from_numpy(np.array(bboxes)).to(torch.float32)
+    torch_bboxes = torch.tensor(bboxes, dtype=torch.float32)
     
+    torch_points = torch_points.unsqueeze(0) # anfoderung von prompt_encoder.py
+    torch_bboxes = torch_bboxes.unsqueeze(0) # anfoderung von prompt_encoder.py
     return torch_points,torch_bboxes
 
 

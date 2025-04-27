@@ -7,3 +7,4 @@ model/segment_anything_ext/modeling/__pycache__
 test.ipynb
 wandb
 __pycache__
+.vscode/settings.json
