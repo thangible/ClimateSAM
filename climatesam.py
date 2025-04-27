@@ -115,12 +115,12 @@ class ClimateSAM(nn.Module):
         tc_sparse_embeddings, tc_dense_embeddings = [], []
         ar_sparse_embeddings, ar_dense_embeddings = [], []
         for batch_idx in range(batch_size):
-            print(f"ar_point_prompts shape: {ar_point_prompts[batch_idx][0].shape}")
-            print(f"tc_point_prompts shape: {tc_point_prompts[batch_idx][0].shape}")
-            print(f"ar_point_prompts label shape: {ar_point_prompts[batch_idx][1].shape}")
-            print(f"tc_point_prompts label shape: {tc_point_prompts[batch_idx][1].shape}")
-            print(f"ar_bbox_prompts shape: {ar_bbox_prompts[batch_idx].shape}")
-            print(f"tc_bbox_prompts shape: {tc_bbox_prompts[batch_idx].shape}")
+            # print(f"ar_point_prompts shape: {ar_point_prompts[batch_idx][0].shape}")
+            # print(f"tc_point_prompts shape: {tc_point_prompts[batch_idx][0].shape}")
+            # print(f"ar_point_prompts label shape: {ar_point_prompts[batch_idx][1].shape}")
+            # print(f"tc_point_prompts label shape: {tc_point_prompts[batch_idx][1].shape}")
+            # print(f"ar_bbox_prompts shape: {ar_bbox_prompts[batch_idx].shape}")
+            # print(f"tc_bbox_prompts shape: {tc_bbox_prompts[batch_idx].shape}")
             current_tc_sparse_embedding, current_dense_embeddings = self.prompt_encoder(
                 points=tc_point_prompts[batch_idx] if tc_point_prompts is not None else None,
                 boxes=tc_bbox_prompts[batch_idx] if tc_bbox_prompts is not None else None,

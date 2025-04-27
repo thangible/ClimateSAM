@@ -75,8 +75,8 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         ar_mask, tc_mask = model(batch['input'],
                                 ar_point_prompts = ar_point_prompts,
                                 tc_point_prompts = tc_point_prompts, 
-                                ar_bbox_prompts = ar_bbox_prompts, 
-                                tc_bbox_prompts= tc_bbox_prompts)
+                                ar_bbox_prompts = None, 
+                                tc_bbox_prompts= None)
         
         masks_gt = batch['gt_masks']
         masks_ar_gt = [ (mask == 2).to(torch.uint8) for mask in masks_gt ]
