@@ -112,8 +112,8 @@ class ClimateSAM(nn.Module):
         # print(f"TC masks shape: {tc_masks.shape}")
         # print(f"AR masks shape: {ar_masks.shape}")
             
-        tc_sparse_embeddings, tc_dense_embeddings = self.prompt_encoder(masks=tc_masks, points=points, boxes=tc_bbox_prompts, points = tc_point_prompts)
-        ar_sparse_embeddings, ar_dense_embeddings = self.prompt_encoder(masks=ar_masks, points=points, boxes=ar_bbox_prompts, points = ar_point_prompts)
+        tc_sparse_embeddings, tc_dense_embeddings = self.prompt_encoder(masks=tc_masks,  boxes=tc_bbox_prompts, points = tc_point_prompts)
+        ar_sparse_embeddings, ar_dense_embeddings = self.prompt_encoder(masks=ar_masks,  boxes=ar_bbox_prompts, points = ar_point_prompts)
         # print(f"TC mask embedding shape: {tc_dense_embeddings.shape}")
         # print(f"AR mask embedding shape: {ar_dense_embeddings.shape}")
         # print(f"TC sparse embedding shape: {tc_sparse_embeddings.shape}")
