@@ -113,7 +113,7 @@ class ClimateSAM(nn.Module):
         # print(f"AR masks shape: {ar_masks.shape}")
             
         tc_sparse_embeddings, tc_dense_embeddings = [], []
-        ar_sparse_embeddings, ar_dense_embeddings = [], []
+        # ar_sparse_embeddings, ar_dense_embeddings = [], []
         for batch_idx in range(batch_size):
             # print(f"ar_point_prompts shape: {ar_point_prompts[batch_idx][0].shape}")
             # print(f"tc_point_prompts shape: {tc_point_prompts[batch_idx][0].shape}")
@@ -127,16 +127,16 @@ class ClimateSAM(nn.Module):
                 masks= tc_masks[batch_idx] if tc_masks is not None else None,
             )
             
-            current_ar_sparse_embedding, current_dense_embeddings = self.prompt_encoder(
-                points=ar_point_prompts[batch_idx] if ar_point_prompts is not None else None,
-                boxes=ar_bbox_prompts[batch_idx] if ar_bbox_prompts is not None else None,
-                masks= ar_masks[batch_idx] if ar_masks is not None else None,
-            )
+            # current_ar_sparse_embedding, current_dense_embeddings = self.prompt_encoder(
+            #     points=ar_point_prompts[batch_idx] if ar_point_prompts is not None else None,
+            #     boxes=ar_bbox_prompts[batch_idx] if ar_bbox_prompts is not None else None,
+            #     masks= ar_masks[batch_idx] if ar_masks is not None else None,
+            # )
             
             tc_sparse_embeddings.append(current_tc_sparse_embedding)
-            ar_sparse_embeddings.append(current_ar_sparse_embedding)
+            # ar_sparse_embeddings.append(current_ar_sparse_embedding)
             tc_dense_embeddings.append(current_dense_embeddings)
-            ar_dense_embeddings.append(current_dense_embeddings)
+            # ar_dense_embeddings.append(current_dense_embeddings)
 
         
         # print(f"TC mask embedding shape: {tc_dense_embeddings.shape}")
@@ -155,16 +155,16 @@ class ClimateSAM(nn.Module):
             return_all_hq_masks=return_all_hq_masks
         )
         
-        _, ar_pred_masks = self.mask_decoder(
-            image_embeddings=image_embeddings,
-            image_pe=[self.prompt_encoder.get_dense_pe() for _ in range(batch_size)],
-            sparse_prompt_embeddings=ar_sparse_embeddings,
-            dense_prompt_embeddings= ar_dense_embeddings,
-            multimask_output=False,
-            interm_embeddings=interm_embeddings,
-            hq_token_weight=hq_token_weight,
-            return_all_hq_masks=return_all_hq_masks
-        )
+        # _, ar_pred_masks = self.mask_decoder(
+        #     image_embeddings=image_embeddings,
+        #     image_pe=[self.prompt_encoder.get_dense_pe() for _ in range(batch_size)],
+        #     sparse_prompt_embeddings=ar_sparse_embeddings,
+        #     dense_prompt_embeddings= ar_dense_embeddings,
+        #     multimask_output=False,
+        #     interm_embeddings=interm_embeddings,
+        #     hq_token_weight=hq_token_weight,
+        #     return_all_hq_masks=return_all_hq_masks
+        # )
         
         # print(f"TC predicted masks shape: {tc_pred_masks[0].shape}")
         # print(f"Length of TC predicted masks list: {len(tc_pred_masks)}")
@@ -176,16 +176,18 @@ class ClimateSAM(nn.Module):
         for i in range(len(tc_postprocess_masks_hq)):
             tc_postprocess_masks_hq[i] = self.postprocess(output_masks=tc_postprocess_masks_hq[i], ori_img_size=ori_img_size[i])
         
-        ar_postprocess_masks_hq = [m_hq.clone() for m_hq in ar_pred_masks]
-        for i in range(len(ar_postprocess_masks_hq)):
-            ar_postprocess_masks_hq[i] = self.postprocess(output_masks=ar_postprocess_masks_hq[i], ori_img_size=ori_img_size[i])
+        # ar_postprocess_masks_hq = [m_hq.clone() for m_hq in ar_pred_masks]
+        # for i in range(len(ar_postprocess_masks_hq)):
+        #     ar_postprocess_masks_hq[i] = self.postprocess(output_masks=ar_postprocess_masks_hq[i], ori_img_size=ori_img_size[i])
         
         # Print the shapes of the postprocessed masks for debugging
         # for i, (tc_mask, ar_mask) in enumerate(zip(tc_postprocess_masks_hq, ar_postprocess_masks_hq)):
         #     print(f"Postprocessed TC mask {i} shape: {tc_mask.shape}")
         #     print(f"Postprocessed AR mask {i} shape: {ar_mask.shape}")
-            
-        return tc_postprocess_masks_hq, ar_postprocess_masks_hq
+        
+        output = [tc_postprocess_masks_hq]
+                #   ar_postprocess_masks_hq]
+        return tc_postprocess_masks_hq, _
     
     @staticmethod
     def postprocess(output_masks: torch.Tensor, ori_img_size: Tuple):

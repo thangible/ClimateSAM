@@ -72,18 +72,18 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = \
             extract_point_and_bbox_prompts_from_climatenet_mask(batch['gt_masks'], device)
         
-        ar_mask, tc_mask = model(batch['input'],
+        tc_mask, _  = model(batch['input'],
                                 ar_point_prompts = ar_point_prompts,
                                 tc_point_prompts = tc_point_prompts, 
                                 ar_bbox_prompts = None, 
                                 tc_bbox_prompts= None)
         
         masks_gt = batch['gt_masks']
-        masks_ar_gt = [ (mask == 2).to(torch.uint8) for mask in masks_gt ]
+        # masks_ar_gt = [ (mask == 2).to(torch.uint8) for mask in masks_gt ]
         masks_tc_gt = [ (mask == 1).to(torch.uint8) for mask in masks_gt ]
         
         # some processing to make sure the masks are in the right shape
-        for masks in [masks_ar_gt, masks_tc_gt, ar_mask, tc_mask]:
+        for masks in [ masks_tc_gt, tc_mask]:
                 for i in range(len(masks)):
                     if len(masks[i].shape) == 2:
                         masks[i] = masks[i][None, None, :]
@@ -94,42 +94,42 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
                     
         bce_loss_list_tc, bce_loss_list_ar = [], []
         dice_loss_list_tc, dice_loss_list_ar = [], []
-        for i in range(len(masks_ar_gt)):
+        for i in range(len(masks_tc_gt)):
             # ar
-            pred_ar, label_ar = ar_mask[i], masks_ar_gt[i]
-            label_ar = torch.where(torch.gt(label_ar, 0.), 1., 0.)
-            b_loss_ar = F.binary_cross_entropy_with_logits(pred_ar, label_ar.float())
-            d_loss_ar = calculate_dice_loss(pred_ar, label_ar)
+            # pred_ar, label_ar = ar_mask[i], masks_ar_gt[i]
+            # label_ar = torch.where(torch.gt(label_ar, 0.), 1., 0.)
+            # b_loss_ar = F.binary_cross_entropy_with_logits(pred_ar, label_ar.float())
+            # d_loss_ar = calculate_dice_loss(pred_ar, label_ar)
             # tc
             pred_tc, label_tc = tc_mask[i], masks_tc_gt[i]
             label_tc = torch.where(torch.gt(label_tc, 0.), 1., 0.)
             b_loss_tc = F.binary_cross_entropy_with_logits(pred_tc, label_tc.float())
             d_loss_tc = calculate_dice_loss(pred_tc, label_tc)
             # add the loss to the list
-            bce_loss_list_ar.append(b_loss_ar)
-            dice_loss_list_ar.append(d_loss_ar)
+            # bce_loss_list_ar.append(b_loss_ar)
+            # dice_loss_list_ar.append(d_loss_ar)
             bce_loss_list_tc.append(b_loss_tc)
             dice_loss_list_tc.append(d_loss_tc)
             
-        bce_loss_ar = sum(bce_loss_list_ar) / len(bce_loss_list_ar)
+        # bce_loss_ar = sum(bce_loss_list_ar) / len(bce_loss_list_ar)
         bce_loss_tc = sum(bce_loss_list_tc) / len(bce_loss_list_tc)
-        bce_loss = bce_loss_ar + bce_loss_tc
-        dice_loss_ar = sum(dice_loss_list_ar) / len(dice_loss_list_ar)
+        # bce_loss = bce_loss_ar + bce_loss_tc
+        # dice_loss_ar = sum(dice_loss_list_ar) / len(dice_loss_list_ar)
         dice_loss_tc = sum(dice_loss_list_tc) / len(dice_loss_list_tc)
-        dice_loss = dice_loss_ar + dice_loss_tc
-        total_loss_ar = bce_loss_ar + dice_loss_ar
+        # dice_loss = dice_loss_ar + dice_loss_tc
+        # total_loss_ar = bce_loss_ar + dice_loss_ar
         total_loss_tc = bce_loss_tc + dice_loss_tc
-        total_loss = bce_loss + dice_loss
+        # total_loss = bce_loss + dice_loss
         loss_dict = dict(
-            total_loss=total_loss.clone().detach(),
-            total_loss_ar=total_loss_ar.clone().detach(),
+            # total_loss=total_loss.clone().detach(),
+            # total_loss_ar=total_loss_ar.clone().detach(),
             total_loss_tc=total_loss_tc.clone().detach(),
-            bce_loss_ar=bce_loss_ar.clone().detach(),
+            # bce_loss_ar=bce_loss_ar.clone().detach(),
             bce_loss_tc=bce_loss_tc.clone().detach(),
-            dice_loss_ar=dice_loss_ar.clone().detach(),
+            # dice_loss_ar=dice_loss_ar.clone().detach(),
             dice_loss_tc=dice_loss_tc.clone().detach(),
-            bce_loss=bce_loss.clone().detach(),
-            dice_loss=dice_loss.clone().detach()
+            # bce_loss=bce_loss.clone().detach(),
+            # dice_loss=dice_loss.clone().detach()
         )
         
         if worker_args.wandb:
@@ -139,7 +139,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         if torch.distributed.is_initialized():
             backward_context = model.no_sync
         with backward_context():
-            total_loss.backward()
+            total_loss_tc.backward()
         optimizer.step()
         optimizer.zero_grad()
         if torch.distributed.is_initialized():
@@ -166,15 +166,22 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
     model.eval()
     valid_pbar = tqdm(total=len(val_dataloader), desc='valid', leave=False)
     for val_step, batch in enumerate(val_dataloader):
+        ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = \
+            extract_point_and_bbox_prompts_from_climatenet_mask(batch['gt_masks'], device)
+        
         batch = batch_to_cuda(batch, device)
         val_model = model
         with torch.no_grad():
-            ar_masks, tc_masks = val_model(batch['input'])
+            _ , tc_masks = val_model(batch['input'],
+                                # ar_point_prompts = ar_point_prompts,
+                                tc_point_prompts = tc_point_prompts, 
+                                ar_bbox_prompts = None, 
+                                tc_bbox_prompts= None)
             masks_gt = batch['gt_masks']
-            masks_ar_gt = [ (mask == 2).to(torch.uint8) for mask in masks_gt ]
+            # masks_ar_gt = [ (mask == 2).to(torch.uint8) for mask in masks_gt ]
             masks_tc_gt = [ (mask == 1).to(torch.uint8) for mask in masks_gt ]
             # some processing to make sure the masks are in the right shape
-            for masks in [masks_ar_gt, masks_tc_gt, ar_masks, tc_masks]:
+            for masks in [masks_tc_gt, tc_masks]:
                     for i in range(len(masks)):
                         if len(masks[i].shape) == 2:
                             masks[i] = masks[i][None, None, :]
@@ -183,26 +190,26 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
                         if len(masks[i].shape) != 4:
                             raise RuntimeError
                         
-            ar_metrics.update(ar_masks, masks_ar_gt,  batch['index_name'])
+            # ar_metrics.update(ar_masks, masks_ar_gt,  batch['index_name'])
             tc_metrics.update(tc_masks, masks_tc_gt,  batch['index_name'])
             valid_pbar.update(1)
             str_step_info = "Epoch: {epoch}/{epochs:4}.".format(
                 epoch=epoch, epochs=max_epoch_num
             )
             valid_pbar.set_postfix_str(str_step_info)
-        miou_ar = ar_metrics.compute()[0]['Mean Foreground IoU']
+        # miou_ar = ar_metrics.compute()[0]['Mean Foreground IoU']
         miou_tc = tc_metrics.compute()[0]['Mean Foreground IoU']
-        ar_metrics.reset()
+        # ar_metrics.reset()
         tc_metrics.reset()
         
         if worker_args.wandb:
             wandb.log({
-                "valid/miou_ar": miou_ar,
+                # "valid/miou_ar": miou_ar,
                 "valid/miou_tc": miou_tc,
                 "epoch": epoch
             })
         
-        return miou_tc, miou_ar
+        return miou_tc, _
         
             
             
@@ -283,7 +290,8 @@ def main_worker(worker_id, worker_args):
                 best_miou_total = (miou_tc + miou_ar) / 2
                 print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
                 if worker_args.save_model:
-                    save_path = os.path.join(worker_args.exp_dir, f"best_model_epoch_{epoch}.pth")
+                    save_path = os.path.join(worker_args.exp_dir, f"best_model.pth")
+                    os.makedirs(os.path.dirname(save_path), exist_ok=True)
                     torch.save(model.state_dict(), save_path)
                     print(f"Model saved to {save_path}")
                     wandb.save(save_path)

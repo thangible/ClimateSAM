@@ -1,8 +1,8 @@
 [PATH]
-exp_dir = ./exp
+exp_dir = ./exp/only_tc
 data_dir = '/home/aiworker2/thang/climateNet'
 project_name = climate-sam
-run_name = train_image_encoder
+run_name = train_image_encoder_only_tc
 
 [BATCH CONFIG]
 ; num_workers = None
@@ -17,7 +17,7 @@ sam_type = vit_b
 
 [TRAINING LOOP]
 ; shot_num = 1
-max_epoch_num = 300
+max_epoch_num = 60
 valid_per_epochs = 1
 
 
