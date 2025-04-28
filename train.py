@@ -72,7 +72,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = \
             extract_point_and_bbox_prompts_from_climatenet_mask(batch['gt_masks'], device)
         
-        ar_mask, tc_mask = model(batch['input'],
+        tc_mask, ar_mask = model(batch['input'],
                                 ar_point_prompts = ar_point_prompts,
                                 tc_point_prompts = tc_point_prompts, 
                                 ar_bbox_prompts = None, 
@@ -169,7 +169,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
         batch = batch_to_cuda(batch, device)
         val_model = model
         with torch.no_grad():
-            ar_masks, tc_masks = val_model(batch['input'])
+            tc_masks, ar_masks = val_model(batch['input'])
             masks_gt = batch['gt_masks']
             masks_ar_gt = [ (mask == 2).to(torch.uint8) for mask in masks_gt ]
             masks_tc_gt = [ (mask == 1).to(torch.uint8) for mask in masks_gt ]
@@ -257,7 +257,16 @@ def main_worker(worker_id, worker_args):
         except Exception as e:
             print(f"Error initializing DistributedDataParallel: {e}")
             model = model.to(device=device)
-            
+    
+    # Load pretrained weights
+    # pretrained_path = os.path.join(worker_args.exp_dir, "best_model.pth")
+    # if os.path.exists(pretrained_path):
+    #     state_dict = torch.load(pretrained_path, map_location=device)
+    #     model.load_state_dict(state_dict)
+    #     print(f"Pretrained weights loaded from {pretrained_path}.")
+    # else:
+    #     print(f"Pretrained weights not found at {pretrained_path}.")
+    
     # Optimizer and scheduler
     optimizer, scheduler = setup_optimizer_and_scheduler(model, worker_args)
     best_miou_tc = 0
