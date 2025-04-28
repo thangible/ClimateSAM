@@ -7,7 +7,7 @@ import torch.multiprocessing as mp
 import torch.nn.functional as F
 from functools import partial
 from torch.utils.data import DataLoader
-from train_util import extract_point_and_bbox_prompts_from_climatenet_mask, batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, calculate_dice_loss
+from train_util import extract_point_and_bbox_prompts_from_climatenet_mask, batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, calculate_dice_loss, calculate_focal_loss
 from tqdm import tqdm
 from contextlib import nullcontext
 from train_parser import parse
@@ -94,17 +94,21 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
                     
         bce_loss_list_tc, bce_loss_list_ar = [], []
         dice_loss_list_tc, dice_loss_list_ar = [], []
+        
         for i in range(len(masks_ar_gt)):
             # ar
             pred_ar, label_ar = ar_mask[i], masks_ar_gt[i]
             label_ar = torch.where(torch.gt(label_ar, 0.), 1., 0.)
-            b_loss_ar = F.binary_cross_entropy_with_logits(pred_ar, label_ar.float())
-            d_loss_ar = calculate_dice_loss(pred_ar, label_ar)
+            weight_tensor_ar = torch.where(label_ar == 1, torch.tensor(0.5, device=device), torch.tensor(3, device=device))
+
+            b_loss_ar = F.binary_cross_entropy_with_logits(pred_ar, label_ar.float(), weight_tensor_ar)
+            d_loss_ar = calculate_focal_loss(pred_ar, label_ar)
             # tc
             pred_tc, label_tc = tc_mask[i], masks_tc_gt[i]
             label_tc = torch.where(torch.gt(label_tc, 0.), 1., 0.)
-            b_loss_tc = F.binary_cross_entropy_with_logits(pred_tc, label_tc.float())
-            d_loss_tc = calculate_dice_loss(pred_tc, label_tc)
+            weight_tensor_tc = torch.where(label_tc == 1, torch.tensor(0.5, device=device), torch.tensor(3, device=device))
+            b_loss_tc = F.binary_cross_entropy_with_logits(pred_tc, label_tc.float(), weight_tensor_tc)
+            d_loss_tc = calculate_focal_loss(pred_tc, label_tc)
             # add the loss to the list
             bce_loss_list_ar.append(b_loss_ar)
             dice_loss_list_ar.append(d_loss_ar)
@@ -190,19 +194,20 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
                 epoch=epoch, epochs=max_epoch_num
             )
             valid_pbar.set_postfix_str(str_step_info)
-        miou_ar = ar_metrics.compute()[0]['Mean Foreground IoU']
-        miou_tc = tc_metrics.compute()[0]['Mean Foreground IoU']
-        ar_metrics.reset()
-        tc_metrics.reset()
+            
+    miou_ar = ar_metrics.compute()[0]['Mean Foreground IoU']
+    miou_tc = tc_metrics.compute()[0]['Mean Foreground IoU']
+    ar_metrics.reset()
+    tc_metrics.reset()
+    
+    if worker_args.wandb:
+        wandb.log({
+            "valid/miou_ar": miou_ar,
+            "valid/miou_tc": miou_tc,
+            "epoch": epoch
+        })
         
-        if worker_args.wandb:
-            wandb.log({
-                "valid/miou_ar": miou_ar,
-                "valid/miou_tc": miou_tc,
-                "epoch": epoch
-            })
-        
-        return miou_tc, miou_ar
+    return miou_tc, miou_ar
         
             
             
@@ -279,7 +284,7 @@ def main_worker(worker_id, worker_args):
     
     for epoch in range(1, max_epoch_num + 1):
         train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num)
-        if epoch % worker_args.valid_per_epochs == 0 and local_rank == 0:
+        if epoch % worker_args.valid_per_epochs == 1 and local_rank == 0:
             miou_tc, miou_ar = validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args)
             print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}")
             if miou_tc > best_miou_tc:
@@ -292,7 +297,7 @@ def main_worker(worker_id, worker_args):
                 best_miou_total = (miou_tc + miou_ar) / 2
                 print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
                 if worker_args.save_model:
-                    save_path = os.path.join(worker_args.exp_dir, f"best_model_epoch_{epoch}.pth")
+                    save_path = os.path.join(worker_args.exp_dir, f"best_model_epoch.pth")
                     torch.save(model.state_dict(), save_path)
                     print(f"Model saved to {save_path}")
                     wandb.save(save_path)

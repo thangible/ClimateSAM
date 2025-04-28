@@ -9,7 +9,7 @@ run_name = train_image_encoder
 train_bs = 8
 ; val_bs = None
 ; weight_decay = 1e-4
-lr = 1e-3
+lr = 1e-2
 
 [MODEL CONFIG]
 sam_type = vit_b
@@ -17,8 +17,8 @@ sam_type = vit_b
 
 [TRAINING LOOP]
 ; shot_num = 1
-max_epoch_num = 150
-valid_per_epochs = 1
+max_epoch_num = 200
+valid_per_epochs = 5
 
 
 

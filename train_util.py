@@ -14,6 +14,10 @@ from packaging.version import parse as V
 import torch
 
 
+import matplotlib.pyplot as plt
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+
 
 import cv2
 import torch
@@ -192,8 +196,94 @@ def get_point_and_bbox_from_binary_mask(binary_mask, connectivity = 8, threshold
     torch_bboxes = torch_bboxes.unsqueeze(0) # anfoderung von prompt_encoder.py
     return torch_points,torch_bboxes
 
+def plot_with_projection(image, mask, prediction, label, var_names, use_projection=False, batch_num=None, epoch=None, title = None):
+    # Convert tensors to numpy arrays
+    # Check if the image tensor needs to be transposed
+    if image.ndim == 3 and image.shape[0] in [1, 3]:
+        image_np = image.cpu().numpy().transpose(1, 2, 0)  # Convert to HWC format
+    else:
+        image_np = image.cpu().numpy()
+    mask_np = mask.cpu().numpy().squeeze() if torch.is_tensor(mask) else mask.squeeze()  # Remove channel dimension
+    if prediction is not None:
+        prediction = prediction.detach().cpu().numpy().squeeze() if torch.is_tensor(prediction) else prediction.squeeze()
 
+    longitudes = np.linspace(-180, 180, image_np.shape[1])
+    latitudes = np.linspace(-90, 90, image_np.shape[0])
 
+    # Normalize image data to [0, 1] range for imshow
+    image_np = image_np / 255.0
+
+    # Create a figure
+    fig, ax = plt.subplots(figsize=(12, 6), subplot_kw={'projection': ccrs.PlateCarree()} if use_projection else {})
+
+    # Plot the RGB image
+    ax.imshow(image_np, origin='upper', extent=[-180, 180, -90, 90] if use_projection else None, alpha=0.7)
+    ax.add_feature(cfeature.COASTLINE, edgecolor='black')
+
+    # Plot the mask contours
+    if mask_np.ndim == 3:
+        for i in range(mask_np.shape[0]):
+            ax.contour(longitudes, latitudes, mask_np[i], colors='green', linewidths=1, levels=[0.5], transform=ccrs.PlateCarree() if use_projection else None)
+    else:
+        ax.contour(longitudes, latitudes, mask_np, colors='green', linewidths=1, levels=[0.5], transform=ccrs.PlateCarree() if use_projection else None)
+
+    # Plot the prediction contours if prediction is not None
+    if prediction is not None:
+        if prediction.ndim == 3:
+            for i in range(prediction.shape[0]):
+                ax.contour(longitudes, latitudes, prediction[i], colors='red', linewidths=1, levels=[0.5], transform=ccrs.PlateCarree() if use_projection else None)
+        else:
+            ax.contour(longitudes, latitudes, prediction, colors='red', linewidths=1, levels=[0.5], transform=ccrs.PlateCarree() if use_projection else None)
+
+    # Add a legend
+    if prediction is not None:
+        red_path = plt.Line2D([0], [0], color='red', linewidth=1, label='Prediction')
+    green_path = plt.Line2D([0], [0], color='green', linewidth=1, label='Ground Truth')
+    if prediction is not None:
+        plt.legend(handles=[red_path, green_path], loc='upper right')
+    else:
+        plt.legend(handles=[green_path], loc='upper right')
+
+    # Add title and labels
+    if title is None and var_names is not None:
+        title = f'World projection with RGB as {var_names[0]}, {var_names[1]}, {var_names[2]} - Epoch {epoch} - {label}'
+        
+    plt.title(title)
+    # Save the plot to a numpy array
+    fig.canvas.draw()
+    plot_array = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+    plot_array = plot_array.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    plt.close(fig)
+    
+    return plot_array, title
+
+def calculate_focal_loss(inputs: torch.Tensor, targets: torch.Tensor, gamma: float = 5, alpha: float = 1):
+    """
+    Compute the Focal Loss for binary classification.
+    
+    Args:
+        inputs: A float tensor of arbitrary shape. These are the raw logits.
+        targets: A float tensor with the same shape as inputs.
+                 Contains binary labels (0 for negative, 1 for positive).
+        gamma: Focusing parameter that reduces the loss contribution from easy examples. Default is 2.0.
+        alpha: Balancing parameter to balance the importance of positive/negative examples. Default is 0.25.
+    
+    Returns:
+        A scalar focal loss value.
+    """
+    # Apply sigmoid to get probabilities
+    p = inputs.sigmoid()
+    # Compute p_t, which is p if target is 1 and (1 - p) otherwise
+    p_t = p * targets + (1 - p) * (1 - targets)
+    
+    # Compute the alpha factor according to targets
+    alpha_factor = alpha * targets + (1 - alpha) * (1 - targets)
+    # Compute focal weight
+    focal_weight = alpha_factor * (1 - p_t).pow(gamma)
+    
+    # Compute the focal loss
+    loss = -focal_weight * torch.log(p_t.clamp(min=1e-8))
+    return loss.mean()
 
 def calculate_dice_loss(inputs: torch.Tensor, targets: torch.Tensor):
     """
