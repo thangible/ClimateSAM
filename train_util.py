@@ -235,7 +235,7 @@ def plot_with_projection(image, ar_pred, tc_pred, ar_gt, tc_gt, save_path, use_p
     fig, ax = plt.subplots(figsize=(12, 6), subplot_kw={'projection': ccrs.PlateCarree()} if use_projection else {})
     
     # Plot the RGB image
-    ax.imshow(image_np, origin='upper', extent=[-180, 180, -90, 90] if use_projection else None, alpha=0.7)
+    ax.imshow(image_np, origin='upper', extent=[-180, 180, -90, 90] if use_projection else None, alpha=0.5)
     ax.add_feature(cfeature.COASTLINE, edgecolor='black')
     ar_gt_line = plt.Line2D([0], [0], color=ar_gt_color, linewidth=1, label='AR Ground Truth')
     tc_gt_line = plt.Line2D([0], [0], color=tc_gt_color, linewidth=1, label='TC Ground Truth')
@@ -244,7 +244,7 @@ def plot_with_projection(image, ar_pred, tc_pred, ar_gt, tc_gt, save_path, use_p
     ax.contour(longitudes, latitudes, tc_gt, colors=tc_gt_color, linewidths=1, levels=[0.5], transform=ccrs.PlateCarree() if use_projection else None)
     
     
-    handles = [ar_gt_line, tc_gt_line]
+    
     
     # PREPROCESSING
     ar_gt = ar_gt.cpu().numpy().squeeze() if torch.is_tensor(ar_gt) else ar_gt.squeeze() 
@@ -253,15 +253,15 @@ def plot_with_projection(image, ar_pred, tc_pred, ar_gt, tc_gt, save_path, use_p
         ar_pred = ar_pred.detach().cpu().numpy().squeeze() if torch.is_tensor(ar_pred) else ar_pred.squeeze()
         ax.contour(longitudes, latitudes, ar_pred, colors=ar_pred_color, linewidths=1, levels=[0.5], transform=ccrs.PlateCarree() if use_projection else None)
         ac_pred_line = plt.Line2D([0], [0], color=ar_pred_color, linewidth=1, label='AC Prediction')
-        handles.append(ac_pred_line)
+
         
     if tc_pred is not None:
         tc_pred = tc_pred.detach().cpu().numpy().squeeze() if torch.is_tensor(tc_pred) else tc_pred.squeeze()
         ax.contour(longitudes, latitudes, tc_pred, colors=tc_pred_color, linewidths=1, levels=[0.5], transform=ccrs.PlateCarree() if use_projection else None)
         tc_red_line = plt.Line2D([0], [0], color=tc_pred_color, linewidth=1, label='TC Prediction')
-        handles.append(tc_red_line)
 
-    
+
+    handles = [ar_gt_line, ac_pred_line, tc_gt_line, tc_red_line]
     
     plt.legend(handles=handles, loc='upper right')
 

@@ -19,7 +19,7 @@ sam_type = vit_b
 [TRAINING LOOP]
 ; shot_num = 1
 max_epoch_num = 200
-valid_per_epochs = 5
+valid_per_epochs = 10
 gamma_ar = 2
 gamma_tc = 2
 alpha_ar = 0.9
@@ -29,7 +29,7 @@ bce_weight_ar = 10
 
 
 [DEBUGGING]
-load_pretrained = True
+load_pretrained = False
 wandb = True
 debugging = False
 save_model = True
