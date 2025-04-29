@@ -85,6 +85,37 @@ def parse():
         '--pretrained_name', type=str,
         help="Name of the pretrained model to load."
     )
+    
+    parser.add_argument(
+        '--bce_weight_ar', default=10, type=float,
+        help="Weight for the BCE loss for AR. Default is 1.0."
+    )
+    
+    parser.add_argument(
+        '--bce_weight_tc', default=10, type=float,
+        help="Weight for the BCE loss for TC. Default is 1.0."
+    )
+    
+    parser.add_argument(
+        '--gamma_ar', default=2, type=float,
+        help="Gamma parameter for the Focal loss for AR. Default is 2.0."
+    )
+    
+    parser.add_argument(
+        '--gamma_tc', default=2, type=float,
+        help="Gamma parameter for the Focal loss for TC. Default is 2.0."
+    )
+    
+    parser.add_argument(
+        '--alpha_ar', default=0.9, type=float,
+        help="Alpha parameter for the Focal loss for AR. Default is 0.25."
+    )
+    
+    parser.add_argument(
+        '--alpha_tc', default=0.98, type=float,
+        help="Alpha parameter for the Focal loss for TC. Default is 0.25."
+    )
+    
     args = parser.parse_args()
 
     return args

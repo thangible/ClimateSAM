@@ -101,16 +101,16 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
             # ar
             pred_ar, label_ar = ar_mask[i], masks_ar_gt[i]
             label_ar = torch.where(torch.gt(label_ar, 0.), 1., 0.)
-            pos_weight_ar = torch.tensor([17]).to(device)
+            pos_weight_ar = torch.tensor([worker_args.bce_weight_ar]).to(device)
             b_loss_ar = F.binary_cross_entropy_with_logits(pred_ar, label_ar.float(), 
                                                            pos_weight=pos_weight_ar)
-            d_loss_ar = calculate_focal_loss(pred_ar, label_ar, gamma=2, alpha=0.9)
+            d_loss_ar = calculate_focal_loss(pred_ar, label_ar, gamma=worker_args.gamma_ar, alpha=worker_args.alpha_ar)
             # tc
             pred_tc, label_tc = tc_mask[i], masks_tc_gt[i]
             label_tc = torch.where(torch.gt(label_tc, 0.), 1., 0.)
-            pos_weight_tc = torch.tensor([257]).to(device)
+            pos_weight_tc = torch.tensor([worker_args.bce_weight_tc]).to(device)
             b_loss_tc = F.binary_cross_entropy_with_logits(pred_tc, label_tc.float(), pos_weight=pos_weight_tc)
-            d_loss_tc = calculate_focal_loss(pred_tc, label_tc, gamma=2, alpha=0.98)
+            d_loss_tc = calculate_focal_loss(pred_tc, label_tc, gamma=worker_args.gamma_tc, alpha=worker_args.alpha_tc)
             # add the loss to the list
             bce_loss_list_ar.append(b_loss_ar)
             dice_loss_list_ar.append(d_loss_ar)
