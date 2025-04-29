@@ -23,10 +23,11 @@ class ClimateSAM(nn.Module):
     It includes a Vision Transformer (ViT) encoder and a mask decoder, with additional features for climate data processing.
     """
 
-    def __init__(self, model_type: str, input_weights: List[float] = None, verbose = False):
+    def __init__(self, model_type: str, input_weights: List[float] = None, verbose = False, use_prompt_generator = False, mlp_ratio = 0.25):
         super(ClimateSAM, self).__init__()
         assert model_type in ['vit_b', 'vit_l', 'vit_h'], f"invalid model_type: {model_type}!"
         self.verbose = verbose
+        self.use_prompt_generator = use_prompt_generator
         # ORI SAM model
         self.ori_sam = sam_model_registry[model_type](sam_ckpt_path_dict[model_type])
         
@@ -40,8 +41,9 @@ class ClimateSAM(nn.Module):
         self.mask_decoder = MaskDecoderHQ(
             model_type, self.ori_sam.mask_decoder.state_dict()
         )
-        self.image_encoder = ClimateSAMImageEncoder(ori_sam=self.ori_sam, fix=True, hq_token=self.mask_decoder.hf_token.weight)
-        self.prompt_generator = PromptGenerator()
+        self.image_encoder = ClimateSAMImageEncoder(ori_sam=self.ori_sam, fix=True, hq_token=self.mask_decoder.hf_token.weight, mlp_ratio=mlp_ratio)
+        if self.use_prompt_generator:
+          self.prompt_generator = PromptGenerator(in_channels = self.image_encoder.sam_img_encoder.num_features)
         self.prompt_encoder = PromptEncoderWrapper(ori_sam=self.ori_sam, fix=True)
         
         #set weights for input adaptation:
@@ -62,27 +64,37 @@ class ClimateSAM(nn.Module):
                 
         del self.ori_sam.mask_decoder # remove the mask decoder in original SAM to avoid redundant params in model object
         
-    def train(self, mode: bool = True, phase = 0):
+    def train(self, mode: bool = True, phase = 1):
         # set train status for this class: disable all but the prompt-related modules
-        super().train()
+        super().train(mode)
         if mode:
-            # training: only turn the image encoder to train mode
-            for n, c in self.named_children():
-                if n != 'image_encoder':
-                    c.eval()
-                else:
-                    c.train()
-        else:
-            # eval:
-            for module in self.children():
-                module.train(mode)
-                
+            if phase == 1:
+                self.disable_prompt_generator()
+                for n, c in self.named_children():
+                    if n not in ['image_encoder']:
+                        c.eval()
+                    else:
+                        c.train()
+            elif phase == 2:
+                self.enable_prompt_generator()
+                for n, c in self.named_children():
+                    if n not in ['prompt_encoder']:
+                        c.eval()
+                    else:
+                        c.train()
+            elif phase == 3:
+                self.enable_prompt_generator()
+                for n, c in self.named_children():
+                    if n not in ['input_adapt']:
+                        c.eval()
+                    else:
+                        c.train()
+                    
                 
     def forward(
             self,
             input: Union[List[torch.Tensor], None],
             hq_token_weight: torch.Tensor = None,
-            unfreeze_prompt_generator: bool = False,
             return_all_hq_masks: bool = False,
             ar_point_prompts: Optional[List[Tuple[np.ndarray, np.ndarray]]] = None,
             tc_point_prompts: Optional[List[Tuple[np.ndarray, np.ndarray]]] = None,
@@ -116,7 +128,7 @@ class ClimateSAM(nn.Module):
         )
         
         tc_masks, ar_masks = None, None
-        if unfreeze_prompt_generator:
+        if self.use_prompt_generator:
             tc_masks, ar_masks = self.prompt_generator(interm_embeddings) # shape: batch x 2 x 256 x 256
             ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = None, None, None, None
         # tc_masks, ar_masks = torch.chunk(masks, 2, dim=1) # shape: batch x 1 x 256 x 256 each
@@ -202,6 +214,17 @@ class ClimateSAM(nn.Module):
             ar_postprocess_masks_hq = [self.discretize_mask(m) for m in ar_postprocess_masks_hq]
         return tc_postprocess_masks_hq, ar_postprocess_masks_hq, image_input
     
+    def enable_prompt_generator(self):
+        if not hasattr(self, 'prompt_generator'):
+            self.prompt_generator = PromptGenerator(
+                in_channels=self.image_encoder.sam_img_encoder.num_features
+            )
+        self.use_prompt_generator = True
+
+    def disable_prompt_generator(self):
+        if hasattr(self, 'prompt_generator'):
+            del self.prompt_generator
+        self.use_prompt_generator = False
     
     @staticmethod
     def postprocess(output_masks: torch.Tensor, ori_img_size: Tuple):

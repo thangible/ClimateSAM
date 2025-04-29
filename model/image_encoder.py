@@ -19,16 +19,17 @@ class SAMImageEncodeWrapper(nn.Module):
 class ClimateSAMImageEncoder(SAMImageEncodeWrapper):
 
     def __init__(
-            self, ori_sam, hq_token: torch.Tensor, fix: bool = True,
+            self, ori_sam, hq_token: torch.Tensor, fix: bool = True, mlp_ratio=0.25
     ):
         super(ClimateSAMImageEncoder, self).__init__(ori_sam=ori_sam, fix=True)
+        
         
         self.hq_token = hq_token
 
         total_p_layer = len(self.sam_img_encoder.blocks)
         prompt_dim = self.sam_img_encoder.pos_embed.shape[-1]
         self.hq_token_proj = nn.Sequential(
-            *[Adapter(hq_token.size(-1), prompt_dim, mlp_ratio=0.25) for _ in range(total_p_layer)]
+            *[Adapter(hq_token.size(-1), prompt_dim, mlp_ratio=mlp_ratio) for _ in range(total_p_layer)]
         )
 
 

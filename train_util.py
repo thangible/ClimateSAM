@@ -101,6 +101,9 @@ def extract_point_and_bbox_prompts_from_climatenet_mask(masks, device = None, co
         tc_point_prompts.append(current_tc_point_prompts)
         ar_bbox_prompts.append(ar_bboxes)
         tc_bbox_prompts.append(tc_bboxes)
+         # Delete temporary variables that are no longer needed
+        del ar_mask, tc_mask, ar_positive_points, ar_bboxes, tc_positive_points, tc_bboxes
+
 
     # print("AR Point Prompts:", ar_point_prompts, "AR Point Prompts Length:", len(ar_point_prompts))
     # print("TC Point Prompts:", tc_point_prompts, "TC Point Prompts Length:", len(tc_point_prompts))
@@ -113,6 +116,12 @@ def extract_point_and_bbox_prompts_from_climatenet_mask(masks, device = None, co
         tc_point_prompts = [(prompt[0].to(device), prompt[1].to(device)) if prompt is not None else None for prompt in tc_point_prompts]
         ar_bbox_prompts = [prompt.to(device) if prompt is not None else None for prompt in ar_bbox_prompts]
         tc_bbox_prompts = [prompt.to(device) if prompt is not None else None for prompt in tc_bbox_prompts]
+        
+    del ar_masks, tc_masks, masks
+    
+    # Optionally force garbage collection
+    import gc
+    gc.collect()
     
     return ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts
     

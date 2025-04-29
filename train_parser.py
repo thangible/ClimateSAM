@@ -92,7 +92,7 @@ def parse():
     )
     
     parser.add_argument(
-        '--bce_weight_tc', default=10, type=float,
+        '--bce_weight_tc', default=200, type=float,
         help="Weight for the BCE loss for TC. Default is 1.0."
     )
     
@@ -114,6 +114,16 @@ def parse():
     parser.add_argument(
         '--alpha_tc', default=0.98, type=float,
         help="Alpha parameter for the Focal loss for TC. Default is 0.25."
+    )
+    
+    parser.add_argument(
+        '--phase', default='1', type=int, choices=[1, 2, 3, 4],
+        help="Phase 1 for image_encoder, Phase 2 for prompt generator, phase 3 for input adapter, phase 4 for all"
+    )
+    
+    parser.add_argument(
+        '--image_encoder_mlp_ratio', default=0.25, type=float,
+        help="MLP ratio for the image encoder. Default is 0.25."
     )
     
     args = parser.parse_args()

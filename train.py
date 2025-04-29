@@ -64,8 +64,8 @@ def setup_device_and_distributed(worker_id, worker_args):
     return device, local_rank
 
     
-def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num):
-    model.train()
+def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler):
+    model.train(mode = True, phase = worker_args.phase)
     train_pbar = tqdm(total=len(train_dataloader), desc='train', leave=False) if local_rank == 0 else None
     for train_step, batch in enumerate(train_dataloader):
         batch = batch_to_cuda(batch, device)
@@ -116,16 +116,25 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
             dice_loss_list_ar.append(d_loss_ar)
             bce_loss_list_tc.append(b_loss_tc)
             dice_loss_list_tc.append(d_loss_tc)
-            
+        
+        theta_tc = 5
+        # bce loss
         bce_loss_ar = sum(bce_loss_list_ar) / len(bce_loss_list_ar)
         bce_loss_tc = sum(bce_loss_list_tc) / len(bce_loss_list_tc)
+        bce_loss_tc = bce_loss_tc * theta_tc
         bce_loss = bce_loss_ar + bce_loss_tc
         dice_loss_ar = sum(dice_loss_list_ar) / len(dice_loss_list_ar)
         dice_loss_tc = sum(dice_loss_list_tc) / len(dice_loss_list_tc)
+        dice_loss_tc = dice_loss_tc * theta_tc
         dice_loss = dice_loss_ar + dice_loss_tc
-        total_loss_ar = bce_loss_ar + dice_loss_ar
-        total_loss_tc = bce_loss_tc + dice_loss_tc
-        total_loss = bce_loss + dice_loss
+        
+        # total loss
+        theta_total = 10
+        dice_loss_ar = dice_loss_ar * theta_total
+        dice_loss_tc = dice_loss_tc * theta_total
+        total_loss_ar = bce_loss_ar + dice_loss_ar 
+        total_loss_tc = bce_loss_tc + dice_loss_tc 
+        total_loss = bce_loss + dice_loss 
         loss_dict = dict(
             total_loss=total_loss.clone().detach(),
             total_loss_ar=total_loss_ar.clone().detach(),
@@ -144,10 +153,26 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         backward_context = nullcontext
         if torch.distributed.is_initialized():
             backward_context = model.no_sync
+        # with backward_context():
+        #     total_loss.backward()
+        # optimizer.step()
+        # optimizer.zero_grad()
+        
         with backward_context():
-            total_loss.backward()
-        optimizer.step()
+            scaler.scale(total_loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
         optimizer.zero_grad()
+        
+        # Delete intermediate variables to free memory
+        del batch, ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts
+        del tc_mask, ar_mask, images, masks_gt, masks_ar_gt, masks_tc_gt
+        del bce_loss_list_ar, bce_loss_list_tc, dice_loss_list_ar, dice_loss_list_tc
+        # Optionally force garbage collection and empty CUDA cache
+        import gc
+        gc.collect()
+        torch.cuda.empty_cache()
+        
         if torch.distributed.is_initialized():
                 for key in loss_dict.keys():
                     if hasattr(loss_dict[key], 'detach'):
@@ -204,12 +229,13 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
                     save_path=os.path.join(worker_args.exp_dir, worker_args.run_name, 'images', f"epoch_{epoch}_step_{val_step}_image_{i}.png")
                     
                     plot, titel = plot_with_projection(imges[i], masks_ar[i], masks_tc[i], masks_ar_gt[i], masks_tc_gt[i], save_path = save_path, epoch=epoch)
-                    
+                
+         
                     
       
-                    print(f"Epoch {epoch} - Step {val_step} - Image {i} saved.")
+                    print(f"Epoch {epoch}- Image {i} saved.")
                     if worker_args.wandb:
-                        wandb.log({f"valid/epoch_{epoch}_image_{i}": wandb.Image(plot, caption=titel), "epoch": epoch}, step = epoch)
+                        wandb.log({f"valid/image": wandb.Image(plot, caption=titel), "epoch": epoch}, step = epoch)
             # CAL
             ar_metrics.update(ar_masks, masks_ar_gts,  batch['index_name'])
             tc_metrics.update(tc_masks, masks_tc_gts,  batch['index_name'])
@@ -296,7 +322,7 @@ def main_worker(worker_id, worker_args):
     )
     
     # SET UP MODEL
-    model = ClimateSAM(model_type=worker_args.sam_type).to(device=device)
+    model = ClimateSAM(model_type=worker_args.sam_type, mlp_ratio=worker_args.image_encoder_mlp_ratio).to(device=device)
     if torch.distributed.is_initialized():
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         try:
@@ -319,16 +345,20 @@ def main_worker(worker_id, worker_args):
     
     # Optimizer and scheduler
     optimizer, scheduler = setup_optimizer_and_scheduler(model, worker_args)
+    if worker_args.phase == 2:
+        model.enable_prompt_generator()
+        optimizer.add_param_group({'params': model.prompt_generator.parameters()})
     best_miou_tc = 0
     best_miou_ar = 0
     best_miou_total = 0
     ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     
+    scaler = torch.cuda.amp.GradScaler() 
     print(f"Validation will be performed every {worker_args.valid_per_epochs} epochs.")
-    model.train()
+    model.train(mode = True, phase = worker_args.phase)
     for epoch in range(1, max_epoch_num + 1):
-        train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num)
+        train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler)
         if epoch % worker_args.valid_per_epochs == 1 and local_rank == 0:
             miou_tc, miou_ar = validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args)
             print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}")
@@ -342,12 +372,13 @@ def main_worker(worker_id, worker_args):
                 best_miou_total = (miou_tc + miou_ar) / 2
                 print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
                 if worker_args.save_model:
-                    save_path = os.path.join(worker_args.exp_dir, f"best_model_epoch.pth")
-                    torch.save(model.state_dict(), save_path)
-                    print(f"Model saved to {save_path}")
-                    wandb.save(save_path)
-                    print(f"Model saved to wandb: {save_path}")
-    
+                    if worker_args.phase == 1:
+                        save_path = os.path.join(worker_args.exp_dir, f"image_encoder_weights.pth")
+                        torch.save({'image_encoder_state_dict': model.image_encoder.state_dict(),}, save_path)
+                        print(f"Image encoder saved to {save_path}")
+                        wandb.save(save_path)
+                        print(f"Image encoder saved to wandb: {save_path}")
+        
 if __name__ == '__main__':
     args = parse()
     
