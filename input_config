@@ -25,6 +25,6 @@ valid_per_epochs = 5
 [climate]
 
 [DEBUGGING]
-wandb = True
+wandb = False
 debugging = False
-save_model = True
+save_model = Trues

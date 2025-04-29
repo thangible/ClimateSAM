@@ -16,9 +16,9 @@ def test_mask_shapes():
     # Run a forward pass
     outputs = model(dummy_input)
     # tc_dense_embeddings_list, ar_dense_embeddings_list = outputs[0], outputs[1]
-    
+    tc_mask, ar_mask, image = outputs[0], outputs[1], outputs[2]
     # Assuming forward() returns (tc_mask, ar_mask)
     # print(f"TC Dense Embeddings Shape: {tc_dense_embeddings_list[0].shape}")
-
+    
 if __name__ == "__main__":
     test_mask_shapes()

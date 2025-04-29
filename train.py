@@ -65,6 +65,7 @@ def setup_device_and_distributed(worker_id, worker_args):
 
     
 def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num):
+    model.train()
     train_pbar = tqdm(total=len(train_dataloader), desc='train', leave=False) if local_rank == 0 else None
     for train_step, batch in enumerate(train_dataloader):
         batch = batch_to_cuda(batch, device)
@@ -72,7 +73,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = \
             extract_point_and_bbox_prompts_from_climatenet_mask(batch['gt_masks'], device)
         
-        tc_mask, ar_mask = model(batch['input'],
+        tc_mask, ar_mask, images = model(batch['input'],
                                 ar_point_prompts = ar_point_prompts,
                                 tc_point_prompts = tc_point_prompts, 
                                 ar_bbox_prompts = None, 
@@ -96,6 +97,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         dice_loss_list_tc, dice_loss_list_ar = [], []
         
         for i in range(len(masks_ar_gt)):
+            
             # ar
             pred_ar, label_ar = ar_mask[i], masks_ar_gt[i]
             label_ar = torch.where(torch.gt(label_ar, 0.), 1., 0.)
@@ -173,7 +175,14 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
         batch = batch_to_cuda(batch, device)
         val_model = model
         with torch.no_grad():
-            tc_masks, ar_masks = val_model(batch['input'])
+            ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = \
+            extract_point_and_bbox_prompts_from_climatenet_mask(batch['gt_masks'], device) 
+            tc_masks, ar_masks, images = val_model(batch['input'],
+                                ar_point_prompts = ar_point_prompts,
+                                tc_point_prompts = tc_point_prompts)
+            
+            
+            
             masks_gt = batch['gt_masks']
             masks_ar_gt = [ (mask == 2).to(torch.uint8) for mask in masks_gt ]
             masks_tc_gt = [ (mask == 1).to(torch.uint8) for mask in masks_gt ]

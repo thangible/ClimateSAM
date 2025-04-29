@@ -50,6 +50,9 @@ class ClimateSAM(nn.Module):
         with torch.no_grad():
             self.input_adapt[0].weight.zero_()  
             if input_weights is None:
+                # Default input_weights correspond to indices of specific climate variables:
+                # 'TMQ' (Total Precipitable Water Vapor), 'U850' (Zonal Wind at 850 hPa), 
+                # and 'V850' (Meridional Wind at 850 hPa).
                 input_weights = [0, 1, 2] # for 'TMQ', 'U850', 'V850'
             # For instance, set those weights to 1.0 for every output channel
             for out_ch in range(self.input_adapt[0].weight.shape[0]):
@@ -59,8 +62,9 @@ class ClimateSAM(nn.Module):
                 
         del self.ori_sam.mask_decoder # remove the mask decoder in original SAM to avoid redundant params in model object
         
-    def train(self, mode: bool = True):
+    def train(self, mode: bool = True, phase = 0):
         # set train status for this class: disable all but the prompt-related modules
+        super().train()
         if mode:
             # training: only turn the image encoder to train mode
             for n, c in self.named_children():
@@ -77,10 +81,7 @@ class ClimateSAM(nn.Module):
     def forward(
             self,
             input: Union[List[torch.Tensor], None],
-            
             hq_token_weight: torch.Tensor = None,
-            points:  Optional[Tuple[torch.Tensor, torch.Tensor]]= None,
-            boxes: Optional[torch.Tensor] = None,
             unfreeze_prompt_generator: bool = False,
             return_all_hq_masks: bool = False,
             ar_point_prompts: Optional[List[Tuple[np.ndarray, np.ndarray]]] = None,
@@ -93,16 +94,26 @@ class ClimateSAM(nn.Module):
         
         # print(f"Input shape after interpolation: {input.shape}")
         imgs = self.input_adapt(input) # from 16x1024x1024 to 3x1024x1024
+        
         # print(f"Input to imgs after adapt: {imgs.shape}")
-        imgs = self.preprocess(imgs) # normalize the input images
+        imgs = self.preprocess_images(imgs) # normalize the input images
         # print(f"Shape of imgs after preprocessing: {imgs.shape}")
         # encode the images
+        image_input = imgs.clone().detach()
         image_embeddings, interm_embeddings = self.image_encoder(imgs) # shape batch x [256, 64, 64] and 12 x torch.Size([batch, 64, 64, 768])
         batch_size = len(image_embeddings)
         # Print the shapes of the embeddings for debugging
         # print(f"Image embeddings shape: {image_embeddings[0].shape}")
         # print(f"Intermediate embeddings shape: {interm_embeddings[0].shape}")
 
+        ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = self.preprocess_prompts(
+            ar_point_prompts=ar_point_prompts,
+            tc_point_prompts=tc_point_prompts,
+            ar_bbox_prompts=ar_bbox_prompts,
+            tc_bbox_prompts=tc_bbox_prompts,
+            ori_img_size=ori_img_size
+        )
+        
         tc_masks, ar_masks = None, None
         if unfreeze_prompt_generator:
             tc_masks, ar_masks = self.prompt_generator(interm_embeddings) # shape: batch x 2 x 256 x 256
@@ -184,8 +195,12 @@ class ClimateSAM(nn.Module):
         # for i, (tc_mask, ar_mask) in enumerate(zip(tc_postprocess_masks_hq, ar_postprocess_masks_hq)):
         #     print(f"Postprocessed TC mask {i} shape: {tc_mask.shape}")
         #     print(f"Postprocessed AR mask {i} shape: {ar_mask.shape}")
-            
-        return tc_postprocess_masks_hq, ar_postprocess_masks_hq
+        
+        if not self.training:
+            tc_postprocess_masks_hq = [self.discretize_mask(m) for m in tc_postprocess_masks_hq]
+            ar_postprocess_masks_hq = [self.discretize_mask(m) for m in ar_postprocess_masks_hq]
+        return tc_postprocess_masks_hq, ar_postprocess_masks_hq, image_input
+    
     
     @staticmethod
     def postprocess(output_masks: torch.Tensor, ori_img_size: Tuple):
@@ -210,12 +225,49 @@ class ClimateSAM(nn.Module):
         
         return input
     
-    def preprocess(self, input: Union[List[torch.Tensor], None]):
+    def preprocess_images(self, input: Union[List[torch.Tensor], None]):
         # Normalize colors to match the original SAM preprocessing
         pixel_mean = self.ori_sam.pixel_mean.clone().detach().to(input.device).view(1, 3, 1, 1)
         pixel_std  = self.ori_sam.pixel_std.clone().detach().to(input.device).view(1, 3, 1, 1)
         input = (input - pixel_mean) / pixel_std
         return input
         
+    def preprocess_prompts(self, ar_point_prompts = None,
+                           tc_point_prompts = None,
+                            ar_bbox_prompts = None,
+                            tc_bbox_prompts = None,
+                            ori_img_size = [768, 1152]):
+        
+        for i in range(len(ori_img_size)):
+            h_scale = self.sam_img_size[0] / ori_img_size[i][0]
+            w_scale = self.sam_img_size[1] / ori_img_size[i][1]
+        
+            if tc_point_prompts is not None:
+                tc_point_prompt[i][:,:, 0]  *= w_scale
+                tc_point_prompt[i][:,:, 1]  *= h_scale
+                tc_point_prompt = torch.round(tc_point_prompt[i])
+            if ar_point_prompts is not None:
+                ar_point_prompt[i][:,:, 0]  *= w_scale
+                ar_point_prompt[i][:,:, 1]  *= h_scale
+                ar_point_prompt = torch.round(ar_point_prompt[i])
+            if tc_bbox_prompts is not None:
+                tc_bbox_prompts[i][:, 0]  *= w_scale
+                tc_bbox_prompts[i][:, 1]  *= h_scale
+                tc_bbox_prompts[i][:, 2]  *= w_scale
+                tc_bbox_prompts[i][:, 3]  *= h_scale
+                tc_bbox_prompts = torch.round(tc_bbox_prompts[i])
+            if ar_bbox_prompts is not None:
+                ar_bbox_prompts[i][:, 0]  *= w_scale
+                ar_bbox_prompts[i][:, 1]  *= h_scale
+                ar_bbox_prompts[i][:, 2]  *= w_scale
+                ar_bbox_prompts[i][:, 3]  *= h_scale
+        
+        return ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts
+    
+     
+    def discretize_mask(self, masks_logits):
+        return torch.gt(masks_logits, self.ori_sam.mask_threshold).float()
+            
+
         
         

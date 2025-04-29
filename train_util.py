@@ -196,22 +196,22 @@ def get_point_and_bbox_from_binary_mask(binary_mask, connectivity = 8, threshold
     torch_bboxes = torch_bboxes.unsqueeze(0) # anfoderung von prompt_encoder.py
     return torch_points,torch_bboxes
 
-def plot_with_projection(image, mask, prediction, label, var_names, use_projection=False, batch_num=None, epoch=None, title = None):
+def plot_with_projection(image, ar_pred, tc_pred, ar_gt, tc_gt, label, var_names, use_projection=False, epoch=None, title = None):
     # Convert tensors to numpy arrays
-    # Check if the image tensor needs to be transposed
-    if image.ndim == 3 and image.shape[0] in [1, 3]:
-        image_np = image.cpu().numpy().transpose(1, 2, 0)  # Convert to HWC format
-    else:
-        image_np = image.cpu().numpy()
-    mask_np = mask.cpu().numpy().squeeze() if torch.is_tensor(mask) else mask.squeeze()  # Remove channel dimension
-    if prediction is not None:
-        prediction = prediction.detach().cpu().numpy().squeeze() if torch.is_tensor(prediction) else prediction.squeeze()
-
-    longitudes = np.linspace(-180, 180, image_np.shape[1])
-    latitudes = np.linspace(-90, 90, image_np.shape[0])
-
+    image_np = image.cpu().numpy()
     # Normalize image data to [0, 1] range for imshow
     image_np = image_np / 255.0
+    longitudes = np.linspace(-180, 180, image_np.shape[1])
+    latitudes = np.linspace(-90, 90, image_np.shape[0])
+    
+    # PREPROCESSING
+    ar_gt = ar_gt.cpu().numpy().squeeze() if torch.is_tensor(ar_gt) else ar_gt.squeeze() 
+    tc_gt = tc_gt.cpu().numpy().squeeze() if torch.is_tensor(tc_gt) else tc_gt.squeeze()
+    if ar_pred is not None:
+        ar_pred = ar_pred.detach().cpu().numpy().squeeze() if torch.is_tensor(ar_pred) else ar_pred.squeeze()
+    if tc_pred is not None:
+        tc_pred = tc_pred.detach().cpu().numpy().squeeze() if torch.is_tensor(tc_pred) else tc_pred.squeeze()
+
 
     # Create a figure
     fig, ax = plt.subplots(figsize=(12, 6), subplot_kw={'projection': ccrs.PlateCarree()} if use_projection else {})
@@ -257,7 +257,7 @@ def plot_with_projection(image, mask, prediction, label, var_names, use_projecti
     
     return plot_array, title
 
-def calculate_focal_loss(inputs: torch.Tensor, targets: torch.Tensor, gamma: float = 5, alpha: float = 1):
+def calculate_focal_loss(inputs: torch.Tensor, targets: torch.Tensor, gamma: float = 5, alpha: float = 0.75):
     """
     Compute the Focal Loss for binary classification.
     
