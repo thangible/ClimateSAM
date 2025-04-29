@@ -204,9 +204,9 @@ def get_point_and_bbox_from_binary_mask(binary_mask, connectivity = 8, threshold
 
 def plot_with_projection(image, ar_pred, tc_pred, ar_gt, tc_gt, save_path, use_projection=True, epoch=None, title = None):
     ar_gt_color = 'red'
-    tc_gt_color = 'blue'
+    tc_gt_color = 'green'
     ar_pred_color = 'orange'
-    tc_pred_color = 'blueviolet'
+    tc_pred_color = 'blue'
     
     # PREPROCESSING
     ar_pred = ar_pred.squeeze() if ar_pred is not None else None
@@ -221,7 +221,10 @@ def plot_with_projection(image, ar_pred, tc_pred, ar_gt, tc_gt, save_path, use_p
         image_np = np.squeeze(image_np)
         image_np = image_np.transpose(1, 2, 0)
     # Normalize image data to [0, 1] range for imshow
-    image_np = np.clip(image_np, 0, 1)
+    min_val = image_np.min()
+    max_val = image_np.max()
+    image_np = (image_np - min_val) / (max_val - min_val)
+    # image_np = np.clip(image_np, 0, 1)
     # Resize the image to 1024x1024 using interpolation
     image_np = cv2.resize(image_np, (1152, 768), interpolation=cv2.INTER_LINEAR)
     longitudes = np.linspace(-180, 180, image_np.shape[1])

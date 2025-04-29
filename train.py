@@ -101,14 +101,14 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
             # ar
             pred_ar, label_ar = ar_mask[i], masks_ar_gt[i]
             label_ar = torch.where(torch.gt(label_ar, 0.), 1., 0.)
-            pos_weight_ar = torch.tensor([16]).to(device)
+            pos_weight_ar = torch.tensor([17]).to(device)
             b_loss_ar = F.binary_cross_entropy_with_logits(pred_ar, label_ar.float(), 
                                                            pos_weight=pos_weight_ar)
             d_loss_ar = calculate_focal_loss(pred_ar, label_ar, gamma=2, alpha=0.9)
             # tc
             pred_tc, label_tc = tc_mask[i], masks_tc_gt[i]
             label_tc = torch.where(torch.gt(label_tc, 0.), 1., 0.)
-            pos_weight_tc = torch.tensor([250]).to(device)
+            pos_weight_tc = torch.tensor([257]).to(device)
             b_loss_tc = F.binary_cross_entropy_with_logits(pred_tc, label_tc.float(), pos_weight=pos_weight_tc)
             d_loss_tc = calculate_focal_loss(pred_tc, label_tc, gamma=2, alpha=0.98)
             # add the loss to the list
@@ -201,7 +201,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
                 masks_ar_gt = [masks_ar_gts[i].cpu().numpy() for i in range(len(masks_ar_gts))]
                 masks_tc_gt = [masks_tc_gts[i].cpu().numpy() for i in range(len(masks_tc_gts))]
                 for i in range(len(imges)):
-                    save_path=os.path.join(worker_args.exp_dir, worker_args.run_name, 'images', f"epoch_{epoch}_step_{val_step}.png")
+                    save_path=os.path.join(worker_args.exp_dir, worker_args.run_name, 'images', f"epoch_{epoch}_step_{val_step}_image_{i}.png")
                     
                     plot, titel = plot_with_projection(imges[i], masks_ar[i], masks_tc[i], masks_ar_gt[i], masks_tc_gt[i], save_path = save_path)
                     
@@ -209,7 +209,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
       
                     print(f"Epoch {epoch} - Step {val_step} - Image {i} saved.")
                     if worker_args.wandb:
-                        wandb.log({f"valid/epoch_{epoch}_image_{i}": wandb.Image(plot, caption=titel), "epoch": epoch})
+                        wandb.log({f"valid/epoch_{epoch}_image_{i}": wandb.Image(plot, caption=titel), "epoch": epoch}, step = epoch)
             # CAL
             ar_metrics.update(ar_masks, masks_ar_gts,  batch['index_name'])
             tc_metrics.update(tc_masks, masks_tc_gts,  batch['index_name'])
@@ -219,8 +219,19 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
             )
             valid_pbar.set_postfix_str(str_step_info)
             
-    miou_ar = ar_metrics.compute()[0]['Mean Foreground IoU']
-    miou_tc = tc_metrics.compute()[0]['Mean Foreground IoU']
+    ar_metrict_dict, _ = ar_metrics.compute()
+    tc_metric_dict, _ = tc_metrics.compute()
+    
+    miou_ar = ar_metrict_dict['Mean Foreground IoU']
+    mean_acc_ar = ar_metrict_dict['Mean Acc']
+    overall_acc_ar = ar_metrict_dict['Overall Acc']
+    freqw_acc_ar = ar_metrict_dict['FreqW Acc']
+    miout_including_bg_ar = ar_metrict_dict['Mean IoU']
+    miou_tc = tc_metric_dict['Mean Foreground IoU']
+    mean_acc_tc = tc_metric_dict['Mean Acc']
+    overall_acc_tc = tc_metric_dict['Overall Acc']
+    freqw_acc_tc = tc_metric_dict['FreqW Acc']
+    miout_including_bg_tc = tc_metric_dict['Mean IoU']
     ar_metrics.reset()
     tc_metrics.reset()
     
@@ -228,8 +239,17 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
         wandb.log({
             "valid/miou_ar": miou_ar,
             "valid/miou_tc": miou_tc,
-            "epoch": epoch
-        })
+            "valid/mean_acc_ar": mean_acc_ar,
+            "valid/mean_acc_tc": mean_acc_tc,
+            "valid/overall_acc_ar": overall_acc_ar,
+            "valid/overall_acc_tc": overall_acc_tc,
+            "valid/freqw_acc_ar": freqw_acc_ar,
+            "valid/freqw_acc_tc": freqw_acc_tc,
+            "valid/miout_including_bg_ar": miout_including_bg_ar,
+            "valid/miout_including_bg_tc": miout_including_bg_tc,
+            "epoch": epoch,
+        },
+            step = epoch)
         
     return miou_tc, miou_ar
         
@@ -307,7 +327,7 @@ def main_worker(worker_id, worker_args):
     print(f"Validation will be performed every {worker_args.valid_per_epochs} epochs.")
     model.train()
     for epoch in range(1, max_epoch_num + 1):
-        # train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num)
+        train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num)
         if epoch % worker_args.valid_per_epochs == 1 and local_rank == 0:
             miou_tc, miou_ar = validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args)
             print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}")
