@@ -11,7 +11,7 @@ from cat_sam.datasets.transforms import Compose
 import cv2
 
 class ClimateDataset(Dataset):
-    def __init__(self, data_dir, train_flag=True, reset_flag = False, transforms=None,  **prompt_kwargs):
+    def __init__(self, data_dir, train_flag=True, reset_flag=False, transforms=None,  **prompt_kwargs):
         """
         Parameters:
             data_dir (str): Directory containing the .nc files.
@@ -33,6 +33,7 @@ class ClimateDataset(Dataset):
         # Store prompt generation parameters.
         self.prompt_kwargs = prompt_kwargs
         
+        prompt_kwargs = prompt_kwargs.copy()
         shot_num = prompt_kwargs.pop("shot_num", None)
         if shot_num is not None:
             self.files = self.files[:shot_num]
@@ -46,31 +47,49 @@ class ClimateDataset(Dataset):
         
         # Define the path to save the mean and std values.
         self.mean_std_path = os.path.join(data_dir, "mean_std.npy")
-        self.mean_std_dict = self.calculate_mean_std()
+        self.mean_std_dict = self.calculate_stats()
 
-    def calculate_mean_std(self):
+    def calculate_stats(self):
         """
         Calculate the mean and std of the data across all the files.
         """
         if os.path.exists(self.mean_std_path) and self.reset_flag is False:
             print(f"Loading mean/std from {self.mean_std_path}")
-            return np.load(self.mean_std_path, allow_pickle=True).item()
+            stats = np.load(self.mean_std_path, allow_pickle=True).item()
+            print(f"AR Ratio: {stats['ar_ratio']}, TC Ratio: {stats['tc_ratio']}")
+            return stats
 
         print("Calculating mean/std from scratch...")
         means = []
         stds = []
+        ar_ratios = []
+        tc_ratios = []
         
         for file in self.files:
             dataset = xr.load_dataset(file)
             data = dataset.to_array().sel(variable=self.variables).values.squeeze()
             means.append(np.mean(data, axis=(1,2)))  # Mean for each of the 16 channels
             stds.append(np.std(data, axis=(1,2)))    # Std for each of the 16 channels
+            
+            mask = dataset['LABELS'].values
+            ar_mask = mask == 2
+            tc_mask = mask == 1
+            ar_ones_count = np.sum(ar_mask == 1) + 1
+            tc_ones_count = np.sum(tc_mask == 1) + 1
+            ar_zeros_count = np.sum(ar_mask == 0)
+            tc_zeros_count = np.sum(tc_mask == 0)
+            ar_ratio = ar_zeros_count / (ar_ones_count)
+            tc_ratio = tc_zeros_count / (tc_ones_count)
+            ar_ratios.append(ar_ratio)
+            tc_ratios.append(tc_ratio)
         
         # Calculate the overall mean and std for each channel across all files
         mean_dict = np.mean(means, axis=0)
         std_dict = np.mean(stds, axis=0)
+        mean_ar_ratio = np.median(ar_ratios)
+        mean_tc_ratio = np.median(tc_ratios)
         
-        result = {"mean": mean_dict, "std": std_dict}
+        result = {"mean": mean_dict, "std": std_dict, "ar_ratio": mean_ar_ratio, "tc_ratio": mean_tc_ratio}
         np.save(self.mean_std_path, result)
         
         # Return a dictionary with channel-wise mean and std
@@ -102,7 +121,8 @@ class ClimateDataset(Dataset):
         normalized_data_max = normalized_data.max(axis=(0, 1), keepdims=True)
         
         # Clip values to ensure they stay within the range [0, 1] before multiplying by 255
-        scaled_data = np.clip((normalized_data - normalized_data_min) / (normalized_data_max - normalized_data_min), 0, 1) * 255
+        epsilon = 1e-8  # Small value to prevent division by zero
+        scaled_data = np.clip((normalized_data - normalized_data_min) / (normalized_data_max - normalized_data_min + epsilon), 0, 1) * 255
         
         # Convert to uint8 for image representation
         scaled_data = scaled_data.astype(np.uint8)
@@ -228,4 +248,4 @@ class ClimateDataset(Dataset):
         # Optional: Stack if all are same shape (e.g., during training with fixed size)
         # Otherwise, leave as list to handle variable-sized input
         return batch_dict
-
+    

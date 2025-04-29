@@ -243,13 +243,19 @@ class ClimateSAM(nn.Module):
             w_scale = self.sam_img_size[1] / ori_img_size[i][1]
         
             if tc_point_prompts is not None:
-                tc_point_prompt[i][:,:, 0]  *= w_scale
-                tc_point_prompt[i][:,:, 1]  *= h_scale
-                tc_point_prompt = torch.round(tc_point_prompt[i])
+                if tc_point_prompts[i] is not None:
+                    tc_point, tc_label = tc_point_prompts[i] 
+                    tc_point[:,:, 0]  *= w_scale
+                    tc_point[:,:, 1]  *= h_scale
+                    tc_point = torch.round(tc_point)
+                    tc_point_prompts[i] = (tc_point, tc_label)
             if ar_point_prompts is not None:
-                ar_point_prompt[i][:,:, 0]  *= w_scale
-                ar_point_prompt[i][:,:, 1]  *= h_scale
-                ar_point_prompt = torch.round(ar_point_prompt[i])
+                if ar_point_prompts[i] is not None:
+                    ar_point, ar_label = ar_point_prompts[i]
+                    ar_point[:,:, 0]  *= w_scale
+                    ar_point[:,:, 1]  *= h_scale
+                    ar_point = torch.round(ar_point)
+                    ar_point_prompts[i] = (ar_point, ar_label)
             if tc_bbox_prompts is not None:
                 tc_bbox_prompts[i][:, 0]  *= w_scale
                 tc_bbox_prompts[i][:, 1]  *= h_scale

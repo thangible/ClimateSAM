@@ -27,4 +27,4 @@ valid_per_epochs = 5
 [DEBUGGING]
 wandb = False
 debugging = False
-save_model = Trues
+save_model = False
