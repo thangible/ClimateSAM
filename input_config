@@ -1,6 +1,7 @@
 [PATH]
 exp_dir = ./exp
 data_dir = '/home/aiworker2/thang/climateNet'
+pretrained_name = 'best_model.pth'
 project_name = climate-sam
 run_name = train_image_encoder
 
@@ -9,7 +10,7 @@ run_name = train_image_encoder
 train_bs = 8
 val_bs = 8
 ; weight_decay = 1e-4
-lr = 1e-2
+lr = 1e-3
 
 [MODEL CONFIG]
 sam_type = vit_b
@@ -25,6 +26,7 @@ valid_per_epochs = 5
 [climate]
 
 [DEBUGGING]
+load_pretrained = True
 wandb = True
 debugging = False
 save_model = True

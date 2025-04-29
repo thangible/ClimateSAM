@@ -76,7 +76,15 @@ def parse():
         '--debugging', action='store_true',
         help="Flag to enable debugging mode. Default is False."
     )
+    parser.add_argument(
+        '--load_pretrained', action='store_true',
+        help="Flag to load a pretrained model. Default is False."
+    )
 
+    parser.add_argument(
+        '--pretrained_name', type=str,
+        help="Name of the pretrained model to load."
+    )
     args = parser.parse_args()
 
     return args

@@ -154,7 +154,7 @@ class ClimateDataset(Dataset):
                 
         
         # Apply Z-normalization to the data
-        data = self.z_normalize_and_scale(data)
+        data = self.minmax_per_channel_to_image(data)
         
         rgb_image = self.to_image(dataset, var_1='TMQ', var_2='U850', var_3='V850')
         # Return a dictionary that matches the expected format.
@@ -198,6 +198,17 @@ class ClimateDataset(Dataset):
             rgb_image = np.squeeze(rgb_image, axis=0) 
 
         return rgb_image
+    
+    def minmax_per_channel_to_image(self, data):
+        """
+        Normalize the data using min-max normalization.
+        """
+        # Min-max normalization
+        data_min = data.min(axis=(1, 2), keepdims=True)
+        data_max = data.max(axis=(1, 2), keepdims=True)
+        normalized_data = (data - data_min) / (data_max - data_min + 1e-8)
+        normalized_data = (normalized_data * 255).astype(np.uint8)
+        return normalized_data
 
     def get_labels(self, dataset, label_name= None):
         """

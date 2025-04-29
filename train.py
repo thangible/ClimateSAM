@@ -308,13 +308,14 @@ def main_worker(worker_id, worker_args):
             model = model.to(device=device)
     
     # Load pretrained weights
-    # pretrained_path = os.path.join(worker_args.exp_dir, "best_model.pth")
-    # if os.path.exists(pretrained_path):
-    #     state_dict = torch.load(pretrained_path, map_location=device)
-    #     model.load_state_dict(state_dict)
-    #     print(f"Pretrained weights loaded from {pretrained_path}.")
-    # else:
-    #     print(f"Pretrained weights not found at {pretrained_path}.")
+    if worker_args.load_pretrained:
+        pretrained_path = os.path.join(worker_args.exp_dir, worker_args.pretrained_name)
+        if os.path.exists(pretrained_path):
+            state_dict = torch.load(pretrained_path, map_location=device)
+            model.load_state_dict(state_dict)
+            print(f"Pretrained weights loaded from {pretrained_path}.")
+        else:
+            print(f"Pretrained weights not found at {pretrained_path}.")
     
     # Optimizer and scheduler
     optimizer, scheduler = setup_optimizer_and_scheduler(model, worker_args)
