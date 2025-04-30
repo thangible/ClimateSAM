@@ -384,6 +384,14 @@ def batch_to_cuda(batch, device):
                 else item.to(device=device, dtype=torch.float32) if item is not None else None
                 for item in batch[key]
             ]
+        elif key in ["ar_point_prompts", "tc_point_prompts", "ar_bbox_prompts", "tc_bbox_prompts"]:
+            batch[key] = [
+                (torch.from_numpy(item[0]).to(device=device, dtype=torch.float32),
+                 torch.from_numpy(item[1]).to(device=device, dtype=torch.float32))
+                if isinstance(item, tuple) and item is not None
+                else item.to(device=device, dtype=torch.float32) if item is not None else None
+                for item in batch[key]
+            ]
     return batch
 
 

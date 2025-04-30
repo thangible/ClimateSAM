@@ -5,10 +5,12 @@ import numpy as np
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
-from cat_sam.datasets.misc import generate_prompts_from_mask
-from cat_sam.datasets.base import BinaryCATSAMDataset  
-from cat_sam.datasets.transforms import Compose
+# from cat_sam.datasets.misc import generate_prompts_from_mask
+# from cat_sam.datasets.base import BinaryCATSAMDataset  
+# from cat_sam.datasets..transforms import Compose
 import cv2
+from .transforms  import Compose
+from .climatenet_util import extract_point_and_bbox_prompts_from_climatenet_mask
 
 class ClimateDataset(Dataset):
     def __init__(self, data_dir, train_flag=True, reset_flag=False, transforms=None,  **prompt_kwargs):
@@ -47,8 +49,51 @@ class ClimateDataset(Dataset):
         
         # Define the path to save the mean and std values.
         self.mean_std_path = os.path.join(data_dir, "mean_std.npy")
-        self.mean_std_dict = self.calculate_stats()
+        self.mean_std_dict = self.calculate_stats() 
 
+    def __getitem__(self, index):
+        # Use filename as the unique index name.
+        file_path = self.files[index]
+        index_name = os.path.basename(file_path)
+
+        # Load the .nc file.
+        dataset = xr.load_dataset(file_path)
+        prompt_kwargs = self.prompt_kwargs.copy() 
+        
+        # Generate the binary mask from the dataset.
+        mask = self.get_labels(dataset)  # see function below
+        
+        # Generate inputs
+        data = dataset.to_array().sel(variable=self.variables).values.squeeze()
+                
+        # Apply Z-normalization to the data
+        data = self.minmax_per_channel_to_image(data)
+        
+        rgb_image = self.to_image(dataset, var_1='TMQ', var_2='U850', var_3='V850')
+        # Return a dictionary that matches the expected format.
+        
+        
+        prompt_type = random.choice(['bbox', 'point', 'noisy_mask']) if self.train_flag else random.choice(['bbox', 'point'])
+        prompt_dict = extract_point_and_bbox_prompts_from_climatenet_mask(mask = mask, prompt_type = prompt_type)
+        
+        return {
+            "input": data,
+            "gt_mask": mask,     # binary mask.
+            "index_name": index_name,
+            
+            "ar_point_prompts": prompt_dict['ar_point_prompts'],
+            "tc_point_prompts": prompt_dict['tc_point_prompts'],
+            
+            "ar_bbox_prompts": prompt_dict['ar_bbox_prompts'],
+            "tc_bbox_prompts": prompt_dict['tc_bbox_prompts'],
+            
+            "ar_mask_prompts": prompt_dict['ar_mask_prompts'],
+            "tc_mask_prompts": prompt_dict['tc_mask_prompts'],
+            
+            "ar_object_masks" : prompt_dict['ar_object_masks'],
+            "tc_object_masks" : prompt_dict['tc_object_masks']
+        }
+        
     def calculate_stats(self):
         """
         Calculate the mean and std of the data across all the files.
@@ -131,38 +176,6 @@ class ClimateDataset(Dataset):
 
     def __len__(self):
         return len(self.files)
-
-    
-    def __getitem__(self, index):
-        # Use filename as the unique index name.
-        file_path = self.files[index]
-        index_name = os.path.basename(file_path)
-
-        # Load the .nc file.
-        dataset = xr.load_dataset(file_path)
-        # 
-        prompt_kwargs = self.prompt_kwargs.copy() 
-        
-        # Generate the binary mask from the dataset.
-        
-        mask = self.get_labels(dataset)  # see function below
-        
-        # Generate inputs
-        
-        
-        data = dataset.to_array().sel(variable=self.variables).values.squeeze()
-                
-        
-        # Apply Z-normalization to the data
-        data = self.minmax_per_channel_to_image(data)
-        
-        rgb_image = self.to_image(dataset, var_1='TMQ', var_2='U850', var_3='V850')
-        # Return a dictionary that matches the expected format.
-        return {
-            "input": data,
-            "gt_masks": mask,     # binary mask.
-            "index_name": index_name
-        }
         
     def get_file_names(self, index_name):
         return os.path.splitext(index_name)[0] # file name without the .nc extension,

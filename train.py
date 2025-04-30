@@ -7,7 +7,7 @@ import torch.multiprocessing as mp
 import torch.nn.functional as F
 from functools import partial
 from torch.utils.data import DataLoader
-from train_util import extract_point_and_bbox_prompts_from_climatenet_mask, batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, calculate_dice_loss, calculate_focal_loss, plot_with_projection
+from train_util import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, calculate_dice_loss, calculate_focal_loss, plot_with_projection
 from tqdm import tqdm
 from contextlib import nullcontext
 from train_parser import parse
@@ -70,18 +70,15 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
     for train_step, batch in enumerate(train_dataloader):
         batch = batch_to_cuda(batch, device)
         # print(f"batch['input'] shape: {batch['input'].shape}") 
-        ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = \
-            extract_point_and_bbox_prompts_from_climatenet_mask(batch['gt_masks'], device)
         
         tc_mask, ar_mask, images = model(batch['input'],
-                                ar_point_prompts = ar_point_prompts,
-                                tc_point_prompts = tc_point_prompts, 
-                                ar_bbox_prompts = None, 
-                                tc_bbox_prompts= None)
+                                ar_point_prompts = batch['ar_point_prompts'],
+                                tc_point_prompts = batch['tc_point_prompts'], 
+                                ar_bbox_prompts = batch['ar_bbox_prompts'], 
+                                tc_bbox_prompts= batch['tc_bbox_prompts'])
         
-        masks_gt = batch['gt_masks']
-        masks_ar_gt = [ (mask == 2).to(torch.uint8) for mask in masks_gt ]
-        masks_tc_gt = [ (mask == 1).to(torch.uint8) for mask in masks_gt ]
+        masks_ar_gt = batch['ar_object_masks']
+        masks_tc_gt = batch['tc_object_masks']
         
         # some processing to make sure the masks are in the right shape
         for masks in [masks_ar_gt, masks_tc_gt, ar_mask, tc_mask]:
@@ -200,11 +197,13 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
         batch = batch_to_cuda(batch, device)
         val_model = model
         with torch.no_grad():
-            ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = \
-            extract_point_and_bbox_prompts_from_climatenet_mask(batch['gt_masks'], device) 
+            
             tc_masks, ar_masks, images = val_model(batch['input'],
-                                ar_point_prompts = ar_point_prompts,
-                                tc_point_prompts = tc_point_prompts)
+                                ar_point_prompts = batch['ar_point_prompts'],
+                                tc_point_prompts = batch['tc_point_prompts'], 
+                                ar_bbox_prompts = batch['ar_bbox_prompts'], 
+                                tc_bbox_prompts= batch['tc_bbox_prompts'],
+                                )
             
             masks_gt = batch['gt_masks']
             masks_ar_gts = [ (mask == 2).to(torch.uint8) for mask in masks_gt ]
@@ -335,14 +334,11 @@ def main_worker(worker_id, worker_args):
     
     # Load pretrained weights
     if worker_args.load_pretrained:
+        image_encoder_path = os.path.join(worker_args.exp_dir, f"image_encoder_weights.pth")
+        ie_checkpoint = torch.load(image_encoder_path, map_location=device)
         pretrained_path = os.path.join(worker_args.exp_dir, worker_args.pretrained_name)
-        if os.path.exists(pretrained_path):
-            state_dict = torch.load(pretrained_path, map_location=device)
-            model.load_state_dict(state_dict)
-            print(f"Pretrained weights loaded from {pretrained_path}.")
-        else:
-            print(f"Pretrained weights not found at {pretrained_path}.")
-    
+        model.image_encoder.load_state_dict(ie_checkpoint["image_encoder_state_dict"])
+        print(f"Pretrained weights loaded from {image_encoder_path}")
     # Optimizer and scheduler
     optimizer, scheduler = setup_optimizer_and_scheduler(model, worker_args)
     if worker_args.phase == 2:
