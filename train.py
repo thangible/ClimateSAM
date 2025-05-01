@@ -121,12 +121,14 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
     
         theta_tc = 5
         # bce loss
-        bce_loss_ar = sum(bce_loss_list_ar) / len(bce_loss_list_ar)
-        bce_loss_tc = sum(bce_loss_list_tc) / len(bce_loss_list_tc)
+        bce_loss_ar = sum(bce_loss_list_ar) / len(bce_loss_list_ar) if len(bce_loss_list_ar) > 0 else torch.tensor(0).to(device)
+        bce_loss_tc = sum(bce_loss_list_tc) / len(bce_loss_list_tc) if len(bce_loss_list_tc) > 0 else torch.tensor(0).to(device)
         bce_loss_tc = bce_loss_tc * theta_tc
         bce_loss = bce_loss_ar + bce_loss_tc
-        dice_loss_ar = sum(dice_loss_list_ar) / len(dice_loss_list_ar)
-        dice_loss_tc = sum(dice_loss_list_tc) / len(dice_loss_list_tc)
+        
+        # focal loss
+        dice_loss_ar = sum(dice_loss_list_ar) / len(dice_loss_list_ar) if len(dice_loss_list_ar) > 0 else torch.tensor(0).to(device)
+        dice_loss_tc = sum(dice_loss_list_tc) / len(dice_loss_list_tc) if len(dice_loss_list_tc) > 0 else torch.tensor(0).to(device)
         dice_loss_tc = dice_loss_tc * theta_tc
         dice_loss = dice_loss_ar + dice_loss_tc
         
@@ -220,7 +222,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
                         if len(masks[i].shape) != 4:
                             raise RuntimeError
             # LOG
-            if val_step == 0:
+            if val_step == 2:
                 imges = [images[i].cpu().numpy() for i in range(len(images))]
                 masks_ar = [ar_masks[i].cpu().numpy() for i in range(len(ar_masks))]
                 masks_tc = [tc_masks[i].cpu().numpy() for i in range(len(tc_masks))]
@@ -234,6 +236,10 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
                     print(f"Epoch {epoch}- Image {i} saved.")
                     if worker_args.wandb:
                         wandb.log({f"valid/image_{i}": wandb.Image(plot, caption=titel), "epoch": epoch}, step = epoch)
+                del imges, masks_ar, masks_tc, masks_ar_gt, masks_tc_gt
+                torch.cuda.empty_cache()
+            
+
             
             # CAL
             merge_tc_masks = []
@@ -343,11 +349,15 @@ def main_worker(worker_id, worker_args):
     
     # Load pretrained weights
     if worker_args.load_pretrained:
-        image_encoder_path = os.path.join(worker_args.exp_dir, f"image_encoder_weights_30.pth")
-        ie_checkpoint = torch.load(image_encoder_path, map_location=device)
-        pretrained_path = os.path.join(worker_args.exp_dir, worker_args.pretrained_name)
-        model.image_encoder.load_state_dict(ie_checkpoint["image_encoder_state_dict"])
-        print(f"Pretrained weights loaded from {image_encoder_path}")
+        if worker_args.phase == 1:
+            image_encoder_path = os.path.join(worker_args.exp_dir, f"phase_1_weights.pth")
+            phase_1_checkpoint = torch.load(image_encoder_path, map_location=device)
+            print(f"Pretrained weights from phase 1 loaded from {image_encoder_path}")
+            model.image_encoder.load_state_dict(phase_1_checkpoint['image_encoder'])
+            print(f"Image encoder weights loaded from {image_encoder_path}")
+            model.mask_decoder.load_state_dict(phase_1_checkpoint['mask_decoder'])
+            print(f"Mask decoder weights loaded from {image_encoder_path}")
+            
     # Optimizer and scheduler
     optimizer, scheduler = setup_optimizer_and_scheduler(model, worker_args)
     if worker_args.phase == 2:
@@ -378,8 +388,12 @@ def main_worker(worker_id, worker_args):
                 print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
                 if worker_args.save_model and epoch > 5:
                     if worker_args.phase == 1:
-                        save_path = os.path.join(worker_args.exp_dir, f"image_encoder_weights.pth")
-                        torch.save({'image_encoder_state_dict': model.image_encoder.state_dict(),}, save_path)
+                        save_path = os.path.join(worker_args.exp_dir, f"phase_1_weights.pth")
+                        phase_1_weights = {
+                            'image_encoder': model.image_encoder.state_dict(),
+                            'mask_decoder': model.mask_decoder.state_dict(),
+                        }
+                        torch.save(phase_1_weights, save_path)
                         print(f"Image encoder saved to {save_path}")
                         wandb.save(save_path)
                         print(f"Image encoder saved to wandb: {save_path}")

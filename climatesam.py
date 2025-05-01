@@ -30,9 +30,7 @@ class ClimateSAM(nn.Module):
         self.use_prompt_generator = use_prompt_generator
         # ORI SAM model
         self.ori_sam = sam_model_registry[model_type](sam_ckpt_path_dict[model_type])
-        
         self.sam_img_size = (self.ori_sam.image_encoder.img_size, self.ori_sam.image_encoder.img_size)
-
         # ClimateSAM model
         self.input_adapt = nn.Sequential(
             nn.Conv2d(16, 3, kernel_size=1, stride=1, padding=0),
@@ -64,31 +62,72 @@ class ClimateSAM(nn.Module):
                 
         del self.ori_sam.mask_decoder # remove the mask decoder in original SAM to avoid redundant params in model object
         
-    def train(self, mode: bool = True, phase = 1):
-        # set train status for this class: disable all but the prompt-related modules
+    def train(self, mode: bool = True, phase: int = 1):
+        # Set the global train/eval mode
         super().train(mode)
-        if mode:
-            if phase == 1:
-                self.disable_prompt_generator()
-                for n, c in self.named_children():
-                    if n not in ['image_encoder']:
-                        c.eval()
-                    else:
-                        c.train()
-            elif phase == 2:
-                self.enable_prompt_generator()
-                for n, c in self.named_children():
-                    if n not in ['prompt_encoder']:
-                        c.eval()
-                    else:
-                        c.train()
-            elif phase == 3:
-                self.enable_prompt_generator()
-                for n, c in self.named_children():
-                    if n not in ['input_adapt']:
-                        c.eval()
-                    else:
-                        c.train()
+        
+        if not mode:
+            return  # If not in training mode, exit early
+
+        # Freeze all parameters by default (phase-specific unfreezing follows)
+        for param in self.parameters():
+            param.requires_grad = False
+
+        # Phase-specific training configurations
+        if phase == 1:
+            # Phase 1: Train only image_encoder
+            self.disable_prompt_generator()
+            self.image_encoder.train()
+            self.mask_decoder.train()
+            for param in self.image_encoder.parameters():
+                param.requires_grad = True
+            for param in self.mask_decoder.parameters():
+                param.requires_grad = True
+            
+            # Ensure other components are frozen
+            self.input_adapt.eval()
+            self.prompt_encoder.eval()
+            
+            
+        elif phase == 2:
+            # Phase 2: Train only prompt_encoder
+            self.enable_prompt_generator()
+            self.prompt_generator.train()
+            for param in self.prompt_generator.parameters():
+                param.requires_grad = True
+            
+            # Ensure other components are frozen
+            self.prompt_encoder.eval()
+            self.image_encoder.eval()
+            self.input_adapt.eval()
+            self.mask_decoder.eval()
+            
+            # Special case for prompt generator if it exists
+            if hasattr(self, 'prompt_generator'):
+                self.prompt_generator.eval()
+                
+        elif phase == 3:
+            # Phase 3: Train only input_adapt
+            self.enable_prompt_generator()
+            self.input_adapt.train()
+            for param in self.input_adapt.parameters():
+                param.requires_grad = True
+            
+            # Ensure other components are frozen
+            self.prompt_encoder.eval()
+            self.image_encoder.eval()
+            self.input_adapt.eval()
+            self.mask_decoder.eval()
+            
+            # Special case for prompt generator if it exists
+            if hasattr(self, 'prompt_generator'):
+                self.prompt_generator.eval()
+
+        # Verify frozen/trainable parameters (for debugging)
+        total_params = sum(p.numel() for p in self.parameters())
+        trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        print(f"Phase {phase}: Trainable params = {trainable_params}/{total_params} "
+            f"({100*trainable_params/total_params:.2f}%)")
                     
                 
     def forward(
