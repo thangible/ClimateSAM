@@ -260,13 +260,17 @@ def plot_with_projection(image, ar_pred, tc_pred, ar_gt, tc_gt, save_path, use_p
     tc_gt = tc_gt.cpu().numpy().squeeze() if torch.is_tensor(tc_gt) else tc_gt.squeeze()
     if ar_pred is not None:
         ar_pred = ar_pred.detach().cpu().numpy().squeeze() if torch.is_tensor(ar_pred) else ar_pred.squeeze()
-        ax.contour(longitudes, latitudes, ar_pred, colors=ar_pred_color, linewidths=1, levels=[0.5], transform=ccrs.PlateCarree() if use_projection else None)
+        if ar_pred.ndim == 3:
+            for pred in ar_pred:
+                ax.contour(longitudes, latitudes, pred, colors=ar_pred_color, linewidths=1, levels=[0.5], transform=ccrs.PlateCarree() if use_projection else None)
         ac_pred_line = plt.Line2D([0], [0], color=ar_pred_color, linewidth=1, label='AC Prediction')
 
         
     if tc_pred is not None:
         tc_pred = tc_pred.detach().cpu().numpy().squeeze() if torch.is_tensor(tc_pred) else tc_pred.squeeze()
-        ax.contour(longitudes, latitudes, tc_pred, colors=tc_pred_color, linewidths=1, levels=[0.5], transform=ccrs.PlateCarree() if use_projection else None)
+        if tc_pred.ndim == 3:
+            for pred in tc_pred:
+                ax.contour(longitudes, latitudes, pred, colors=tc_pred_color, linewidths=1, levels=[0.5], transform=ccrs.PlateCarree() if use_projection else None)
         tc_red_line = plt.Line2D([0], [0], color=tc_pred_color, linewidth=1, label='TC Prediction')
 
 
@@ -284,6 +288,7 @@ def plot_with_projection(image, ar_pred, tc_pred, ar_gt, tc_gt, save_path, use_p
     plot_array = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
     plot_array = plot_array.reshape(fig.canvas.get_width_height()[::-1] + (3,))
     
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
     plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
     plt.close(fig)
     
@@ -377,19 +382,25 @@ def batch_to_cuda(batch, device):
             # batch[key] = torch.from_numpy(batch[key])
             batch[key] = batch[key].to(device=device, dtype=torch.float32)
         
-        elif key in ["gt_masks"]:
+        elif key in ["gt_masks", "ar_object_masks", "tc_object_masks"]:
             batch[key] = [
                 torch.from_numpy(item).to(device=device, dtype=torch.float32)
                 if isinstance(item, np.ndarray)
                 else item.to(device=device, dtype=torch.float32) if item is not None else None
                 for item in batch[key]
             ]
-        elif key in ["ar_point_prompts", "tc_point_prompts", "ar_bbox_prompts", "tc_bbox_prompts"]:
+        elif key in ["ar_bbox_prompts", "tc_bbox_prompts", "ar_mask_prompts", "tc_mask_prompts"]:
             batch[key] = [
-                (torch.from_numpy(item[0]).to(device=device, dtype=torch.float32),
-                 torch.from_numpy(item[1]).to(device=device, dtype=torch.float32))
-                if isinstance(item, tuple) and item is not None
-                else item.to(device=device, dtype=torch.float32) if item is not None else None
+                item.to(device=device, dtype=torch.float32) if item is not None else None
+                for item in batch[key]
+            ]
+        elif key in ["ar_point_prompts", "tc_point_prompts"]:
+            # points, labels = zip(*batch[key])
+            batch[key] = [
+                (item[0].to(device=device, dtype=torch.float32),
+                 item[1].to(device=device, dtype=torch.float32))
+                if item[0] is not None
+                else None
                 for item in batch[key]
             ]
     return batch

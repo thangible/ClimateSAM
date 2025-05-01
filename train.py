@@ -75,45 +75,50 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
                                 ar_point_prompts = batch['ar_point_prompts'],
                                 tc_point_prompts = batch['tc_point_prompts'], 
                                 ar_bbox_prompts = batch['ar_bbox_prompts'], 
-                                tc_bbox_prompts= batch['tc_bbox_prompts'])
+                                tc_bbox_prompts= batch['tc_bbox_prompts'],
+                                ar_mask_prompts = batch['ar_mask_prompts'],
+                                tc_mask_prompts = batch['tc_mask_prompts']
+                                )
         
         masks_ar_gt = batch['ar_object_masks']
         masks_tc_gt = batch['tc_object_masks']
         
+        
         # some processing to make sure the masks are in the right shape
-        for masks in [masks_ar_gt, masks_tc_gt, ar_mask, tc_mask]:
-                for i in range(len(masks)):
-                    if len(masks[i].shape) == 2:
-                        masks[i] = masks[i][None, None, :]
-                    if len(masks[i].shape) == 3:
-                        masks[i] = masks[i][:, None, :]
-                    if len(masks[i].shape) != 4:
-                        raise RuntimeError
+        # for masks in [masks_ar_gt, masks_tc_gt, ar_mask, tc_mask]:
+        #         for i in range(len(masks)):
+        #             if len(masks[i].shape) == 2:
+        #                 masks[i] = masks[i][None, None, :]
+        #             if len(masks[i].shape) == 3:
+        #                 masks[i] = masks[i][:, None, :]
+        #             if len(masks[i].shape) != 4:
+        #                 raise RuntimeError
                     
         bce_loss_list_tc, bce_loss_list_ar = [], []
         dice_loss_list_tc, dice_loss_list_ar = [], []
         
         for i in range(len(masks_ar_gt)):
+            if masks_ar_gt[i] is not None:
+                # ar
+                pred_ar, label_ar = ar_mask[i], masks_ar_gt[i]
+                label_ar = torch.where(torch.gt(label_ar, 0.), 1., 0.)
+                pos_weight_ar = torch.tensor([worker_args.bce_weight_ar]).to(device)
+                b_loss_ar = F.binary_cross_entropy_with_logits(pred_ar, label_ar.float(), 
+                                                            pos_weight=pos_weight_ar)
+                d_loss_ar = calculate_focal_loss(pred_ar, label_ar, gamma=worker_args.gamma_ar, alpha=worker_args.alpha_ar)
+                bce_loss_list_ar.append(b_loss_ar)
+                dice_loss_list_ar.append(d_loss_ar)
             
-            # ar
-            pred_ar, label_ar = ar_mask[i], masks_ar_gt[i]
-            label_ar = torch.where(torch.gt(label_ar, 0.), 1., 0.)
-            pos_weight_ar = torch.tensor([worker_args.bce_weight_ar]).to(device)
-            b_loss_ar = F.binary_cross_entropy_with_logits(pred_ar, label_ar.float(), 
-                                                           pos_weight=pos_weight_ar)
-            d_loss_ar = calculate_focal_loss(pred_ar, label_ar, gamma=worker_args.gamma_ar, alpha=worker_args.alpha_ar)
+            if masks_tc_gt[i] is not None:
             # tc
-            pred_tc, label_tc = tc_mask[i], masks_tc_gt[i]
-            label_tc = torch.where(torch.gt(label_tc, 0.), 1., 0.)
-            pos_weight_tc = torch.tensor([worker_args.bce_weight_tc]).to(device)
-            b_loss_tc = F.binary_cross_entropy_with_logits(pred_tc, label_tc.float(), pos_weight=pos_weight_tc)
-            d_loss_tc = calculate_focal_loss(pred_tc, label_tc, gamma=worker_args.gamma_tc, alpha=worker_args.alpha_tc)
-            # add the loss to the list
-            bce_loss_list_ar.append(b_loss_ar)
-            dice_loss_list_ar.append(d_loss_ar)
-            bce_loss_list_tc.append(b_loss_tc)
-            dice_loss_list_tc.append(d_loss_tc)
-        
+                pred_tc, label_tc = tc_mask[i], masks_tc_gt[i]
+                label_tc = torch.where(torch.gt(label_tc, 0.), 1., 0.)
+                pos_weight_tc = torch.tensor([worker_args.bce_weight_tc]).to(device)
+                b_loss_tc = F.binary_cross_entropy_with_logits(pred_tc, label_tc.float(), pos_weight=pos_weight_tc)
+                d_loss_tc = calculate_focal_loss(pred_tc, label_tc, gamma=worker_args.gamma_tc, alpha=worker_args.alpha_tc)
+                bce_loss_list_tc.append(b_loss_tc)
+                dice_loss_list_tc.append(d_loss_tc)
+    
         theta_tc = 5
         # bce loss
         bce_loss_ar = sum(bce_loss_list_ar) / len(bce_loss_list_ar)
@@ -161,10 +166,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         scaler.update()
         optimizer.zero_grad()
         
-        # Delete intermediate variables to free memory
-        del batch, ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts
-        del tc_mask, ar_mask, images, masks_gt, masks_ar_gt, masks_tc_gt
-        del bce_loss_list_ar, bce_loss_list_tc, dice_loss_list_ar, dice_loss_list_tc
+    
         # Optionally force garbage collection and empty CUDA cache
         import gc
         gc.collect()
@@ -205,7 +207,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
                                 tc_bbox_prompts= batch['tc_bbox_prompts'],
                                 )
             
-            masks_gt = batch['gt_masks']
+            masks_gt = batch['gt_mask']
             masks_ar_gts = [ (mask == 2).to(torch.uint8) for mask in masks_gt ]
             masks_tc_gts = [ (mask == 1).to(torch.uint8) for mask in masks_gt ]
             # some processing to make sure the masks are in the right shape
@@ -229,15 +231,22 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
                     
                     plot, titel = plot_with_projection(imges[i], masks_ar[i], masks_tc[i], masks_ar_gt[i], masks_tc_gt[i], save_path = save_path, epoch=epoch)
                 
-         
-                    
-      
                     print(f"Epoch {epoch}- Image {i} saved.")
                     if worker_args.wandb:
-                        wandb.log({f"valid/image": wandb.Image(plot, caption=titel), "epoch": epoch}, step = epoch)
+                        wandb.log({f"valid/image_{i}": wandb.Image(plot, caption=titel), "epoch": epoch}, step = epoch)
+            
             # CAL
-            ar_metrics.update(ar_masks, masks_ar_gts,  batch['index_name'])
-            tc_metrics.update(tc_masks, masks_tc_gts,  batch['index_name'])
+            merge_tc_masks = []
+            merge_ar_masks = []
+            for mask in tc_masks:
+                combined_mask = torch.any(mask.bool(), dim=0).float()
+                merge_tc_masks.append(combined_mask)
+            for mask in ar_masks:
+                combined_mask = torch.any(mask.bool(), dim=0).float()
+                merge_ar_masks.append(combined_mask)
+                
+            ar_metrics.update(merge_tc_masks, masks_ar_gts,  batch['index_name'])
+            tc_metrics.update(merge_ar_masks, masks_tc_gts,  batch['index_name'])
             valid_pbar.update(1)
             str_step_info = "Epoch: {epoch}/{epochs:4}.".format(
                 epoch=epoch, epochs=max_epoch_num
@@ -334,7 +343,7 @@ def main_worker(worker_id, worker_args):
     
     # Load pretrained weights
     if worker_args.load_pretrained:
-        image_encoder_path = os.path.join(worker_args.exp_dir, f"image_encoder_weights.pth")
+        image_encoder_path = os.path.join(worker_args.exp_dir, f"image_encoder_weights_30.pth")
         ie_checkpoint = torch.load(image_encoder_path, map_location=device)
         pretrained_path = os.path.join(worker_args.exp_dir, worker_args.pretrained_name)
         model.image_encoder.load_state_dict(ie_checkpoint["image_encoder_state_dict"])
@@ -367,7 +376,7 @@ def main_worker(worker_id, worker_args):
             if (miou_tc + miou_ar) / 2 > best_miou_total:
                 best_miou_total = (miou_tc + miou_ar) / 2
                 print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
-                if worker_args.save_model:
+                if worker_args.save_model and epoch > 5:
                     if worker_args.phase == 1:
                         save_path = os.path.join(worker_args.exp_dir, f"image_encoder_weights.pth")
                         torch.save({'image_encoder_state_dict': model.image_encoder.state_dict(),}, save_path)

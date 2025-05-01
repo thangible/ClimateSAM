@@ -96,10 +96,12 @@ class ClimateSAM(nn.Module):
             input: Union[List[torch.Tensor], None],
             hq_token_weight: torch.Tensor = None,
             return_all_hq_masks: bool = False,
-            ar_point_prompts: Optional[List[Tuple[np.ndarray, np.ndarray]]] = None,
-            tc_point_prompts: Optional[List[Tuple[np.ndarray, np.ndarray]]] = None,
-            ar_bbox_prompts: Optional[np.ndarray] = None,
-            tc_bbox_prompts: Optional[np.ndarray] = None
+            ar_point_prompts: List[Union[torch.Tensor, None]] = None,
+            tc_point_prompts: List[Union[torch.Tensor, None]] = None,
+            ar_bbox_prompts: List[Union[torch.Tensor, None]] = None,
+            tc_bbox_prompts: List[Union[torch.Tensor, None]] = None,
+            ar_mask_prompts: List[Union[torch.Tensor, None]] = None,
+            tc_mask_prompts: List[Union[torch.Tensor, None]] = None
     ):
         ori_img_size = [(input[i].shape[-2], input[i].shape[-1]) for i in range(len(input))]
         input = self.interpolate_input(input) # from 16x768x1152 to 16x1024x1024
@@ -127,7 +129,6 @@ class ClimateSAM(nn.Module):
             ori_img_size=ori_img_size
         )
         
-        tc_masks, ar_masks = None, None
         if self.use_prompt_generator:
             tc_masks, ar_masks = self.prompt_generator(interm_embeddings) # shape: batch x 2 x 256 x 256
             ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = None, None, None, None
@@ -145,22 +146,22 @@ class ClimateSAM(nn.Module):
             # print(f"tc_point_prompts label shape: {tc_point_prompts[batch_idx][1].shape}")
             # print(f"ar_bbox_prompts shape: {ar_bbox_prompts[batch_idx].shape}")
             # print(f"tc_bbox_prompts shape: {tc_bbox_prompts[batch_idx].shape}")
-            current_tc_sparse_embedding, current_dense_embeddings = self.prompt_encoder(
+            current_tc_sparse_embedding, current_tc_dense_embeddings = self.prompt_encoder(
                 points=tc_point_prompts[batch_idx] if tc_point_prompts is not None else None,
                 boxes=tc_bbox_prompts[batch_idx] if tc_bbox_prompts is not None else None,
-                masks= tc_masks[batch_idx] if tc_masks is not None else None,
+                masks= tc_mask_prompts[batch_idx] if tc_mask_prompts is not None else None,
             )
             
-            current_ar_sparse_embedding, current_dense_embeddings = self.prompt_encoder(
+            current_ar_sparse_embedding, current_ar_dense_embeddings = self.prompt_encoder(
                 points=ar_point_prompts[batch_idx] if ar_point_prompts is not None else None,
                 boxes=ar_bbox_prompts[batch_idx] if ar_bbox_prompts is not None else None,
-                masks= ar_masks[batch_idx] if ar_masks is not None else None,
+                masks= ar_mask_prompts[batch_idx] if ar_mask_prompts is not None else None,
             )
             
             tc_sparse_embeddings.append(current_tc_sparse_embedding)
             ar_sparse_embeddings.append(current_ar_sparse_embedding)
-            tc_dense_embeddings.append(current_dense_embeddings)
-            ar_dense_embeddings.append(current_dense_embeddings)
+            tc_dense_embeddings.append(current_tc_dense_embeddings)
+            ar_dense_embeddings.append(current_ar_dense_embeddings)
 
         
         # print(f"TC mask embedding shape: {tc_dense_embeddings.shape}")
@@ -260,7 +261,7 @@ class ClimateSAM(nn.Module):
                            tc_point_prompts = None,
                             ar_bbox_prompts = None,
                             tc_bbox_prompts = None,
-                            ori_img_size = [768, 1152]):
+                            ori_img_size = None):
         
         for i in range(len(ori_img_size)):
             h_scale = self.sam_img_size[0] / ori_img_size[i][0]
@@ -281,16 +282,21 @@ class ClimateSAM(nn.Module):
                     ar_point = torch.round(ar_point)
                     ar_point_prompts[i] = (ar_point, ar_label)
             if tc_bbox_prompts is not None:
-                tc_bbox_prompts[i][:, 0]  *= w_scale
-                tc_bbox_prompts[i][:, 1]  *= h_scale
-                tc_bbox_prompts[i][:, 2]  *= w_scale
-                tc_bbox_prompts[i][:, 3]  *= h_scale
-                tc_bbox_prompts = torch.round(tc_bbox_prompts[i])
+                if tc_bbox_prompts[i] is not None:
+                    tc_bbox_prompts[i][..., 0]  *= w_scale
+                    tc_bbox_prompts[i][..., 1]  *= h_scale
+                    tc_bbox_prompts[i][..., 2]  *= w_scale
+                    tc_bbox_prompts[i][..., 3]  *= h_scale
+                    tc_bbox_prompts[i] = torch.round(tc_bbox_prompts[i])
             if ar_bbox_prompts is not None:
-                ar_bbox_prompts[i][:, 0]  *= w_scale
-                ar_bbox_prompts[i][:, 1]  *= h_scale
-                ar_bbox_prompts[i][:, 2]  *= w_scale
-                ar_bbox_prompts[i][:, 3]  *= h_scale
+                if ar_bbox_prompts[i] is not None:
+                    ar_bbox_prompts[i][..., 0]  *= w_scale
+                    ar_bbox_prompts[i][..., 1]  *= h_scale
+                    ar_bbox_prompts[i][..., 2]  *= w_scale
+                    ar_bbox_prompts[i][..., 3]  *= h_scale
+                    ar_bbox_prompts[i] = torch.round(ar_bbox_prompts[i])
+
+
         
         return ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts
     

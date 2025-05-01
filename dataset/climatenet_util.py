@@ -27,11 +27,11 @@ def extract_point_and_bbox_prompts_from_climatenet_mask(mask: np.array, device =
     
     # SQUEEZE 
 
-    ar_point_count = ar_positive_points.shape[1] if ar_positive_points is not None else 0
-    tc_point_count = tc_positive_points.shape[1] if tc_positive_points is not None else 0
+    ar_point_count = ar_positive_points.shape[0] if ar_positive_points is not None else 0
+    tc_point_count = tc_positive_points.shape[0] if tc_positive_points is not None else 0
     
-    ar_point_labels = torch.ones(ar_point_count, dtype=torch.float32).unsqueeze(0) if ar_point_count > 0 else None
-    tc_point_labels = torch.ones(tc_point_count, dtype=torch.float32).unsqueeze(0) if tc_point_count > 0 else None
+    ar_point_labels = torch.ones(ar_point_count, dtype=torch.float32).unsqueeze(1) if ar_point_count > 0 else None
+    tc_point_labels = torch.ones(tc_point_count, dtype=torch.float32).unsqueeze(1) if tc_point_count > 0 else None
     
     ar_point_prompts = (ar_positive_points, ar_point_labels)
     tc_point_prompts = (tc_positive_points, tc_point_labels)
@@ -102,7 +102,7 @@ def get_prompts_from_binary_mask(binary_mask, connectivity = 8, threshold = 50, 
             
                 #Bounding box prompt for sam
                 bounding_box = [leftmost_pixel, topmost_pixel, rightmost_pixel, bottommost_pixel]
-                bboxes.append(bounding_box) 
+                bboxes.append([bounding_box]) 
             
             # POINT PROMPT
             if prompt_type == 'point':
@@ -125,12 +125,12 @@ def get_prompts_from_binary_mask(binary_mask, connectivity = 8, threshold = 50, 
 
 
 
-def make_noisy_mask_on_objects(object_masks, scale_factor: int = 8, noisy_mask_threshold: float = 0.5):
+def make_noisy_mask_on_objects(object_masks, scale_factor: int = 8, noisy_mask_threshold: float = 0.5, h = 256, w = 256):
     """
         Add noise to mask input
         From Mask Transfiner https://github.com/SysCV/transfiner
     """
-    def get_incoherent_mask(input_masks):
+    def get_incoherent_mask(input_masks, h, w):
         mask = input_masks.float()
         h, w = input_masks.shape[-2:]
 
@@ -142,11 +142,10 @@ def make_noisy_mask_on_objects(object_masks, scale_factor: int = 8, noisy_mask_t
     
     if object_masks.dim() == 3:
         object_masks = object_masks.unsqueeze(1)
-    
-    h, w = object_masks.shape[-2:]
+
     o_m_resized = F.interpolate(object_masks.float(), (h, w), mode='bilinear')
     mask_noise = torch.randn(o_m_resized.shape) * 1.0
-    inc_masks = get_incoherent_mask(o_m_resized)
+    inc_masks = get_incoherent_mask(o_m_resized, h, w)
     o_m_noisy = ((o_m_resized + mask_noise * inc_masks) > noisy_mask_threshold).float()
     
     return o_m_noisy
