@@ -62,18 +62,27 @@ class MaskDecoderHQ(MaskDecoder):
         
 
     def train(self, mode: bool = True):
+        super().train(mode)
         # set train status for this class: disable all but the prompt-related modules
         if mode:
             # training: turn the modules of original SAM mask decoder to eval mode
             for n, c in self.named_children():
                 if n in self.froze_modules:
                     c.eval()
+                    for name, param in c.named_parameters():
+                        param.requires_grad = False
                 else:
                     c.train()
+                    for name, param in c.named_parameters():
+                        param.requires_grad = True
         else:
             # eval:
             for module in self.children():
                 module.train(mode)
+                for name, param in module.named_parameters():
+                    param.requires_grad = False
+                
+        
 
     def forward(
             self,

@@ -65,7 +65,7 @@ def setup_device_and_distributed(worker_id, worker_args):
 
     
 def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler):
-    model.train(mode = True, phase = worker_args.phase)
+    model.train(mode = True, phase = worker_args.phase, verbose = False)
     train_pbar = tqdm(total=len(train_dataloader), desc='train', leave=False) if local_rank == 0 else None
     for train_step, batch in enumerate(train_dataloader):
         batch = batch_to_cuda(batch, device)
@@ -371,7 +371,7 @@ def main_worker(worker_id, worker_args):
     
     scaler = torch.cuda.amp.GradScaler() 
     print(f"Validation will be performed every {worker_args.valid_per_epochs} epochs.")
-    model.train(mode = True, phase = worker_args.phase)
+    model.train(mode = True, phase = worker_args.phase, verbose=True)
     for epoch in range(1, max_epoch_num + 1):
         train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler)
         if epoch % worker_args.valid_per_epochs == 1 and local_rank == 0:

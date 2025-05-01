@@ -49,3 +49,24 @@ class ClimateSAMImageEncoder(SAMImageEncodeWrapper):
 
         x = self.sam_img_encoder.neck(x.permute(0, 3, 1, 2))
         return x, interm_embeddings
+    
+    def train(self, mode: bool = True):
+        # Set the entire module to training/eval mode
+        super().train(mode)
+        if mode:
+            # training: turn the modules of original SAM mask decoder to eval mode
+            for n, c in self.named_children():
+                if n in ['sam_img_encoder']:
+                    c.eval()
+                    for name, param in c.named_parameters():
+                        param.requires_grad = False
+                else:
+                    c.train()
+                    for name, param in c.named_parameters():
+                        param.requires_grad = True
+        else:
+            # eval:
+            for module in self.children():
+                module.train(mode)
+                for name, param in module.named_parameters():
+                    param.requires_grad = False

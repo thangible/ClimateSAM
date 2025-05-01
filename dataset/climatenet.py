@@ -99,9 +99,11 @@ class ClimateDataset(Dataset):
         Calculate the mean and std of the data across all the files.
         """
         if os.path.exists(self.mean_std_path) and self.reset_flag is False:
-            print(f"Loading mean/std from {self.mean_std_path}")
+            
             stats = np.load(self.mean_std_path, allow_pickle=True).item()
-            print(f"AR Ratio: {stats['ar_ratio']}, TC Ratio: {stats['tc_ratio']}")
+            if self.train_flag:
+                print(f"Loading mean/std from {self.mean_std_path}")
+                print(f"AR Ratio (negative/positive): {stats['ar_ratio']}, TC Ratio: {stats['tc_ratio']}")
             return stats
 
         print("Calculating mean/std from scratch...")
