@@ -236,8 +236,8 @@ class ClimateSAM(nn.Module):
         #     print(f"Postprocessed AR mask {i} shape: {ar_mask.shape}")
         
         if not self.training:
-            tc_postprocess_masks_hq = [self.discretize_mask(m) for m in tc_postprocess_masks_hq]
-            ar_postprocess_masks_hq = [self.discretize_mask(m) for m in ar_postprocess_masks_hq]
+            tc_postprocess_masks_hq = self.assemble_raw_masks(tc_postprocess_masks_hq) 
+            ar_postprocess_masks_hq = self.assemble_raw_masks(ar_postprocess_masks_hq)
         return tc_postprocess_masks_hq, ar_postprocess_masks_hq, image_input
     
     def enable_prompt_generator(self):
@@ -328,6 +328,17 @@ class ClimateSAM(nn.Module):
      
     def discretize_mask(self, masks_logits):
         return torch.gt(masks_logits, self.ori_sam.mask_threshold).float()
+    
+    def assemble_raw_masks(self, raw_masks: List):
+        # Order: discretize -> sum over all output masks -> clamp the values larger than 1 -> stack into a batch
+        masks = []
+        for r_m in raw_masks:
+            # discretize the logits into a 0-1 mask
+            r_m = self.discretize_mask(r_m)
+            # sum up the prediced masks by all the prompts of a single image
+            r_m = torch.sum(r_m, dim=0, keepdim=True)
+            masks.append(torch.clamp(r_m, max=1.0))
+        return masks
             
 
         

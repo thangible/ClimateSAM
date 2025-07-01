@@ -238,21 +238,9 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
                         wandb.log({f"valid/image_{i}": wandb.Image(plot, caption=titel), "epoch": epoch}, step = epoch)
                 del imges, masks_ar, masks_tc, masks_ar_gt, masks_tc_gt
                 torch.cuda.empty_cache()
-            
-
-            
-            # CAL
-            merge_tc_masks = []
-            merge_ar_masks = []
-            for mask in tc_masks:
-                combined_mask = torch.any(mask.bool(), dim=0).float()
-                merge_tc_masks.append(combined_mask)
-            for mask in ar_masks:
-                combined_mask = torch.any(mask.bool(), dim=0).float()
-                merge_ar_masks.append(combined_mask)
                 
-            ar_metrics.update(merge_tc_masks, masks_ar_gts,  batch['index_name'])
-            tc_metrics.update(merge_ar_masks, masks_tc_gts,  batch['index_name'])
+            ar_metrics.update(tc_masks, masks_ar_gts,  batch['index_name'])
+            tc_metrics.update(ar_masks, masks_tc_gts,  batch['index_name'])
             valid_pbar.update(1)
             str_step_info = "Epoch: {epoch}/{epochs:4}.".format(
                 epoch=epoch, epochs=max_epoch_num

@@ -32,7 +32,7 @@ bce_weight_ar = 10
 image_encoder_mlp_ratio = 0.5
 
 [DEBUGGING]
-load_pretrained = False
+load_pretrained = True
 wandb = True
 save_model = True
 debugging = False
