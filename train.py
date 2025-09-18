@@ -387,6 +387,7 @@ def main_worker(worker_id, worker_args):
                         print(f"Image encoder saved to wandb: {save_path}")
         
 if __name__ == '__main__':
+    print("Starting training process...")
     args = parse()
     
     if hasattr(args, 'wandb') and args.wandb:
@@ -408,22 +409,4 @@ if __name__ == '__main__':
     # launch the experiment process for both single-GPU and multi-GPU settings
     if len(args.used_gpu) == 1:
         main_worker(worker_id=0, worker_args=args)
-    else:
-        # initialize multiprocessing start method
-        try:
-            mp.set_start_method('spawn')
-        except RuntimeError:
-            try:
-                mp.set_start_method('forkserver')
-                print("Fail to initialize multiprocessing module by spawn method. "
-                      "Use forkserver method instead. Please be careful about it.")
-            except RuntimeError as e:
-                raise RuntimeError(
-                    "Your server supports neither spawn or forkserver method as multiprocessing start methods. "
-                    f"The error details are: {e}"
-                )
 
-        # dist_url is fixed to localhost here, so only single-node DDP is supported now.
-        args.dist_url = "tcp://127.0.0.1" + f':{get_idle_port()}'
-        # spawn one subprocess for each GPU
-        mp.spawn(main_worker, nprocs=args.gpu_num, args=(args,))

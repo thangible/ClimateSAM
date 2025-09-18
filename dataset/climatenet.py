@@ -5,9 +5,6 @@ import numpy as np
 import torch
 from PIL import Image
 from torch.utils.data import Dataset
-# from cat_sam.datasets.misc import generate_prompts_from_mask
-# from cat_sam.datasets.base import BinaryCATSAMDataset  
-# from cat_sam.datasets..transforms import Compose
 import cv2
 from .transforms  import Compose
 from .climatenet_util import extract_point_and_bbox_prompts_from_climatenet_mask

@@ -1,0 +1,40 @@
+[project]
+name = "climatesam"
+version = "0.1.0"
+description = "ClimateSAM"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "gputil>=1.4.0",
+    "argparse>=1.4.0",
+    "configargparse>=1.7.1",
+    "matplotlib>=3.10.5",
+    "opencv-python>=4.12.0.88",
+    "pandas>=2.3.1",
+    "torch>=2.8.0",
+    "torchvision>=0.23.0",
+    "tqdm>=4.67.1",
+    "wandb>=0.21.1",
+    "xarray>=2025.8.0",
+    "cartopy>=0.25.0",
+    "netcdf4>=1.7.2",
+    "h5netcdf>=1.6.4",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+torchvision = [
+  { index = "pytorch-cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.30.1",
+]

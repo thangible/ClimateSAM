@@ -15,7 +15,6 @@ class SAMImageEncodeWrapper(nn.Module):
         x = self.sam_img_encoder(x)
         return x
       
-
 class ClimateSAMImageEncoder(SAMImageEncodeWrapper):
 
     def __init__(
