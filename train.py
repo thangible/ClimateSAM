@@ -8,6 +8,7 @@ import torch.nn.functional as F
 from functools import partial
 from torch.utils.data import DataLoader
 from train_util import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, calculate_dice_loss, calculate_focal_loss, plot_with_projection
+from loss_function import compute_climate_loss
 from tqdm import tqdm
 from contextlib import nullcontext
 from train_parser import parse
@@ -83,73 +84,17 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         masks_ar_gt = batch['ar_object_masks']
         masks_tc_gt = batch['tc_object_masks']
         
-        
-        # some processing to make sure the masks are in the right shape
-        # for masks in [masks_ar_gt, masks_tc_gt, ar_mask, tc_mask]:
-        #         for i in range(len(masks)):
-        #             if len(masks[i].shape) == 2:
-        #                 masks[i] = masks[i][None, None, :]
-        #             if len(masks[i].shape) == 3:
-        #                 masks[i] = masks[i][:, None, :]
-        #             if len(masks[i].shape) != 4:
-        #                 raise RuntimeError
-                    
-        bce_loss_list_tc, bce_loss_list_ar = [], []
-        dice_loss_list_tc, dice_loss_list_ar = [], []
-        
-        for i in range(len(masks_ar_gt)):
-            if masks_ar_gt[i] is not None:
-                # ar
-                pred_ar, label_ar = ar_mask[i], masks_ar_gt[i]
-                label_ar = torch.where(torch.gt(label_ar, 0.), 1., 0.)
-                pos_weight_ar = torch.tensor([worker_args.bce_weight_ar]).to(device)
-                b_loss_ar = F.binary_cross_entropy_with_logits(pred_ar, label_ar.float(), 
-                                                            pos_weight=pos_weight_ar)
-                d_loss_ar = calculate_focal_loss(pred_ar, label_ar, gamma=worker_args.gamma_ar, alpha=worker_args.alpha_ar)
-                bce_loss_list_ar.append(b_loss_ar)
-                dice_loss_list_ar.append(d_loss_ar)
-            
-            if masks_tc_gt[i] is not None:
-            # tc
-                pred_tc, label_tc = tc_mask[i], masks_tc_gt[i]
-                label_tc = torch.where(torch.gt(label_tc, 0.), 1., 0.)
-                pos_weight_tc = torch.tensor([worker_args.bce_weight_tc]).to(device)
-                b_loss_tc = F.binary_cross_entropy_with_logits(pred_tc, label_tc.float(), pos_weight=pos_weight_tc)
-                d_loss_tc = calculate_focal_loss(pred_tc, label_tc, gamma=worker_args.gamma_tc, alpha=worker_args.alpha_tc)
-                bce_loss_list_tc.append(b_loss_tc)
-                dice_loss_list_tc.append(d_loss_tc)
-    
-        theta_tc = 5
-        # bce loss
-        bce_loss_ar = sum(bce_loss_list_ar) / len(bce_loss_list_ar) if len(bce_loss_list_ar) > 0 else torch.tensor(0).to(device)
-        bce_loss_tc = sum(bce_loss_list_tc) / len(bce_loss_list_tc) if len(bce_loss_list_tc) > 0 else torch.tensor(0).to(device)
-        bce_loss_tc = bce_loss_tc * theta_tc
-        bce_loss = bce_loss_ar + bce_loss_tc
-        
-        # focal loss
-        dice_loss_ar = sum(dice_loss_list_ar) / len(dice_loss_list_ar) if len(dice_loss_list_ar) > 0 else torch.tensor(0).to(device)
-        dice_loss_tc = sum(dice_loss_list_tc) / len(dice_loss_list_tc) if len(dice_loss_list_tc) > 0 else torch.tensor(0).to(device)
-        dice_loss_tc = dice_loss_tc * theta_tc
-        dice_loss = dice_loss_ar + dice_loss_tc
-        
-        # total loss
-        theta_total = 10
-        dice_loss_ar = dice_loss_ar * theta_total
-        dice_loss_tc = dice_loss_tc * theta_total
-        total_loss_ar = bce_loss_ar + dice_loss_ar 
-        total_loss_tc = bce_loss_tc + dice_loss_tc 
-        total_loss = bce_loss + dice_loss 
-        loss_dict = dict(
-            total_loss=total_loss.clone().detach(),
-            total_loss_ar=total_loss_ar.clone().detach(),
-            total_loss_tc=total_loss_tc.clone().detach(),
-            bce_loss_ar=bce_loss_ar.clone().detach(),
-            bce_loss_tc=bce_loss_tc.clone().detach(),
-            dice_loss_ar=dice_loss_ar.clone().detach(),
-            dice_loss_tc=dice_loss_tc.clone().detach(),
-            bce_loss=bce_loss.clone().detach(),
-            dice_loss=dice_loss.clone().detach()
+        # Compute loss using the new loss function
+        loss_dict = compute_climate_loss(
+            ar_masks=ar_mask,
+            tc_masks=tc_mask,
+            ar_masks_gt=masks_ar_gt,
+            tc_masks_gt=masks_tc_gt,
+            device=device,
+            worker_args=worker_args
         )
+        
+        total_loss = loss_dict.pop('total_loss_for_backward')
         
         if worker_args.wandb:
             wandb.log({f"train/{key}": value.item() for key, value in loss_dict.items()}, step=epoch)
@@ -168,7 +113,6 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         scaler.update()
         optimizer.zero_grad()
         
-    
         # Optionally force garbage collection and empty CUDA cache
         import gc
         gc.collect()
@@ -302,6 +246,18 @@ def main_worker(worker_id, worker_args):
         transforms=None
     )
     val_dataset = ClimateDataset(data_dir=dataset_dir, train_flag=False)
+    
+    if hasattr(worker_args, 'debug') and worker_args.debug:
+        debug_size = getattr(worker_args, 'debug_size', 50)  # Default to 50 samples
+        indices = list(range(min(debug_size, len(train_dataset))))
+        train_dataset = torch.utils.data.Subset(train_dataset, indices)
+        print(f"Debug mode: Using only {len(train_dataset)} training samples")
+
+        debug_val_size = getattr(worker_args, 'debug_val_size', 10)  # Default to 10 samples
+        val_indices = list(range(min(debug_val_size, len(val_dataset))))
+        val_dataset = torch.utils.data.Subset(val_dataset, val_indices)
+        print(f"Debug mode: Using only {len(val_dataset)} validation samples")
+        
     
     # DataLoader
     train_bs = worker_args.train_bs if worker_args.train_bs else (1 if worker_args.shot_num == 1 else 4)
