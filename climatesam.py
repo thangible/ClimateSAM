@@ -195,6 +195,7 @@ class ClimateSAM(nn.Module):
         # print(f"AR sparse embedding shape: {ar_sparse_embeddings.shape}")
 
         _, tc_pred_masks = self.mask_decoder(
+            type = 'TQ',  # either 'TQ' or 'AR'
             image_embeddings=image_embeddings,
             image_pe=[self.prompt_encoder.get_dense_pe() for _ in range(batch_size)],
             sparse_prompt_embeddings=tc_sparse_embeddings,
@@ -206,6 +207,7 @@ class ClimateSAM(nn.Module):
         )
         
         _, ar_pred_masks = self.mask_decoder(
+            type = 'AR',  # either 'TQ' or 'AR'
             image_embeddings=image_embeddings,
             image_pe=[self.prompt_encoder.get_dense_pe() for _ in range(batch_size)],
             sparse_prompt_embeddings=ar_sparse_embeddings,

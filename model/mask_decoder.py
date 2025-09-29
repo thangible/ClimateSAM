@@ -36,8 +36,10 @@ class MaskDecoderHQ(MaskDecoder):
         vit_dim_dict = {"vit_b": 768, "vit_l": 1024, "vit_h": 1280}
         vit_dim = vit_dim_dict[model_type]
 
-        self.hf_token = nn.Embedding(1, transformer_dim)
-        self.hf_mlp = MLP(transformer_dim, transformer_dim, transformer_dim // 8, 3)
+        self.hf_token_ar = nn.Embedding(1, transformer_dim)
+        self.hf_token_tc = nn.Embedding(1, transformer_dim)
+        self.hf_mlp_ar = MLP(transformer_dim, transformer_dim, transformer_dim // 8, 3)
+        self.hf_mlp_tc = MLP(transformer_dim, transformer_dim, transformer_dim // 8, 3)
         self.num_mask_tokens = self.num_mask_tokens + 1
 
         self.compress_vit_feat = nn.Sequential(
@@ -86,6 +88,7 @@ class MaskDecoderHQ(MaskDecoder):
 
     def forward(
             self,
+            type: str,  # either 'TQ' or 'AR'
             image_embeddings: torch.Tensor,
             image_pe: torch.Tensor,
             sparse_prompt_embeddings: torch.Tensor,
@@ -124,6 +127,7 @@ class MaskDecoderHQ(MaskDecoder):
         masks_sam_batch, masks_hq_batch = [], []
         for i_batch in range(batch_size):
             masks, iou_preds = self.predict_masks(
+                type = type,  # either 'TQ' or 'AR'
                 image_embeddings=image_embeddings[i_batch].unsqueeze(0),
                 image_pe=image_pe[i_batch],
                 sparse_prompt_embeddings=sparse_prompt_embeddings[i_batch],
@@ -152,17 +156,18 @@ class MaskDecoderHQ(MaskDecoder):
 
     def predict_masks(
             self,
+            mask_type: str,  # either 'TQ' or 'AR'
             image_embeddings: torch.Tensor,
             image_pe: torch.Tensor,
             sparse_prompt_embeddings: torch.Tensor,
             dense_prompt_embeddings: torch.Tensor,
             hq_feature: torch.Tensor,
-            hq_token_weight: torch.Tensor = None
+            hq_token_weight: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Predicts masks. See 'forward' for more details."""
 
-        if hq_token_weight is None:
-            hq_token_weight = self.hf_token.weight
+        assert mask_type in ['TQ', 'AR'], "mask_type must be either 'TQ' or 'AR'"
+
         output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight, hq_token_weight], dim=0)
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
         tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
@@ -189,7 +194,10 @@ class MaskDecoderHQ(MaskDecoder):
             if i < 4:
                 hyper_in_list.append(self.output_hypernetworks_mlps[i](mask_tokens_out[:, i, :]))
             else:
-                hyper_in_list.append(self.hf_mlp(mask_tokens_out[:, i, :]))
+                if mask_type == 'AR':
+                    hyper_in_list.append(self.hf_mlp_ar(mask_tokens_out[:, i, :]))
+                else:
+                    hyper_in_list.append(self.hf_mlp_tc(mask_tokens_out[:, i, :]))
 
         hyper_in = torch.stack(hyper_in_list, dim=1)
         b, c, h, w = upscaled_embedding_sam.shape
