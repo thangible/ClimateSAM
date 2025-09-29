@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 from typing import List, Dict, Optional
-from train_util import calculate_focal_loss
+from train_util import calculate_focal_loss, calculate_dice_loss
 
 
 class ClimateLoss:
@@ -35,34 +35,33 @@ class ClimateLoss:
         """
         
         # Compute individual losses
-        bce_loss_list_ar, dice_loss_list_ar = self._compute_mask_losses(
+        dice_loss_list_ar, focal_loss_list_ar = self._compute_mask_losses(
             ar_masks, ar_masks_gt, 
-            worker_args.bce_weight_ar, worker_args.gamma_ar, worker_args.alpha_ar
+            worker_args.gamma_ar, worker_args.alpha_ar
         )
         
-        bce_loss_list_tc, dice_loss_list_tc = self._compute_mask_losses(
+        dice_loss_list_tc, focal_loss_list_tc = self._compute_mask_losses(
             tc_masks, tc_masks_gt,
-            worker_args.bce_weight_tc, worker_args.gamma_tc, worker_args.alpha_tc
+            worker_args.gamma_tc, worker_args.alpha_tc
         )
         
         # Aggregate losses
         return self._aggregate_losses(
-            bce_loss_list_ar, dice_loss_list_ar,
-            bce_loss_list_tc, dice_loss_list_tc
+            dice_loss_list_ar, focal_loss_list_ar,
+            dice_loss_list_tc, focal_loss_list_tc
         )
     
     def _compute_mask_losses(
         self, 
         pred_masks: List[torch.Tensor], 
         gt_masks: List[torch.Tensor],
-        bce_weight: float,
         gamma: float, 
         alpha: float
     ) -> tuple[List[torch.Tensor], List[torch.Tensor]]:
         """Compute BCE and focal losses for a set of masks"""
         
-        bce_losses = []
         dice_losses = []
+        focal_losses = []
         
         for i in range(len(gt_masks)):
             if gt_masks[i] is not None:
@@ -71,54 +70,51 @@ class ClimateLoss:
                 # Binarize ground truth
                 label = torch.where(torch.gt(label, 0.), 1., 0.)
                 
-                # BCE loss
-                pos_weight = torch.tensor([bce_weight]).to(self.device)
-                bce_loss = F.binary_cross_entropy_with_logits(
-                    pred, label.float(), pos_weight=pos_weight
-                )
+                # Dice loss
+                dice_loss = calculate_dice_loss(pred, label)
                 
                 # Focal loss
                 focal_loss = calculate_focal_loss(pred, label, gamma=gamma, alpha=alpha)
                 
-                bce_losses.append(bce_loss)
-                dice_losses.append(focal_loss)
+                dice_losses.append(dice_loss)
+                focal_losses.append(focal_loss)
         
-        return bce_losses, dice_losses
+        return dice_losses, focal_losses
     
     def _aggregate_losses(
         self,
-        bce_loss_list_ar: List[torch.Tensor],
-        dice_loss_list_ar: List[torch.Tensor], 
-        bce_loss_list_tc: List[torch.Tensor],
-        dice_loss_list_tc: List[torch.Tensor]
+        dice_loss_list_ar: List[torch.Tensor],
+        focal_loss_list_ar: List[torch.Tensor], 
+        dice_loss_list_tc: List[torch.Tensor],
+        focal_loss_list_tc: List[torch.Tensor]
     ) -> Dict[str, torch.Tensor]:
         """Aggregate individual losses into final loss components"""
         
-        # Average BCE losses
-        bce_loss_ar = self._safe_mean(bce_loss_list_ar)
-        bce_loss_tc = self._safe_mean(bce_loss_list_tc) * self.theta_tc
-        bce_loss = bce_loss_ar + bce_loss_tc
-        
-        # Average focal losses  
-        dice_loss_ar = self._safe_mean(dice_loss_list_ar) * self.theta_total
-        dice_loss_tc = self._safe_mean(dice_loss_list_tc) * self.theta_tc * self.theta_total
+        # Average Dice losses
+        dice_loss_ar = self._safe_mean(dice_loss_list_ar)
+        dice_loss_tc = self._safe_mean(dice_loss_list_tc) * self.theta_tc
         dice_loss = dice_loss_ar + dice_loss_tc
         
+        # Average focal losses  
+        focal_loss_ar = self._safe_mean(focal_loss_list_ar) * self.theta_total
+        focal_loss_tc = self._safe_mean(focal_loss_list_tc) * self.theta_tc * self.theta_total
+        focal_loss = focal_loss_ar + focal_loss_tc
+        
         # Total losses
-        total_loss_ar = bce_loss_ar + dice_loss_ar
-        total_loss_tc = bce_loss_tc + dice_loss_tc  
-        total_loss = bce_loss + dice_loss
+        total_loss_ar = dice_loss_ar + focal_loss_ar
+        total_loss_tc = dice_loss_tc + focal_loss_tc  
+        total_loss = dice_loss + focal_loss
         
         return {
             'total_loss': total_loss.clone().detach(),
             'total_loss_ar': total_loss_ar.clone().detach(),
             'total_loss_tc': total_loss_tc.clone().detach(),
-            'bce_loss_ar': bce_loss_ar.clone().detach(),
-            'bce_loss_tc': bce_loss_tc.clone().detach(),
             'dice_loss_ar': dice_loss_ar.clone().detach(),
             'dice_loss_tc': dice_loss_tc.clone().detach(),
-            'bce_loss': bce_loss.clone().detach(),
+            'focal_loss_ar': focal_loss_ar.clone().detach(),
+            'focal_loss_tc': focal_loss_tc.clone().detach(),
             'dice_loss': dice_loss.clone().detach(),
+            'focal_loss': focal_loss.clone().detach(),
             'total_loss_for_backward': total_loss  # Keep one without detach for backprop
         }
     
