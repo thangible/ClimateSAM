@@ -101,9 +101,9 @@ def plot_with_projection(image, ar_pred, tc_pred, ar_gt, tc_gt, save_path, use_p
     plt.title(title)
     # Save the plot to a numpy array
     fig.canvas.draw()
-    plot_array = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-    plot_array = plot_array.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-    
+    plot_array = np.frombuffer(fig.canvas.tostring_argb(), dtype=np.uint8)
+    plot_array = plot_array.reshape(fig.canvas.get_width_height()[::-1] + (4,))
+
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
     plt.close(fig)
