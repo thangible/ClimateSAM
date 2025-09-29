@@ -54,7 +54,7 @@ class ClimateSAMImageEncoder(SAMImageEncodeWrapper):
 
         interm_embeddings = []
         for i, blk in enumerate(self.sam_img_encoder.blocks):
-            hq_prompt_tokens = torch.cat([hq_prompt_tokens_ar[i], hq_prompt_tokens_tc[i]], dim=0)
+            hq_prompt_tokens = hq_prompt_tokens_ar[i] + hq_prompt_tokens_tc[i]
             x = blk(x, hq_prompt_tokens)
             interm_embeddings.append(x)
 
