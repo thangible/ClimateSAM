@@ -128,9 +128,14 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         if train_pbar:
             train_pbar.update(1)
             str_step_info = "Epoch: {epoch}/{epochs:4}. " \
-                            "Loss: {total_loss:.4f}(total), {bce_loss:.4f}(bce), {dice_loss:.4f}(dice)".format(
+                            "Loss: {total_loss:.4f}(total), {bce_loss:.4f}(bce), {dice_loss:.4f}(dice), " \
+                            "AR: {ar_loss:.4f}, TC: {tc_loss:.4f}".format(
                 epoch=epoch, epochs=max_epoch_num,
-                total_loss=loss_dict['total_loss'], bce_loss=loss_dict['bce_loss'], dice_loss=loss_dict['dice_loss']
+                total_loss=loss_dict['total_loss'], 
+                bce_loss=loss_dict['bce_loss'], 
+                dice_loss=loss_dict['dice_loss'],
+                ar_loss=loss_dict['total_loss_ar'],
+                tc_loss=loss_dict['total_loss_tc']
             )
             train_pbar.set_postfix_str(str_step_info)
             
