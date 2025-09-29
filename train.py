@@ -127,10 +127,9 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
 
         if train_pbar:
             train_pbar.update(1)
-            str_step_info = "Epoch: {epoch}/{epochs:4}. " \
-                            "Loss: {total_loss:.4f}(total), {dice_loss:.4f}(dice), {focal_loss:.4f}(focal)".format(
+            str_step_info = """Epoch: {epoch}/{epochs:4}. Loss: {total_loss:.4f}(total), {dice_loss:.4f}(dice), {focal:.4f}(focal)""".format(
                 epoch=epoch, epochs=max_epoch_num,
-                total_loss=loss_dict['total_loss'], focal=loss_dict['focal'], dice_loss=loss_dict['dice_loss']
+                total_loss=loss_dict['total_loss'], focal=loss_dict['focal_loss'], dice_loss=loss_dict['dice_loss']
             )
             train_pbar.set_postfix_str(str_step_info)
             
