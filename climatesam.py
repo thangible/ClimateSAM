@@ -39,7 +39,10 @@ class ClimateSAM(nn.Module):
         self.mask_decoder = MaskDecoderHQ(
             model_type, self.ori_sam.mask_decoder.state_dict()
         )
-        self.image_encoder = ClimateSAMImageEncoder(ori_sam=self.ori_sam, fix=True, hq_token=self.mask_decoder.hf_token.weight, mlp_ratio=mlp_ratio)
+        self.image_encoder = ClimateSAMImageEncoder(ori_sam=self.ori_sam, 
+                                                    fix=True,
+                                                    hq_token_ar=self.mask_decoder.hf_token_ar.weight,
+                                                    hq_token_tc=self.mask_decoder.hf_token_tc.weight, mlp_ratio=mlp_ratio)
         if self.use_prompt_generator:
           self.prompt_generator = PromptGenerator(in_channels = self.image_encoder.sam_img_encoder.num_features)
         self.prompt_encoder = PromptEncoderWrapper(ori_sam=self.ori_sam, fix=True)
@@ -119,7 +122,8 @@ class ClimateSAM(nn.Module):
     def forward(
             self,
             input: Union[List[torch.Tensor], None],
-            hq_token_weight: torch.Tensor = None,
+            hq_token_weight_ar: torch.Tensor = None,
+            hq_token_weight_tc: torch.Tensor = None,
             return_all_hq_masks: bool = False,
             ar_point_prompts: List[Union[torch.Tensor, None]] = None,
             tc_point_prompts: List[Union[torch.Tensor, None]] = None,
@@ -195,14 +199,14 @@ class ClimateSAM(nn.Module):
         # print(f"AR sparse embedding shape: {ar_sparse_embeddings.shape}")
 
         _, tc_pred_masks = self.mask_decoder(
-            type = 'TQ',  # either 'TQ' or 'AR'
+            type = 'TC',  # either 'TQ' or 'AR'
             image_embeddings=image_embeddings,
             image_pe=[self.prompt_encoder.get_dense_pe() for _ in range(batch_size)],
             sparse_prompt_embeddings=tc_sparse_embeddings,
             dense_prompt_embeddings=tc_dense_embeddings,
             multimask_output=False,
             interm_embeddings=interm_embeddings,
-            hq_token_weight=hq_token_weight,
+            hq_token_weight=hq_token_weight_tc,
             return_all_hq_masks=return_all_hq_masks
         )
         
@@ -214,7 +218,7 @@ class ClimateSAM(nn.Module):
             dense_prompt_embeddings= ar_dense_embeddings,
             multimask_output=False,
             interm_embeddings=interm_embeddings,
-            hq_token_weight=hq_token_weight,
+            hq_token_weight=hq_token_weight_ar,
             return_all_hq_masks=return_all_hq_masks
         )
         
