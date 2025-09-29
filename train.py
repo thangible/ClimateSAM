@@ -247,7 +247,10 @@ def main_worker(worker_id, worker_args):
     )
     val_dataset = ClimateDataset(data_dir=dataset_dir, train_flag=False)
     
-    if hasattr(worker_args, 'debug') and worker_args.debug:
+    train_collate_fn = train_dataset.collate_fn
+    val_collate_fn = val_dataset.collate_fn
+
+    if hasattr(worker_args, 'debugging') and worker_args.debugging:
         debug_size = getattr(worker_args, 'debug_size', 50)  # Default to 50 samples
         indices = list(range(min(debug_size, len(train_dataset))))
         train_dataset = torch.utils.data.Subset(train_dataset, indices)
@@ -272,12 +275,12 @@ def main_worker(worker_id, worker_args):
         train_bs = int(train_bs / torch.distributed.get_world_size())
     train_dataloader = DataLoader(
         dataset=train_dataset, batch_size=train_bs, shuffle=sampler is None, num_workers=train_workers,
-        sampler=sampler, drop_last=False, collate_fn=train_dataset.collate_fn,
+        sampler=sampler, drop_last=False, collate_fn=train_collate_fn,
         worker_init_fn=partial(worker_init_fn, base_seed=3407)
     )
     val_dataloader = DataLoader(
         dataset=val_dataset, batch_size=val_bs, shuffle=False, num_workers=val_workers,
-        drop_last=False, collate_fn=val_dataset.collate_fn
+        drop_last=False, collate_fn=val_collate_fn
     )
     
     # SET UP MODEL
