@@ -94,11 +94,14 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
             worker_args=worker_args
         )
         
-        loss_dict['epoch'] = epoch
+        
         total_loss = loss_dict.pop('total_loss_for_backward')
         
+        
         if worker_args.wandb:
-            wandb.log({f"train/{key}": value.item() for key, value in loss_dict.items()}, step=epoch)
+            log_dict = {f"train/{key}": value.item() for key, value in loss_dict.items()}
+            log_dict["epoch"] = epoch
+            wandb.log(log_dict, step=epoch)
 
         backward_context = nullcontext
         if torch.distributed.is_initialized():
