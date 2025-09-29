@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from functools import partial
 from torch.utils.data import DataLoader
 from train_util import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, calculate_dice_loss, calculate_focal_loss, plot_with_projection
-from loss_function import compute_climate_loss
+from loss_function import ClimateLoss, compute_climate_loss
 from tqdm import tqdm
 from contextlib import nullcontext
 from train_parser import parse
@@ -94,18 +94,16 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
             worker_args=worker_args
         )
         
+        loss_dict['epoch'] = epoch
         total_loss = loss_dict.pop('total_loss_for_backward')
         
         if worker_args.wandb:
             wandb.log({f"train/{key}": value.item() for key, value in loss_dict.items()}, step=epoch)
-        
+
         backward_context = nullcontext
         if torch.distributed.is_initialized():
             backward_context = model.no_sync
-        # with backward_context():
-        #     total_loss.backward()
-        # optimizer.step()
-        # optimizer.zero_grad()
+
         
         with backward_context():
             scaler.scale(total_loss).backward()
