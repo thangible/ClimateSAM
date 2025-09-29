@@ -196,6 +196,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
 
 def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args):
     model.eval()
+    print(f"Starting validation for epoch {epoch}...")
     valid_pbar = tqdm(total=len(val_dataloader), desc='valid', leave=False)
     for val_step, batch in enumerate(val_dataloader):
         batch = batch_to_cuda(batch, device)
@@ -362,7 +363,7 @@ def main_worker(worker_id, worker_args):
     model.train(mode = True, phase = worker_args.phase, verbose=True)
     for epoch in range(1, max_epoch_num + 1):
         train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler)
-        if epoch % worker_args.valid_per_epochs == 1 and local_rank == 0:
+        if epoch % worker_args.valid_per_epochs == 0 or epoch == max_epoch_num:
             miou_tc, miou_ar = validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args)
             print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}")
             if miou_tc > best_miou_tc:
