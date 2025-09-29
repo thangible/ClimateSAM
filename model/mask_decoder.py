@@ -156,7 +156,7 @@ class MaskDecoderHQ(MaskDecoder):
 
     def predict_masks(
             self,
-            mask_type: str,  # either 'TC' or 'AR'
+            type: str,  # either 'TC' or 'AR'
             image_embeddings: torch.Tensor,
             image_pe: torch.Tensor,
             sparse_prompt_embeddings: torch.Tensor,
@@ -166,9 +166,9 @@ class MaskDecoderHQ(MaskDecoder):
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         """Predicts masks. See 'forward' for more details."""
 
-        assert mask_type in ['TC', 'AR'], "mask_type must be either 'TC' or 'AR'"
+        assert type in ['TC', 'AR'], "mask_type must be either 'TC' or 'AR'"
         if hq_token_weight is None:
-            hq_token_weight = self.hf_token_ar.weight if mask_type == 'AR' else self.hf_token_tc.weight
+            hq_token_weight = self.hf_token_ar.weight if type == 'AR' else self.hf_token_tc.weight
         output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight, hq_token_weight], dim=0)
         output_tokens = output_tokens.unsqueeze(0).expand(sparse_prompt_embeddings.size(0), -1, -1)
         tokens = torch.cat((output_tokens, sparse_prompt_embeddings), dim=1)
@@ -195,7 +195,7 @@ class MaskDecoderHQ(MaskDecoder):
             if i < 4:
                 hyper_in_list.append(self.output_hypernetworks_mlps[i](mask_tokens_out[:, i, :]))
             else:
-                if mask_type == 'AR':
+                if type == 'AR':
                     hyper_in_list.append(self.hf_mlp_ar(mask_tokens_out[:, i, :]))
                 else:
                     hyper_in_list.append(self.hf_mlp_tc(mask_tokens_out[:, i, :]))
