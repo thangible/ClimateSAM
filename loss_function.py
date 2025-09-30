@@ -36,12 +36,18 @@ class ClimateLoss:
         # Compute individual losses
         tversky_loss_list_ar, focal_loss_list_ar = self._compute_mask_losses(
             ar_masks, ar_masks_gt, 
-            worker_args.gamma_ar, worker_args.alpha_ar
+            gamma_focal=worker_args.gamma_ar, 
+            alpha_focal=worker_args.alpha_ar,
+            alpha_tversky=worker_args.alpha_ar_tversky,
+            beta_tversky=worker_args.beta_ar_tversky
         )
         
         tversky_loss_list_tc, focal_loss_list_tc = self._compute_mask_losses(
             tc_masks, tc_masks_gt,
-            worker_args.gamma_tc, worker_args.alpha_tc
+            gamma_focal=worker_args.gamma_tc,
+            alpha_focal=worker_args.alpha_tc,
+            alpha_tversky=worker_args.alpha_tc_tversky,
+            beta_tversky=worker_args.beta_tc_tversky
         )
         
         # Aggregate losses
@@ -54,8 +60,10 @@ class ClimateLoss:
         self, 
         pred_masks: List[torch.Tensor], 
         gt_masks: List[torch.Tensor],
-        gamma: float, 
-        alpha: float
+        gamma_focal: float, 
+        alpha_focal: float,
+        alpha_tversky: float = 0.7,
+        beta_tversky: float = 0.3
     ) -> tuple[List[torch.Tensor], List[torch.Tensor]]:
         """Compute Tversky and focal losses for a set of masks"""
         
@@ -70,10 +78,10 @@ class ClimateLoss:
                 label = torch.where(torch.gt(label, 0.), 1., 0.)
                 
                 # Tversky loss (replaces Dice loss)
-                tversky_loss = calculate_tversky_loss(pred, label, alpha=0.7, beta=0.3)
-                
+                tversky_loss = calculate_tversky_loss(pred, label, alpha=alpha_tversky, beta=beta_tversky)
+
                 # Focal loss
-                focal_loss = calculate_focal_loss(pred, label, gamma=gamma, alpha=alpha)
+                focal_loss = calculate_focal_loss(pred, label, gamma=gamma_focal, alpha=alpha_focal)
                 
                 tversky_losses.append(tversky_loss)
                 focal_losses.append(focal_loss)
