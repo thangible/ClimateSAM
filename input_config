@@ -9,7 +9,7 @@ run_name = train_image_encoder_new_scheme
 [BATCH CONFIG]
 ; num_workers = None
 gradient_accumulation_steps = 4
-train_bs = 8
+train_bs = 32
 val_bs = 4
 ; weight_decay = 1e-4
 lr = 1e-3
@@ -53,4 +53,4 @@ image_encoder_mlp_ratio = 0.5
 load_pretrained = False
 wandb = True
 save_model = True
-debugging = True
+debugging = false

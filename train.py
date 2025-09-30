@@ -72,6 +72,12 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
     # Get gradient accumulation steps
     gradient_accumulation_steps = getattr(worker_args, 'gradient_accumulation_steps', 1)
     
+    # Calculate effective number of optimizer steps
+    effective_steps = len(train_dataloader) // gradient_accumulation_steps
+    if len(train_dataloader) % gradient_accumulation_steps != 0:
+        effective_steps += 1
+    train_pbar = tqdm(total=effective_steps, desc='train', leave=False) if local_rank == 0 else None
+    step_count = 0 
     # Initialize accumulated loss for logging
     accumulated_loss_dict = {}
     
@@ -129,12 +135,16 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
             scaler.update()
             optimizer.zero_grad()
             
+            # Calculate effective step for logging
+            effective_step = (train_step + 1) // gradient_accumulation_steps
+            
             # Log accumulated losses
             if worker_args.wandb:
                 log_dict = {f"train/{key}": accumulated_loss_dict[key] for key in accumulated_loss_dict.keys()}
                 log_dict["epoch"] = epoch
-                log_dict["step"] = train_step // gradient_accumulation_steps
-                wandb.log(log_dict, step=epoch * len(train_dataloader) + train_step)
+                log_dict["effective_step"] = effective_step
+                # Use a consistent step calculation across training and validation
+                wandb.log(log_dict, step=epoch * (len(train_dataloader) // gradient_accumulation_steps) + effective_step)
             
             # Distributed reduction of accumulated losses
             if torch.distributed.is_initialized():
@@ -145,14 +155,19 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
             
             # Update progress bar with accumulated losses
             if train_pbar:
-                str_step_info = """Epoch: {epoch}/{epochs:4}. Loss: {total_loss:.4f}(total), {tversky_loss:.4f}(tversky_loss), {focal:.4f}(focal)""".format(
+                str_step_info = """Epoch: {epoch}/{epochs:4}. Step: {step}/{total_steps}. Loss: {total_loss:.4f}(total), {tversky_loss:.4f}(tversky_loss), {focal:.4f}(focal)""".format(
                     epoch=epoch, epochs=max_epoch_num,
+                    step=effective_step,
+                    total_steps=len(train_dataloader) // gradient_accumulation_steps,
                     total_loss=accumulated_loss_dict['total_loss'], 
                     focal=accumulated_loss_dict['focal_loss'], 
                     tversky_loss=accumulated_loss_dict['tversky_loss']
                 )
                 train_pbar.set_postfix_str(str_step_info)
-            
+                
+            step_count += 1
+            if train_pbar:
+                train_pbar.update(1)
             # Reset accumulated losses
             accumulated_loss_dict = {}
 
@@ -164,6 +179,9 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         scaler.step(optimizer)
         scaler.update()
         optimizer.zero_grad()
+        step_count += 1
+        if train_pbar:
+            train_pbar.update(1)
             
     # Optionally force garbage collection and empty CUDA cache
     import gc
@@ -178,6 +196,10 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
     model.eval()
     print(f"Starting validation for epoch {epoch}...")
     valid_pbar = tqdm(total=len(val_dataloader), desc='valid', leave=False)
+    
+    # Get gradient accumulation steps for proper step calculation
+    gradient_accumulation_steps = getattr(worker_args, 'gradient_accumulation_steps', 1)
+    
     for val_step, batch in enumerate(val_dataloader):
         batch = batch_to_cuda(batch, device)
         val_model = model
@@ -202,8 +224,11 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
                             masks[i] = masks[i][:, None, :]
                         if len(masks[i].shape) != 4:
                             raise RuntimeError
-            # LOG
-            if val_step == 2:
+            
+            # LOG - Adjust logging frequency based on effective validation steps
+            # Use a similar logic as training but for validation
+            effective_val_step = val_step // max(1, gradient_accumulation_steps // 2)  # Log more frequently in validation
+            if effective_val_step == 1:  # Changed from val_step == 2 to be more consistent
                 imges = [images[i].cpu().numpy() for i in range(len(images))]
                 masks_ar = [ar_masks[i].cpu().numpy() for i in range(len(ar_masks))]
                 masks_tc = [tc_masks[i].cpu().numpy() for i in range(len(tc_masks))]
@@ -216,6 +241,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
                 
                     print(f"Epoch {epoch}- Image {i} saved.")
                     if worker_args.wandb:
+                        # Use epoch-based step for validation logging to align with training
                         wandb.log({f"valid/image_{i}": wandb.Image(plot, caption=titel), "epoch": epoch}, step = epoch)
                 del imges, masks_ar, masks_tc, masks_ar_gt, masks_tc_gt
                 torch.cuda.empty_cache()
@@ -273,7 +299,7 @@ def main_worker(worker_id, worker_args):
     if isinstance(worker_id, str):
         worker_id = int(worker_id)
     device, local_rank = setup_device_and_distributed(worker_id, worker_args)
-    print(f"Worker {worker_id} initialized on device {device} with local rank {local_rank}.")
+    print(f"Worker {worker_id} initialized on device {device} with local_rank {local_rank}.")
     
     # PREPARE DATASET
     dataset_dir = worker_args.data_dir
