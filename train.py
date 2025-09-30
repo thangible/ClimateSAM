@@ -408,7 +408,7 @@ def main_worker(worker_id, worker_args):
     ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     
-    scaler = torch.cuda.amp.GradScaler() 
+    scaler = torch.amp.GradScaler('cuda') 
     print(f"Validation will be performed every {worker_args.valid_per_epochs} epochs.")
     model.train(mode = True, phase = worker_args.phase, verbose=True)
     for epoch in range(1, max_epoch_num + 1):
