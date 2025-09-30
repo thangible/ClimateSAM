@@ -8,8 +8,9 @@ run_name = train_image_encoder_new_scheme
 
 [BATCH CONFIG]
 ; num_workers = None
+gradient_accumulation_steps = 4
 train_bs = 8
-val_bs = 8
+val_bs = 4
 ; weight_decay = 1e-4
 lr = 1e-3
 

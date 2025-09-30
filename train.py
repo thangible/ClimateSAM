@@ -68,11 +68,17 @@ def setup_device_and_distributed(worker_id, worker_args):
 def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler):
     model.train(mode = True, phase = worker_args.phase, verbose = False)
     train_pbar = tqdm(total=len(train_dataloader), desc='train', leave=False) if local_rank == 0 else None
+    
+    # Get gradient accumulation steps
+    gradient_accumulation_steps = getattr(worker_args, 'gradient_accumulation_steps', 1)
+    
+    # Initialize accumulated loss for logging
+    accumulated_loss_dict = {}
+    
     for train_step, batch in enumerate(train_dataloader):
         batch = batch_to_cuda(batch, device)
-        # print(f"batch['input'] shape: {batch['input'].shape}") 
         
-        with torch.cuda.amp.autocast('cuda'):
+        with torch.amp.autocast('cuda'):
             tc_mask, ar_mask, _ = model(batch['input'],
                                     ar_point_prompts = batch['ar_point_prompts'],
                                     tc_point_prompts = batch['tc_point_prompts'], 
@@ -97,37 +103,67 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         
         total_loss = loss_dict.pop('total_loss_for_backward')
         
+        # Scale loss by gradient accumulation steps
+        total_loss = total_loss / gradient_accumulation_steps
         
-        if worker_args.wandb:
-            log_dict = {f"train/{key}": value.item() for key, value in loss_dict.items()}
-            log_dict["epoch"] = epoch
-            wandb.log(log_dict, step=epoch)
+        # Accumulate losses for logging
+        for key, value in loss_dict.items():
+            if key not in accumulated_loss_dict:
+                accumulated_loss_dict[key] = 0
+            accumulated_loss_dict[key] += value.item() / gradient_accumulation_steps
 
         backward_context = nullcontext
         if torch.distributed.is_initialized():
-            backward_context = model.no_sync
+            # Only sync gradients on the last accumulation step
+            if (train_step + 1) % gradient_accumulation_steps != 0:
+                backward_context = model.no_sync
+            else:
+                backward_context = nullcontext
 
-        
         with backward_context():
             scaler.scale(total_loss).backward()
-        scaler.step(optimizer)
-        scaler.update()
-        optimizer.zero_grad()
         
-        if torch.distributed.is_initialized():
-                for key in loss_dict.keys():
-                    if hasattr(loss_dict[key], 'detach'):
-                        loss_dict[key] = loss_dict[key].detach()
-                    torch.distributed.reduce(loss_dict[key], dst=0, op=torch.distributed.ReduceOp.SUM)
-                    loss_dict[key] /= torch.distributed.get_world_size()
+        # Only update optimizer every gradient_accumulation_steps
+        if (train_step + 1) % gradient_accumulation_steps == 0:
+            scaler.step(optimizer)
+            scaler.update()
+            optimizer.zero_grad()
+            
+            # Log accumulated losses
+            if worker_args.wandb:
+                log_dict = {f"train/{key}": accumulated_loss_dict[key] for key in accumulated_loss_dict.keys()}
+                log_dict["epoch"] = epoch
+                log_dict["step"] = train_step // gradient_accumulation_steps
+                wandb.log(log_dict, step=epoch * len(train_dataloader) + train_step)
+            
+            # Distributed reduction of accumulated losses
+            if torch.distributed.is_initialized():
+                for key in accumulated_loss_dict.keys():
+                    tensor_loss = torch.tensor(accumulated_loss_dict[key], device=device)
+                    torch.distributed.reduce(tensor_loss, dst=0, op=torch.distributed.ReduceOp.SUM)
+                    accumulated_loss_dict[key] = (tensor_loss / torch.distributed.get_world_size()).item()
+            
+            # Update progress bar with accumulated losses
+            if train_pbar:
+                str_step_info = """Epoch: {epoch}/{epochs:4}. Loss: {total_loss:.4f}(total), {tversky_loss:.4f}(tversky_loss), {focal:.4f}(focal)""".format(
+                    epoch=epoch, epochs=max_epoch_num,
+                    total_loss=accumulated_loss_dict['total_loss'], 
+                    focal=accumulated_loss_dict['focal_loss'], 
+                    tversky_loss=accumulated_loss_dict['tversky_loss']
+                )
+                train_pbar.set_postfix_str(str_step_info)
+            
+            # Reset accumulated losses
+            accumulated_loss_dict = {}
 
         if train_pbar:
             train_pbar.update(1)
-            str_step_info = """Epoch: {epoch}/{epochs:4}. Loss: {total_loss:.4f}(total), {tversky_loss:.4f}(tversky_loss), {focal:.4f}(focal)""".format(
-                epoch=epoch, epochs=max_epoch_num,
-                total_loss=loss_dict['total_loss'], focal=loss_dict['focal_loss'], tversky_loss=loss_dict['tversky_loss']
-            )
-            train_pbar.set_postfix_str(str_step_info)
+    
+    # Handle any remaining gradients if the last batch doesn't complete a full accumulation
+    if len(train_dataloader) % gradient_accumulation_steps != 0:
+        scaler.step(optimizer)
+        scaler.update()
+        optimizer.zero_grad()
             
     # Optionally force garbage collection and empty CUDA cache
     import gc
@@ -268,6 +304,20 @@ def main_worker(worker_id, worker_args):
     
     # DataLoader
     train_bs = worker_args.train_bs if worker_args.train_bs else (1 if worker_args.shot_num == 1 else 4)
+    gradient_accumulation_steps = getattr(worker_args, 'gradient_accumulation_steps', 1)
+    
+    # Adjust batch size for gradient accumulation
+    actual_train_bs = train_bs // gradient_accumulation_steps
+    if actual_train_bs < 1:
+        actual_train_bs = 1
+        print(f"Warning: gradient_accumulation_steps ({gradient_accumulation_steps}) is larger than train_bs ({train_bs}). Setting actual batch size to 1.")
+    
+    effective_batch_size = actual_train_bs * gradient_accumulation_steps
+    if torch.distributed.is_initialized():
+        effective_batch_size *= torch.distributed.get_world_size()
+    
+    print(f"Effective batch size: {effective_batch_size} (actual_bs: {actual_train_bs}, accumulation: {gradient_accumulation_steps})")
+    
     val_bs = worker_args.val_bs if worker_args.val_bs else 2
     train_workers, val_workers = 1 if worker_args.shot_num == 1 else 4, 2
     if worker_args.num_workers is not None:
@@ -276,9 +326,10 @@ def main_worker(worker_id, worker_args):
     sampler = None
     if torch.distributed.is_initialized():
         sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
-        train_bs = int(train_bs / torch.distributed.get_world_size())
+        actual_train_bs = int(actual_train_bs / torch.distributed.get_world_size())
+        
     train_dataloader = DataLoader(
-        dataset=train_dataset, batch_size=train_bs, shuffle=sampler is None, num_workers=train_workers,
+        dataset=train_dataset, batch_size=actual_train_bs, shuffle=sampler is None, num_workers=train_workers,
         sampler=sampler, drop_last=False, collate_fn=train_collate_fn,
         worker_init_fn=partial(worker_init_fn, base_seed=3407)
     )

@@ -146,6 +146,9 @@ def parse():
         help="MLP ratio for the image encoder. Default is 0.25."
     )
     
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=1, 
+                   help='Number of steps to accumulate gradients before updating')
+
     args = parser.parse_args()
 
     return args
