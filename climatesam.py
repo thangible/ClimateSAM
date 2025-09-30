@@ -24,7 +24,7 @@ class ClimateSAM(nn.Module):
     It includes a Vision Transformer (ViT) encoder and a mask decoder, with additional features for climate data processing.
     """
 
-    def __init__(self, model_type: str, input_weights: List[float] = None, verbose = False, use_prompt_generator = False, mlp_ratio = 0.25):
+    def __init__(self, model_type: str, input_weights: List[float] = None, verbose = False, use_prompt_generator = False, mlp_ratio = 0.25, use_checkpoint = True):
         
         super(ClimateSAM, self).__init__()
         
@@ -35,6 +35,7 @@ class ClimateSAM(nn.Module):
         # ORI SAM model
         self.ori_sam = sam_model_registry[model_type](sam_ckpt_path_dict[model_type])
         self.sam_img_size = (self.ori_sam.image_encoder.img_size, self.ori_sam.image_encoder.img_size)
+        
         # ClimateSAM model
         self.input_adapt = nn.Sequential(
             nn.Conv2d(16, 3, kernel_size=1, stride=1, padding=0),
@@ -43,10 +44,16 @@ class ClimateSAM(nn.Module):
         self.mask_decoder = MaskDecoderHQ(
             model_type, self.ori_sam.mask_decoder.state_dict()
         )
-        self.image_encoder = ClimateSAMImageEncoder(ori_sam=self.ori_sam, 
-                                                    fix=True,
-                                                    hq_token_ar=self.mask_decoder.hf_token_ar.weight,
-                                                    hq_token_tc=self.mask_decoder.hf_token_tc.weight, mlp_ratio=mlp_ratio)
+        
+        # Pass use_checkpoint parameter to image encoder
+        self.image_encoder = ClimateSAMImageEncoder(
+            ori_sam=self.ori_sam, 
+            fix=True,
+            hq_token_ar=self.mask_decoder.hf_token_ar.weight,
+            hq_token_tc=self.mask_decoder.hf_token_tc.weight, 
+            mlp_ratio=mlp_ratio,
+            use_checkpoint=use_checkpoint  # Add this line
+        )
         if self.use_prompt_generator:
           self.prompt_generator = PromptGenerator(in_channels = self.image_encoder.sam_img_encoder.num_features)
         self.prompt_encoder = PromptEncoderWrapper(ori_sam=self.ori_sam, fix=True)
@@ -248,6 +255,18 @@ class ClimateSAM(nn.Module):
         if not self.training:
             tc_postprocess_masks_hq = self.assemble_raw_masks(tc_postprocess_masks_hq) 
             ar_postprocess_masks_hq = self.assemble_raw_masks(ar_postprocess_masks_hq)
+        
+        # Clear unnecessary variables early
+        del imgs  # Delete after use
+        torch.cuda.empty_cache()
+        
+        # Process embeddings in chunks if needed
+        batch_size = len(image_embeddings)
+        
+        # Clear intermediate variables
+        del image_embeddings, interm_embeddings
+        torch.cuda.empty_cache()
+        
         return tc_postprocess_masks_hq, ar_postprocess_masks_hq, image_input
     
     def enable_prompt_generator(self):
@@ -349,7 +368,6 @@ class ClimateSAM(nn.Module):
             r_m = torch.sum(r_m, dim=0, keepdim=True)
             masks.append(torch.clamp(r_m, max=1.0))
         return masks
-            
 
-        
-        
+
+

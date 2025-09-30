@@ -53,4 +53,4 @@ image_encoder_mlp_ratio = 0.5
 load_pretrained = False
 wandb = True
 save_model = True
-debugging = false
+debugging = False

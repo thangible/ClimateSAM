@@ -67,7 +67,6 @@ def setup_device_and_distributed(worker_id, worker_args):
     
 def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler):
     model.train(mode = True, phase = worker_args.phase, verbose = False)
-    train_pbar = tqdm(total=len(train_dataloader), desc='train', leave=False) if local_rank == 0 else None
     
     # Get gradient accumulation steps
     gradient_accumulation_steps = getattr(worker_args, 'gradient_accumulation_steps', 1)
@@ -76,7 +75,17 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
     effective_steps = len(train_dataloader) // gradient_accumulation_steps
     if len(train_dataloader) % gradient_accumulation_steps != 0:
         effective_steps += 1
-    train_pbar = tqdm(total=effective_steps, desc='train', leave=False) if local_rank == 0 else None
+    
+    # Create nested progress bars if you're the main process
+    if local_rank == 0:
+        # Outer progress bar for batches
+        batch_pbar = tqdm(total=len(train_dataloader), desc='Batches', position=0, leave=True)
+        # Inner progress bar for optimizer steps
+        step_pbar = tqdm(total=effective_steps, desc='Optimizer Steps', position=1, leave=True)
+    else:
+        batch_pbar = None
+        step_pbar = None
+    
     step_count = 0 
     # Initialize accumulated loss for logging
     accumulated_loss_dict = {}
@@ -129,6 +138,14 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         with backward_context():
             scaler.scale(total_loss).backward()
         
+        # Update batch progress bar
+        if batch_pbar:
+            batch_pbar.update(1)
+            batch_pbar.set_postfix({
+                'batch': f"{train_step + 1}/{len(train_dataloader)}",
+                'loss': f"{total_loss.item():.4f}"
+            })
+        
         # Only update optimizer every gradient_accumulation_steps
         if (train_step + 1) % gradient_accumulation_steps == 0:
             scaler.step(optimizer)
@@ -153,43 +170,36 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
                     torch.distributed.reduce(tensor_loss, dst=0, op=torch.distributed.ReduceOp.SUM)
                     accumulated_loss_dict[key] = (tensor_loss / torch.distributed.get_world_size()).item()
             
-            # Update progress bar with accumulated losses
-            if train_pbar:
-                str_step_info = """Epoch: {epoch}/{epochs:4}. Step: {step}/{total_steps}. Loss: {total_loss:.4f}(total), {tversky_loss:.4f}(tversky_loss), {focal:.4f}(focal)""".format(
-                    epoch=epoch, epochs=max_epoch_num,
-                    step=effective_step,
-                    total_steps=len(train_dataloader) // gradient_accumulation_steps,
-                    total_loss=accumulated_loss_dict['total_loss'], 
-                    focal=accumulated_loss_dict['focal_loss'], 
-                    tversky_loss=accumulated_loss_dict['tversky_loss']
-                )
-                train_pbar.set_postfix_str(str_step_info)
+            # Update step progress bar with accumulated losses
+            if step_pbar:
+                step_pbar.update(1)
+                step_pbar.set_postfix({
+                    'step': f"{effective_step}/{effective_steps}",
+                    'total_loss': f"{accumulated_loss_dict.get('total_loss', 0):.4f}",
+                    'focal': f"{accumulated_loss_dict.get('focal_loss', 0):.4f}",
+                    'tversky': f"{accumulated_loss_dict.get('tversky_loss', 0):.4f}"
+                })
                 
             step_count += 1
-            if train_pbar:
-                train_pbar.update(1)
             # Reset accumulated losses
             accumulated_loss_dict = {}
 
-        if train_pbar:
-            train_pbar.update(1)
-    
     # Handle any remaining gradients if the last batch doesn't complete a full accumulation
     if len(train_dataloader) % gradient_accumulation_steps != 0:
         scaler.step(optimizer)
         scaler.update()
         optimizer.zero_grad()
         step_count += 1
-        if train_pbar:
-            train_pbar.update(1)
+        if step_pbar:
+            step_pbar.update(1)
             
-    # Optionally force garbage collection and empty CUDA cache
-    import gc
-    gc.collect()
-    torch.cuda.empty_cache()      
+    # Close progress bars
+    if batch_pbar:
+        batch_pbar.close()
+    if step_pbar:
+        step_pbar.close()
+            
     scheduler.step()
-    if train_pbar:
-        train_pbar.clear()
 
 @torch.no_grad()
 def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args):
