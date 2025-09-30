@@ -77,7 +77,7 @@ class ClimateLoss:
                 # Binarize ground truth
                 label = torch.where(torch.gt(label, 0.), 1., 0.)
                 
-                # Tversky loss (replaces Dice loss)
+                # Tversky loss (replaces Dice loTss)
                 tversky_loss = calculate_tversky_loss(pred, label, alpha=alpha_tversky, beta=beta_tversky)
 
                 # Focal loss

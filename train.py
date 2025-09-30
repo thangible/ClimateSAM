@@ -72,28 +72,28 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         batch = batch_to_cuda(batch, device)
         # print(f"batch['input'] shape: {batch['input'].shape}") 
         
-        tc_mask, ar_mask, images = model(batch['input'],
-                                ar_point_prompts = batch['ar_point_prompts'],
-                                tc_point_prompts = batch['tc_point_prompts'], 
-                                ar_bbox_prompts = batch['ar_bbox_prompts'], 
-                                tc_bbox_prompts= batch['tc_bbox_prompts'],
-                                ar_mask_prompts = batch['ar_mask_prompts'],
-                                tc_mask_prompts = batch['tc_mask_prompts']
-                                )
-        
-        masks_ar_gt = batch['ar_object_masks']
-        masks_tc_gt = batch['tc_object_masks']
-        
-        # Compute loss using the new loss function
-        loss_dict = compute_climate_loss(
-            ar_masks=ar_mask,
-            tc_masks=tc_mask,
-            ar_masks_gt=masks_ar_gt,
-            tc_masks_gt=masks_tc_gt,
-            device=device,
-            worker_args=worker_args
-        )
-        
+        with torch.cuda.amp.autocast('cuda'):
+            tc_mask, ar_mask, _ = model(batch['input'],
+                                    ar_point_prompts = batch['ar_point_prompts'],
+                                    tc_point_prompts = batch['tc_point_prompts'], 
+                                    ar_bbox_prompts = batch['ar_bbox_prompts'], 
+                                    tc_bbox_prompts= batch['tc_bbox_prompts'],
+                                    ar_mask_prompts = batch['ar_mask_prompts'],
+                                    tc_mask_prompts = batch['tc_mask_prompts']
+                                    )
+            
+            masks_ar_gt = batch['ar_object_masks']
+            masks_tc_gt = batch['tc_object_masks']
+            
+            # Compute loss using the new loss function
+            loss_dict = compute_climate_loss(
+                ar_masks=ar_mask,
+                tc_masks=tc_mask,
+                ar_masks_gt=masks_ar_gt,
+                tc_masks_gt=masks_tc_gt,
+                device=device,
+                worker_args=worker_args
+            )
         
         total_loss = loss_dict.pop('total_loss_for_backward')
         
@@ -114,11 +114,6 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         scaler.update()
         optimizer.zero_grad()
         
-        # Optionally force garbage collection and empty CUDA cache
-        import gc
-        gc.collect()
-        torch.cuda.empty_cache()
-        
         if torch.distributed.is_initialized():
                 for key in loss_dict.keys():
                     if hasattr(loss_dict[key], 'detach'):
@@ -134,10 +129,15 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
             )
             train_pbar.set_postfix_str(str_step_info)
             
+    # Optionally force garbage collection and empty CUDA cache
+    import gc
+    gc.collect()
+    torch.cuda.empty_cache()      
     scheduler.step()
     if train_pbar:
         train_pbar.clear()
 
+@torch.no_grad()
 def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args):
     model.eval()
     print(f"Starting validation for epoch {epoch}...")

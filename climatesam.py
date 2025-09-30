@@ -10,6 +10,7 @@ from typing import Union, List, Tuple, Optional
 import torch.nn.functional as F
 # from climatesam_util import extract_point_and_bbox_prompts_from_climatenet_mask
 import numpy as np
+import torch.utils.checkpoint as checkpoint
 
 sam_ckpt_path_dict = dict(
     vit_b='./pretrained/sam_vit_b_01ec64.pth',
@@ -24,10 +25,13 @@ class ClimateSAM(nn.Module):
     """
 
     def __init__(self, model_type: str, input_weights: List[float] = None, verbose = False, use_prompt_generator = False, mlp_ratio = 0.25):
+        
         super(ClimateSAM, self).__init__()
+        
         assert model_type in ['vit_b', 'vit_l', 'vit_h'], f"invalid model_type: {model_type}!"
         self.verbose = verbose
         self.use_prompt_generator = use_prompt_generator
+        
         # ORI SAM model
         self.ori_sam = sam_model_registry[model_type](sam_ckpt_path_dict[model_type])
         self.sam_img_size = (self.ori_sam.image_encoder.img_size, self.ori_sam.image_encoder.img_size)
@@ -119,7 +123,7 @@ class ClimateSAM(nn.Module):
                 f"({100*trainable_params/total_params:.2f}%)")
                     
                 
-    def forward(
+    def  forward(
             self,
             input: Union[List[torch.Tensor], None],
             hq_token_weight_ar: torch.Tensor = None,
