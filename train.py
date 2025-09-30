@@ -7,7 +7,7 @@ import torch.multiprocessing as mp
 import torch.nn.functional as F
 from functools import partial
 from torch.utils.data import DataLoader
-from train_util import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, calculate_dice_loss, calculate_focal_loss, plot_with_projection
+from train_util import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection
 from loss_function import ClimateLoss, compute_climate_loss
 from tqdm import tqdm
 from contextlib import nullcontext
@@ -128,9 +128,9 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
 
         if train_pbar:
             train_pbar.update(1)
-            str_step_info = """Epoch: {epoch}/{epochs:4}. Loss: {total_loss:.4f}(total), {dice_loss:.4f}(dice), {focal:.4f}(focal)""".format(
+            str_step_info = """Epoch: {epoch}/{epochs:4}. Loss: {total_loss:.4f}(total), {tversky_loss:.4f}(tversky_loss), {focal:.4f}(focal)""".format(
                 epoch=epoch, epochs=max_epoch_num,
-                total_loss=loss_dict['total_loss'], focal=loss_dict['focal_loss'], dice_loss=loss_dict['dice_loss']
+                total_loss=loss_dict['total_loss'], focal=loss_dict['focal_loss'], tversky_loss=loss_dict['tversky_loss']
             )
             train_pbar.set_postfix_str(str_step_info)
             
