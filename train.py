@@ -79,7 +79,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
     # Create nested progress bars if you're the main process
     if local_rank == 0:
         # Outer progress bar for batches
-        batch_pbar = tqdm(total=len(train_dataloader), desc='Batches', position=0, leave=True)
+        batch_pbar = tqdm(total=len(train_dataloader), desc=f'Epoch {epoch}/{max_epoch_num} - Batches', position=0, leave=True)
         # Inner progress bar for optimizer steps
         step_pbar = tqdm(total=effective_steps, desc='Optimizer Steps', position=1, leave=True)
     else:
@@ -142,6 +142,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         if batch_pbar:
             batch_pbar.update(1)
             batch_pbar.set_postfix({
+                'epoch': f"{epoch}/{max_epoch_num}",
                 'batch': f"{train_step + 1}/{len(train_dataloader)}",
                 'loss': f"{total_loss.item():.4f}"
             })
@@ -205,7 +206,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
 def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args):
     model.eval()
     print(f"Starting validation for epoch {epoch}...")
-    valid_pbar = tqdm(total=len(val_dataloader), desc='valid', leave=False)
+    valid_pbar = tqdm(total=len(val_dataloader), desc=f'Epoch {epoch}/{max_epoch_num} - Validation', leave=False)
     
     # Get gradient accumulation steps for proper step calculation
     gradient_accumulation_steps = getattr(worker_args, 'gradient_accumulation_steps', 1)

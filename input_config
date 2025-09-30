@@ -4,7 +4,7 @@ exp_dir = ./exp
 data_dir = '../data/climatenet'
 pretrained_name = 'best_model.pth'
 project_name = climate-sam
-run_name = train_image_encoder_new_scheme
+run_name = train_climate_sam_phase_1
 
 [BATCH CONFIG]
 ; num_workers = None
@@ -36,11 +36,15 @@ gamma_tc = 8
 alpha_tc = 0.996
 
 [LOSS CONFIG TVERSKY]
-alpha_ar_tversky = 0.1
-beta_ar_tversky = 0.9
+alpha_ar_tversky = 0.05
+beta_ar_tversky = 0.95
 
-alpha_tc_tversky = 0.2
-beta_tc_tversky = 0.8
+alpha_tc_tversky = 0.05
+beta_tc_tversky = 0.95
+
+[LOSS Weights]
+focal_weight = 1.0
+tversky_weight = 3.0
 
 [LOSS CONFIG COMMON]
 ; bce_weight_tc = 250

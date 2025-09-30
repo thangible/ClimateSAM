@@ -149,6 +149,16 @@ def parse():
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1, 
                    help='Number of steps to accumulate gradients before updating')
 
+    parser.add_argument(
+        '--focal_weight', default=1.0, type=float,
+        help="Weight for the Focal loss. Default is 1.0."
+    )
+
+    parser.add_argument(
+        '--tversky_weight', default=3.0, type=float,
+        help="Weight for the Tversky loss. Default is 3.0."
+    )
+
     args = parser.parse_args()
 
     return args

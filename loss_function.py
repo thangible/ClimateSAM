@@ -6,11 +6,15 @@ from typing import List, Dict, Optional
 class ClimateLoss:
     """Loss computation class for Climate SAM model"""
     
-    def __init__(self, device: torch.device, theta_tc: float = 5.0, theta_total: float = 1.0):
+    def __init__(self, device: torch.device, 
+                 theta_tc: float = 5.0, 
+                 focal_weight: float = 1.0,
+                 tversky_weight: float = 3.0):
         self.device = device
         self.theta_tc = theta_tc
-        self.theta_total = theta_total
-    
+        self.focal_weight = focal_weight
+        self.tversky_weight = tversky_weight
+
     def compute_loss(
         self,
         ar_masks: List[torch.Tensor],
@@ -98,13 +102,13 @@ class ClimateLoss:
         """Aggregate individual losses into final loss components"""
         
         # Average Tversky losses
-        tversky_loss_ar = self._safe_mean(tversky_loss_list_ar)
-        tversky_loss_tc = self._safe_mean(tversky_loss_list_tc) * self.theta_tc
+        tversky_loss_ar = self._safe_mean(tversky_loss_list_ar) * self.tversky_weight
+        tversky_loss_tc = self._safe_mean(tversky_loss_list_tc) * self.tversky_weight * self.theta_tc 
         tversky_loss = tversky_loss_ar + tversky_loss_tc
         
         # Average focal losses  
-        focal_loss_ar = self._safe_mean(focal_loss_list_ar) * self.theta_total
-        focal_loss_tc = self._safe_mean(focal_loss_list_tc) * self.theta_tc * self.theta_total
+        focal_loss_ar = self._safe_mean(focal_loss_list_ar) * self.focal_weight
+        focal_loss_tc = self._safe_mean(focal_loss_list_tc) * self.theta_tc * self.focal_weight
         focal_loss = focal_loss_ar + focal_loss_tc
         
         # Total losses
@@ -151,7 +155,7 @@ def compute_climate_loss(
         total_loss = loss_dict['total_loss_for_backward'] 
     """
     
-    loss_computer = ClimateLoss(device, theta_tc, theta_total)
+    loss_computer = ClimateLoss(device, theta_tc=theta_tc, focal_weight=worker_args.focal_weight, tversky_weight=worker_args.tversky_weight)
     return loss_computer.compute_loss(ar_masks, tc_masks, ar_masks_gt, tc_masks_gt, worker_args)
 
 
