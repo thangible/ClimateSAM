@@ -87,8 +87,9 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         step_pbar = None
     
     step_count = 0 
-    # Initialize accumulated loss for logging
-    accumulated_loss_dict = {}
+    # Initialize accumulated loss for logging across the entire epoch
+    epoch_loss_dict = {}
+    epoch_loss_count = 0
     
     for train_step, batch in enumerate(train_dataloader):
         batch = batch_to_cuda(batch, device)
@@ -121,11 +122,11 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         # Scale loss by gradient accumulation steps
         total_loss = total_loss / gradient_accumulation_steps
         
-        # Accumulate losses for logging
+        # Accumulate losses for epoch-level logging
         for key, value in loss_dict.items():
-            if key not in accumulated_loss_dict:
-                accumulated_loss_dict[key] = 0
-            accumulated_loss_dict[key] += value.item() / gradient_accumulation_steps
+            if key not in epoch_loss_dict:
+                epoch_loss_dict[key] = 0
+            epoch_loss_dict[key] += value.item() / gradient_accumulation_steps
 
         backward_context = nullcontext
         if torch.distributed.is_initialized():
@@ -155,35 +156,30 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
             
             # Calculate effective step for logging
             effective_step = (train_step + 1) // gradient_accumulation_steps
+            epoch_loss_count += 1
             
-            # Log accumulated losses
-            if worker_args.wandb:
-                log_dict = {f"train/{key}": accumulated_loss_dict[key] for key in accumulated_loss_dict.keys()}
-                log_dict["epoch"] = epoch
-                log_dict["effective_step"] = effective_step
-                # Use a consistent step calculation across training and validation
-                wandb.log(log_dict, step=epoch * (len(train_dataloader) // gradient_accumulation_steps) + effective_step)
-            
-            # Distributed reduction of accumulated losses
+            # Distributed reduction of losses for current step
             if torch.distributed.is_initialized():
-                for key in accumulated_loss_dict.keys():
-                    tensor_loss = torch.tensor(accumulated_loss_dict[key], device=device)
+                step_loss_dict = {}
+                for key in loss_dict.keys():
+                    step_loss_dict[key] = epoch_loss_dict[key] / epoch_loss_count
+                    tensor_loss = torch.tensor(step_loss_dict[key], device=device)
                     torch.distributed.reduce(tensor_loss, dst=0, op=torch.distributed.ReduceOp.SUM)
-                    accumulated_loss_dict[key] = (tensor_loss / torch.distributed.get_world_size()).item()
+                    step_loss_dict[key] = (tensor_loss / torch.distributed.get_world_size()).item()
+            else:
+                step_loss_dict = {key: epoch_loss_dict[key] / epoch_loss_count for key in epoch_loss_dict.keys()}
             
-            # Update step progress bar with accumulated losses
+            # Update step progress bar with current average losses
             if step_pbar:
                 step_pbar.update(1)
                 step_pbar.set_postfix({
                     'step': f"{effective_step}/{effective_steps}",
-                    'total_loss': f"{accumulated_loss_dict.get('total_loss', 0):.4f}",
-                    'focal': f"{accumulated_loss_dict.get('focal_loss', 0):.4f}",
-                    'tversky': f"{accumulated_loss_dict.get('tversky_loss', 0):.4f}"
+                    'total_loss': f"{step_loss_dict.get('total_loss', 0):.4f}",
+                    'focal': f"{step_loss_dict.get('focal_loss', 0):.4f}",
+                    'tversky': f"{step_loss_dict.get('tversky_loss', 0):.4f}"
                 })
                 
             step_count += 1
-            # Reset accumulated losses
-            accumulated_loss_dict = {}
 
     # Handle any remaining gradients if the last batch doesn't complete a full accumulation
     if len(train_dataloader) % gradient_accumulation_steps != 0:
@@ -191,8 +187,27 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         scaler.update()
         optimizer.zero_grad()
         step_count += 1
+        epoch_loss_count += 1
         if step_pbar:
             step_pbar.update(1)
+    
+    # Calculate average losses for the entire epoch
+    if epoch_loss_count > 0:
+        avg_epoch_losses = {key: epoch_loss_dict[key] / epoch_loss_count for key in epoch_loss_dict.keys()}
+        
+        # Final distributed reduction for epoch averages
+        if torch.distributed.is_initialized():
+            for key in avg_epoch_losses.keys():
+                tensor_loss = torch.tensor(avg_epoch_losses[key], device=device)
+                torch.distributed.reduce(tensor_loss, dst=0, op=torch.distributed.ReduceOp.SUM)
+                avg_epoch_losses[key] = (tensor_loss / torch.distributed.get_world_size()).item()
+        
+        # Log to wandb once per epoch
+        if worker_args.wandb and local_rank == 0:
+            log_dict = {f"train/{key}": avg_epoch_losses[key] for key in avg_epoch_losses.keys()}
+            log_dict["epoch"] = epoch
+            log_dict["learning_rate"] = scheduler.get_last_lr()[0]
+            wandb.log(log_dict, step=epoch)
             
     # Close progress bars
     if batch_pbar:
@@ -205,12 +220,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
 @torch.no_grad()
 def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args):
     model.eval()
-    print(f"Starting validation for epoch {epoch}...")
-    valid_pbar = tqdm(total=len(val_dataloader), desc=f'Epoch {epoch}/{max_epoch_num} - Validation', leave=False)
-    
-    # Get gradient accumulation steps for proper step calculation
-    gradient_accumulation_steps = getattr(worker_args, 'gradient_accumulation_steps', 1)
-    
+    valid_pbar = tqdm(total=len(val_dataloader), desc='valid', leave=False)
     for val_step, batch in enumerate(val_dataloader):
         batch = batch_to_cuda(batch, device)
         val_model = model
@@ -235,11 +245,8 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
                             masks[i] = masks[i][:, None, :]
                         if len(masks[i].shape) != 4:
                             raise RuntimeError
-            
-            # LOG - Adjust logging frequency based on effective validation steps
-            # Use a similar logic as training but for validation
-            effective_val_step = val_step // max(1, gradient_accumulation_steps // 2)  # Log more frequently in validation
-            if effective_val_step == 1:  # Changed from val_step == 2 to be more consistent
+            # LOG
+            if val_step == 2:
                 imges = [images[i].cpu().numpy() for i in range(len(images))]
                 masks_ar = [ar_masks[i].cpu().numpy() for i in range(len(ar_masks))]
                 masks_tc = [tc_masks[i].cpu().numpy() for i in range(len(tc_masks))]
@@ -252,7 +259,6 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
                 
                     print(f"Epoch {epoch}- Image {i} saved.")
                     if worker_args.wandb:
-                        # Use epoch-based step for validation logging to align with training
                         wandb.log({f"valid/image_{i}": wandb.Image(plot, caption=titel), "epoch": epoch}, step = epoch)
                 del imges, masks_ar, masks_tc, masks_ar_gt, masks_tc_gt
                 torch.cuda.empty_cache()

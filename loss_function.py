@@ -9,11 +9,13 @@ class ClimateLoss:
     def __init__(self, device: torch.device, 
                  theta_tc: float = 5.0, 
                  focal_weight: float = 1.0,
-                 tversky_weight: float = 3.0):
+                 tversky_weight: float = 3.0,
+                 bce_weight: float = 1.0):
         self.device = device
         self.theta_tc = theta_tc
         self.focal_weight = focal_weight
         self.tversky_weight = tversky_weight
+        self.bce_weight = bce_weight
 
     def compute_loss(
         self,
@@ -38,26 +40,28 @@ class ClimateLoss:
         """
         
         # Compute individual losses
-        tversky_loss_list_ar, focal_loss_list_ar = self._compute_mask_losses(
+        tversky_loss_list_ar, focal_loss_list_ar, bce_loss_list_ar = self._compute_mask_losses(
             ar_masks, ar_masks_gt, 
             gamma_focal=worker_args.gamma_ar, 
             alpha_focal=worker_args.alpha_ar,
             alpha_tversky=worker_args.alpha_ar_tversky,
-            beta_tversky=worker_args.beta_ar_tversky
+            beta_tversky=worker_args.beta_ar_tversky,
+            bce_weight=worker_args.bce_weight_ar
         )
         
-        tversky_loss_list_tc, focal_loss_list_tc = self._compute_mask_losses(
+        tversky_loss_list_tc, focal_loss_list_tc, bce_loss_list_tc = self._compute_mask_losses(
             tc_masks, tc_masks_gt,
             gamma_focal=worker_args.gamma_tc,
             alpha_focal=worker_args.alpha_tc,
             alpha_tversky=worker_args.alpha_tc_tversky,
-            beta_tversky=worker_args.beta_tc_tversky
+            beta_tversky=worker_args.beta_tc_tversky,
+            bce_weight=worker_args.bce_weight_tc
         )
         
         # Aggregate losses
         return self._aggregate_losses(
-            tversky_loss_list_ar, focal_loss_list_ar,
-            tversky_loss_list_tc, focal_loss_list_tc
+            tversky_loss_list_ar, focal_loss_list_ar, bce_loss_list_ar,
+            tversky_loss_list_tc, focal_loss_list_tc, bce_loss_list_tc
         )
     
     def _compute_mask_losses(
@@ -67,12 +71,14 @@ class ClimateLoss:
         gamma_focal: float, 
         alpha_focal: float,
         alpha_tversky: float = 0.7,
-        beta_tversky: float = 0.3
-    ) -> tuple[List[torch.Tensor], List[torch.Tensor]]:
-        """Compute Tversky and focal losses for a set of masks"""
+        beta_tversky: float = 0.3,
+        bce_weight: int = 10
+    ) -> tuple[List[torch.Tensor], List[torch.Tensor], List[torch.Tensor]]:
+        """Compute Tversky, focal, and BCE losses for a set of masks"""
         
         tversky_losses = []
         focal_losses = []
+        bce_losses = []
         
         for i in range(len(gt_masks)):
             if gt_masks[i] is not None:
@@ -81,23 +87,29 @@ class ClimateLoss:
                 # Binarize ground truth
                 label = torch.where(torch.gt(label, 0.), 1., 0.)
                 
-                # Tversky loss (replaces Dice loTss)
+                # Tversky loss
                 tversky_loss = calculate_tversky_loss(pred, label, alpha=alpha_tversky, beta=beta_tversky)
 
                 # Focal loss
                 focal_loss = calculate_focal_loss(pred, label, gamma=gamma_focal, alpha=alpha_focal)
                 
+                # BCE loss
+                bce_loss = calculate_bce_loss(pred, label, weight=bce_weight)
+                
                 tversky_losses.append(tversky_loss)
                 focal_losses.append(focal_loss)
+                bce_losses.append(bce_loss)
         
-        return tversky_losses, focal_losses
+        return tversky_losses, focal_losses, bce_losses
     
     def _aggregate_losses(
         self,
         tversky_loss_list_ar: List[torch.Tensor],
-        focal_loss_list_ar: List[torch.Tensor], 
+        focal_loss_list_ar: List[torch.Tensor],
+        bce_loss_list_ar: List[torch.Tensor],
         tversky_loss_list_tc: List[torch.Tensor],
-        focal_loss_list_tc: List[torch.Tensor]
+        focal_loss_list_tc: List[torch.Tensor],
+        bce_loss_list_tc: List[torch.Tensor]
     ) -> Dict[str, torch.Tensor]:
         """Aggregate individual losses into final loss components"""
         
@@ -111,10 +123,15 @@ class ClimateLoss:
         focal_loss_tc = self._safe_mean(focal_loss_list_tc) * self.theta_tc * self.focal_weight
         focal_loss = focal_loss_ar + focal_loss_tc
         
+        # Average BCE losses
+        bce_loss_ar = self._safe_mean(bce_loss_list_ar) * self.bce_weight
+        bce_loss_tc = self._safe_mean(bce_loss_list_tc) * self.theta_tc * self.bce_weight
+        bce_loss = bce_loss_ar + bce_loss_tc
+        
         # Total losses
-        total_loss_ar = tversky_loss_ar + focal_loss_ar
-        total_loss_tc = tversky_loss_tc + focal_loss_tc  
-        total_loss = tversky_loss + focal_loss
+        total_loss_ar = tversky_loss_ar + focal_loss_ar + bce_loss_ar
+        total_loss_tc = tversky_loss_tc + focal_loss_tc + bce_loss_tc
+        total_loss = tversky_loss + focal_loss + bce_loss
         
         return {
             'total_loss': total_loss.clone().detach(),
@@ -124,8 +141,11 @@ class ClimateLoss:
             'tversky_loss_tc': tversky_loss_tc.clone().detach(),
             'focal_loss_ar': focal_loss_ar.clone().detach(),
             'focal_loss_tc': focal_loss_tc.clone().detach(),
+            'bce_loss_ar': bce_loss_ar.clone().detach(),
+            'bce_loss_tc': bce_loss_tc.clone().detach(),
             'tversky_loss': tversky_loss.clone().detach(),
             'focal_loss': focal_loss.clone().detach(),
+            'bce_loss': bce_loss.clone().detach(),
             'total_loss_for_backward': total_loss  # Keep one without detach for backprop
         }
     
@@ -144,8 +164,7 @@ def compute_climate_loss(
     tc_masks_gt: List[torch.Tensor],
     device: torch.device,
     worker_args,
-    theta_tc: float = 5.0,
-    theta_total: float = 10.0
+    theta_tc: float = 5.0
 ) -> Dict[str, torch.Tensor]:
     """
     Convenience function for computing climate loss
@@ -155,7 +174,13 @@ def compute_climate_loss(
         total_loss = loss_dict['total_loss_for_backward'] 
     """
     
-    loss_computer = ClimateLoss(device, theta_tc=theta_tc, focal_weight=worker_args.focal_weight, tversky_weight=worker_args.tversky_weight)
+    loss_computer = ClimateLoss(
+        device, 
+        theta_tc=theta_tc, 
+        focal_weight=worker_args.focal_weight, 
+        tversky_weight=worker_args.tversky_weight,
+        bce_weight= worker_args.bce_weight
+    )
     return loss_computer.compute_loss(ar_masks, tc_masks, ar_masks_gt, tc_masks_gt, worker_args)
 
 
@@ -187,6 +212,10 @@ def calculate_focal_loss(inputs: torch.Tensor, targets: torch.Tensor, gamma: flo
     loss = -focal_weight * torch.log(p_t.clamp(min=1e-8))
     return loss.mean()
 
+def calculate_bce_loss(inputs: torch.Tensor, targets: torch.Tensor, weight: int):
+    pos_weight = torch.tensor([weight]).to(inputs.device)
+    bce_loss = F.binary_cross_entropy_with_logits(inputs, targets, pos_weight=pos_weight)
+    return bce_loss
 
 def calculate_tversky_loss(inputs: torch.Tensor, targets: torch.Tensor, alpha: float = 0.9, beta: float = 0.1):
     """

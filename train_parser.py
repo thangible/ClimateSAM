@@ -158,6 +158,11 @@ def parse():
         '--tversky_weight', default=3.0, type=float,
         help="Weight for the Tversky loss. Default is 3.0."
     )
+    
+    parser.add_argument(
+        '--bce_weight', default=1.0, type=float,
+        help="Weight for the BCE loss. Default is 1.0."
+    )
 
     args = parser.parse_args()
 
