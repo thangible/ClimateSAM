@@ -43,10 +43,9 @@ alpha_tc_tversky = 0.05
 beta_tc_tversky = 0.95
 
 [LOSS Weights]
-focal_weight = 0.0
-tversky_weight = 0.0
+focal_weight = 1.0
+tversky_weight = 1.0
 bce_weight = 1.0
-
 [LOSS CONFIG COMMON]
 bce_weight_tc = 250
 bce_weight_ar = 10

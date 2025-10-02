@@ -70,7 +70,7 @@ class ClimateDataset(Dataset):
         # Return a dictionary that matches the expected format.
         
         
-        prompt_type = random.choice(['bbox', 'point', 'noisy_mask']) if self.train_flag else random.choice(['bbox', 'point'])
+        prompt_type = random.choice(['bbox', 'point']) 
         prompt_dict = extract_point_and_bbox_prompts_from_climatenet_mask(mask = mask, prompt_type = prompt_type)
         
         return {

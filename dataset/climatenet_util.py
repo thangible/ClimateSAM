@@ -114,6 +114,7 @@ def get_prompts_from_binary_mask(binary_mask, connectivity = 8, threshold = 50, 
                 else:
                     chosen_point = random_point
                 # Append to list
+                chosen_point = chosen_point[::-1]  # (x, y) format
                 points.append([chosen_point])
     
     object_masks = torch.from_numpy(np.stack(object_masks, axis = 0)).to(torch.float32).unsqueeze(1)
