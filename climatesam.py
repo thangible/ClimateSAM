@@ -568,6 +568,11 @@ class ClimateSAM(nn.Module):
             tc_dense_embeddings.append(current_tc_dense)
             ar_dense_embeddings.append(current_ar_dense)
         
+        # Log prompt embeddings only if debugging
+        if self.enable_wandb_logging:
+            self.log_embeddings(tc_sparse_embeddings, tc_dense_embeddings, "infer/tc_prompt")
+            self.log_embeddings(ar_sparse_embeddings, ar_dense_embeddings, "infer/ar_prompt")
+        
         # Decode masks
         _, tc_pred_masks = self.mask_decoder(
             type='TC',
@@ -591,11 +596,31 @@ class ClimateSAM(nn.Module):
             return_all_hq_masks=return_all_hq_masks
         )
         
-        # Postprocess masks
-        tc_postprocess_masks = [self.postprocess(m.clone(), self.ori_infer_img_size[i]) 
-                               for i, m in enumerate(tc_pred_masks)]
-        ar_postprocess_masks = [self.postprocess(m.clone(), self.ori_infer_img_size[i]) 
-                               for i, m in enumerate(ar_pred_masks)]
+        # Log predicted masks only if debugging
+        if self.enable_wandb_logging:
+            self.log_masks(tc_pred_masks, "infer/tc_predicted", log_images=False, max_images=2)
+            self.log_masks(ar_pred_masks, "infer/ar_predicted", log_images=False, max_images=2)
+        
+        # Postprocess masks to original image size
+        tc_postprocess_masks = []
+        ar_postprocess_masks = []
+        
+        for i in range(len(tc_pred_masks)):
+            tc_postprocess_masks.append(
+                self.postprocess(tc_pred_masks[i].clone(), self.ori_infer_img_size[i])
+            )
+            ar_postprocess_masks.append(
+                self.postprocess(ar_pred_masks[i].clone(), self.ori_infer_img_size[i])
+            )
+        
+        # Log postprocessed masks only if debugging
+        if self.enable_wandb_logging:
+            self.log_masks(tc_postprocess_masks, "infer/tc_postprocessed", log_images=False, max_images=2)
+            self.log_masks(ar_postprocess_masks, "infer/ar_postprocessed", log_images=False, max_images=2)
+        
+        # Assemble raw masks (discretize and combine)
+        tc_postprocess_masks = self.assemble_raw_masks(tc_postprocess_masks)
+        ar_postprocess_masks = self.assemble_raw_masks(ar_postprocess_masks)
         
         return tc_postprocess_masks, ar_postprocess_masks
 
