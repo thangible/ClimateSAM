@@ -221,56 +221,61 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
 def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args):
     model.eval()
     valid_pbar = tqdm(total=len(val_dataloader), desc='valid', leave=False)
+    
     for val_step, batch in enumerate(val_dataloader):
         batch = batch_to_cuda(batch, device)
-        val_model = model
-        with torch.no_grad():
-            
-            tc_masks, ar_masks, images = val_model(batch['input'],
-                                ar_point_prompts = batch['ar_point_prompts'],
-                                tc_point_prompts = batch['tc_point_prompts'], 
-                                ar_bbox_prompts = batch['ar_bbox_prompts'], 
-                                tc_bbox_prompts= batch['tc_bbox_prompts'],
-                                )
-            
-            masks_gt = batch['gt_mask']
-            masks_ar_gts = [ (mask == 2).to(torch.uint8) for mask in masks_gt ]
-            masks_tc_gts = [ (mask == 1).to(torch.uint8) for mask in masks_gt ]
-            # some processing to make sure the masks are in the right shape
-            for masks in [masks_ar_gts, masks_tc_gts, ar_masks, tc_masks]:
-                    for i in range(len(masks)):
-                        if len(masks[i].shape) == 2:
-                            masks[i] = masks[i][None, None, :]
-                        if len(masks[i].shape) == 3:
-                            masks[i] = masks[i][:, None, :]
-                        if len(masks[i].shape) != 4:
-                            raise RuntimeError
-            # LOG
-            if val_step == 2:
-                imges = [images[i].cpu().numpy() for i in range(len(images))]
-                masks_ar = [ar_masks[i].cpu().numpy() for i in range(len(ar_masks))]
-                masks_tc = [tc_masks[i].cpu().numpy() for i in range(len(tc_masks))]
-                masks_ar_gt = [masks_ar_gts[i].cpu().numpy() for i in range(len(masks_ar_gts))]
-                masks_tc_gt = [masks_tc_gts[i].cpu().numpy() for i in range(len(masks_tc_gts))]
-                for i in range(len(imges)):
-                    save_path=os.path.join(worker_args.exp_dir, worker_args.run_name, 'images', f"epoch_{epoch}_step_{val_step}_image_{i}.png")
-                    
-                    plot, titel = plot_with_projection(imges[i], masks_ar[i], masks_tc[i], masks_ar_gt[i], masks_tc_gt[i], save_path = save_path, epoch=epoch)
+        
+        # Set inference images once
+        images = model.set_infer_img(batch['input'])
+        
+        # Perform inference with prompts
+        tc_masks, ar_masks = model.infer(
+            ar_point_prompts=batch['ar_point_prompts'],
+            tc_point_prompts=batch['tc_point_prompts'],
+            ar_bbox_prompts=batch['ar_bbox_prompts'],
+            tc_bbox_prompts=batch['tc_bbox_prompts']
+        )
+        
+        # Rest of validation logic remains the same...
+        masks_gt = batch['gt_mask']
+        masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt]
+        masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt]
+        
+        # some processing to make sure the masks are in the right shape
+        for masks in [masks_ar_gts, masks_tc_gts, ar_masks, tc_masks]:
+                for i in range(len(masks)):
+                    if len(masks[i].shape) == 2:
+                        masks[i] = masks[i][None, None, :]
+                    if len(masks[i].shape) == 3:
+                        masks[i] = masks[i][:, None, :]
+                    if len(masks[i].shape) != 4:
+                        raise RuntimeError
+        # LOG
+        if val_step == 2:
+            imges = [images[i].cpu().numpy() for i in range(len(images))]
+            masks_ar = [ar_masks[i].cpu().numpy() for i in range(len(ar_masks))]
+            masks_tc = [tc_masks[i].cpu().numpy() for i in range(len(tc_masks))]
+            masks_ar_gt = [masks_ar_gts[i].cpu().numpy() for i in range(len(masks_ar_gts))]
+            masks_tc_gt = [masks_tc_gts[i].cpu().numpy() for i in range(len(masks_tc_gts))]
+            for i in range(len(imges)):
+                save_path=os.path.join(worker_args.exp_dir, worker_args.run_name, 'images', f"epoch_{epoch}_step_{val_step}_image_{i}.png")
                 
-                    print(f"Epoch {epoch}- Image {i} saved.")
-                    if worker_args.wandb:
-                        wandb.log({f"valid/image_{i}": wandb.Image(plot, caption=titel), "epoch": epoch}, step = epoch)
-                del imges, masks_ar, masks_tc, masks_ar_gt, masks_tc_gt
-                torch.cuda.empty_cache()
-                
-            ar_metrics.update(tc_masks, masks_ar_gts,  batch['index_name'])
-            tc_metrics.update(ar_masks, masks_tc_gts,  batch['index_name'])
-            valid_pbar.update(1)
-            str_step_info = "Epoch: {epoch}/{epochs:4}.".format(
-                epoch=epoch, epochs=max_epoch_num
-            )
-            valid_pbar.set_postfix_str(str_step_info)
+                plot, titel = plot_with_projection(imges[i], masks_ar[i], masks_tc[i], masks_ar_gt[i], masks_tc_gt[i], save_path = save_path, epoch=epoch)
             
+                print(f"Epoch {epoch}- Image {i} saved.")
+                if worker_args.wandb:
+                    wandb.log({f"valid/image_{i}": wandb.Image(plot, caption=titel), "epoch": epoch}, step = epoch)
+            del imges, masks_ar, masks_tc, masks_ar_gt, masks_tc_gt
+            torch.cuda.empty_cache()
+            
+        ar_metrics.update(tc_masks, masks_ar_gts,  batch['index_name'])
+        tc_metrics.update(ar_masks, masks_tc_gts,  batch['index_name'])
+        valid_pbar.update(1)
+        str_step_info = "Epoch: {epoch}/{epochs:4}.".format(
+            epoch=epoch, epochs=max_epoch_num
+        )
+        valid_pbar.set_postfix_str(str_step_info)
+        
     ar_metrict_dict, _ = ar_metrics.compute()
     tc_metric_dict, _ = tc_metrics.compute()
     
@@ -305,10 +310,6 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
         
     return miou_tc, miou_ar
         
-            
-            
-        
-    
         
 def main_worker(worker_id, worker_args):
     set_randomness()
@@ -381,8 +382,12 @@ def main_worker(worker_id, worker_args):
         drop_last=False, collate_fn=val_collate_fn
     )
     
-    # SET UP MODEL
-    model = ClimateSAM(model_type=worker_args.sam_type, mlp_ratio=worker_args.image_encoder_mlp_ratio).to(device=device)
+    # SET UP MODEL - enable W&B logging only if debugging is True
+    model = ClimateSAM(
+        model_type=worker_args.sam_type, 
+        mlp_ratio=worker_args.image_encoder_mlp_ratio,
+        enable_wandb_logging=getattr(worker_args, 'debugging', False)  # Only log if debugging=True
+    ).to(device=device)
     if torch.distributed.is_initialized():
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
         try:

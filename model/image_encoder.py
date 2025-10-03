@@ -68,7 +68,7 @@ class ClimateSAMImageEncoder(SAMImageEncodeWrapper):
 
         interm_embeddings = []
         for i, blk in enumerate(self.sam_img_encoder.blocks):
-            hq_prompt_tokens = hq_prompt_tokens_ar[i] + hq_prompt_tokens_tc[i]
+            hq_prompt_tokens = (hq_prompt_tokens_ar[i] + hq_prompt_tokens_tc[i]) / 2
             
             # Use gradient checkpointing only during training
             if self.use_checkpoint and self.training:

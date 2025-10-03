@@ -11,6 +11,8 @@ import torch.nn.functional as F
 # from climatesam_util import extract_point_and_bbox_prompts_from_climatenet_mask
 import numpy as np
 import torch.utils.checkpoint as checkpoint
+import wandb
+import matplotlib.pyplot as plt
 
 sam_ckpt_path_dict = dict(
     vit_b='./pretrained/sam_vit_b_01ec64.pth',
@@ -24,13 +26,14 @@ class ClimateSAM(nn.Module):
     It includes a Vision Transformer (ViT) encoder and a mask decoder, with additional features for climate data processing.
     """
 
-    def __init__(self, model_type: str, input_weights: List[float] = None, verbose = False, use_prompt_generator = False, mlp_ratio = 0.25, use_checkpoint = True):
+    def __init__(self, model_type: str, input_weights: List[float] = None, verbose = False, use_prompt_generator = False, mlp_ratio = 0.25, use_checkpoint = True, enable_wandb_logging = False):
         
         super(ClimateSAM, self).__init__()
         
         assert model_type in ['vit_b', 'vit_l', 'vit_h'], f"invalid model_type: {model_type}!"
         self.verbose = verbose
         self.use_prompt_generator = use_prompt_generator
+        self.enable_wandb_logging = enable_wandb_logging
         
         # ORI SAM model
         self.ori_sam = sam_model_registry[model_type](sam_ckpt_path_dict[model_type])
@@ -130,6 +133,94 @@ class ClimateSAM(nn.Module):
                 f"({100*trainable_params/total_params:.2f}%)")
                     
                 
+    def log_prompt_shapes(self, ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts, prefix="forward"):
+        """Log shapes and sizes of prompts"""
+        if not self.enable_wandb_logging or not wandb.run:
+            return
+            
+        prompt_info = {}
+        
+        if ar_point_prompts is not None:
+            for i, prompt in enumerate(ar_point_prompts):
+                if prompt is not None:
+                    points, labels = prompt
+                    prompt_info[f"{prefix}/ar_point_prompts_{i}_points_shape"] = list(points.shape)
+                    prompt_info[f"{prefix}/ar_point_prompts_{i}_labels_shape"] = list(labels.shape)
+                    prompt_info[f"{prefix}/ar_point_prompts_{i}_num_points"] = points.shape[1] if len(points.shape) > 1 else 0
+        
+        if tc_point_prompts is not None:
+            for i, prompt in enumerate(tc_point_prompts):
+                if prompt is not None:
+                    points, labels = prompt
+                    prompt_info[f"{prefix}/tc_point_prompts_{i}_points_shape"] = list(points.shape)
+                    prompt_info[f"{prefix}/tc_point_prompts_{i}_labels_shape"] = list(labels.shape)
+                    prompt_info[f"{prefix}/tc_point_prompts_{i}_num_points"] = points.shape[1] if len(points.shape) > 1 else 0
+        
+        if ar_bbox_prompts is not None:
+            for i, bbox in enumerate(ar_bbox_prompts):
+                if bbox is not None:
+                    prompt_info[f"{prefix}/ar_bbox_prompts_{i}_shape"] = list(bbox.shape)
+                    prompt_info[f"{prefix}/ar_bbox_prompts_{i}_num_boxes"] = bbox.shape[0] if len(bbox.shape) > 1 else 0
+        
+        if tc_bbox_prompts is not None:
+            for i, bbox in enumerate(tc_bbox_prompts):
+                if bbox is not None:
+                    prompt_info[f"{prefix}/tc_bbox_prompts_{i}_shape"] = list(bbox.shape)
+                    prompt_info[f"{prefix}/tc_bbox_prompts_{i}_num_boxes"] = bbox.shape[0] if len(bbox.shape) > 1 else 0
+        
+        wandb.log(prompt_info)
+
+    def log_embeddings(self, sparse_embeddings, dense_embeddings, prefix=""):
+        """Log embedding shapes and statistics"""
+        if not self.enable_wandb_logging or not wandb.run:
+            return
+            
+        embedding_info = {}
+        
+        for i, (sparse, dense) in enumerate(zip(sparse_embeddings, dense_embeddings)):
+            embedding_info[f"{prefix}_sparse_embedding_{i}_shape"] = list(sparse.shape)
+            embedding_info[f"{prefix}_dense_embedding_{i}_shape"] = list(dense.shape)
+            embedding_info[f"{prefix}_sparse_embedding_{i}_mean"] = sparse.mean().item()
+            embedding_info[f"{prefix}_sparse_embedding_{i}_std"] = sparse.std().item()
+            embedding_info[f"{prefix}_dense_embedding_{i}_mean"] = dense.mean().item()
+            embedding_info[f"{prefix}_dense_embedding_{i}_std"] = dense.std().item()
+        
+        wandb.log(embedding_info)
+
+    def log_masks(self, masks, prefix="", log_images=False, max_images=2):
+        """Log mask shapes and optionally visualizations"""
+        if not self.enable_wandb_logging or not wandb.run:
+            return
+            
+        mask_info = {}
+        
+        for i, mask in enumerate(masks):
+            mask_info[f"{prefix}_mask_{i}_shape"] = list(mask.shape)
+            mask_info[f"{prefix}_mask_{i}_min"] = mask.min().item()
+            mask_info[f"{prefix}_mask_{i}_max"] = mask.max().item()
+            mask_info[f"{prefix}_mask_{i}_mean"] = mask.mean().item()
+            
+            if log_images and i < max_images:  # Log first few masks to avoid too many images
+                # Convert to numpy and create visualization
+                mask_np = mask.detach().cpu().numpy()
+                if len(mask_np.shape) == 4:  # [1, 1, H, W]
+                    mask_np = mask_np[0, 0]
+                elif len(mask_np.shape) == 3:  # [1, H, W]
+                    mask_np = mask_np[0]
+                
+                # Create matplotlib figure
+                fig, ax = plt.subplots(1, 1, figsize=(6, 6))
+                im = ax.imshow(mask_np, cmap='viridis')
+                ax.set_title(f'{prefix} Mask {i}')
+                ax.axis('off')
+                plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+                
+                # Log to wandb
+                mask_info[f"{prefix}_mask_{i}_image"] = wandb.Image(fig)
+                plt.close(fig)
+        
+        wandb.log(mask_info)
+
     def  forward(
             self,
             input: Union[List[torch.Tensor], None],
@@ -144,22 +235,40 @@ class ClimateSAM(nn.Module):
             tc_mask_prompts: List[Union[torch.Tensor, None]] = None
     ):
         ori_img_size = [(input[i].shape[-2], input[i].shape[-1]) for i in range(len(input))]
+        
+        # Log input information only if debugging
+        if self.enable_wandb_logging and wandb.run:
+            wandb.log({
+                "forward/input_batch_size": len(input),
+                "forward/original_img_sizes": ori_img_size,
+                "forward/input_channels": input[0].shape[0] if len(input) > 0 else 0
+            })
+        
         input = self.interpolate_input(input) # from 16x768x1152 to 16x1024x1024
         
-        # print(f"Input shape after interpolation: {input.shape}")
-        imgs = input[:, :3, :, :] # from 16x1024x1024 to 3x1024x1024
-        # imgs = self.input_adapt(input) # from 16x1024x1024 to 3x1024x1024
+        # Log interpolated input info only if debugging
+        if self.enable_wandb_logging and wandb.run:
+            wandb.log({
+                "forward/interpolated_input_shape": list(input.shape),
+                "forward/sam_img_size": list(self.sam_img_size)
+            })
         
-        # print(f"Input to imgs after adapt: {imgs.shape}")
+        imgs = input[:, :3, :, :] # from 16x1024x1024 to 3x1024x1024
         imgs = self.preprocess_images(imgs) # normalize the input images
-        # print(f"Shape of imgs after preprocessing: {imgs.shape}")
+        
         # encode the images
         image_input = imgs.clone().detach()
         image_embeddings, interm_embeddings = self.image_encoder(imgs) # shape batch x [256, 64, 64] and 12 x torch.Size([batch, 64, 64, 768])
         batch_size = len(image_embeddings)
-        # Print the shapes of the embeddings for debugging
-        # print(f"Image embeddings shape: {image_embeddings[0].shape}")
-        # print(f"Intermediate embeddings shape: {interm_embeddings[0].shape}")
+        
+        # Log image embeddings info only if debugging
+        if self.enable_wandb_logging and wandb.run:
+            wandb.log({
+                "forward/image_embeddings_batch_size": batch_size,
+                "forward/image_embeddings_shape": [list(emb.shape) for emb in image_embeddings],
+                "forward/interm_embeddings_count": len(interm_embeddings),
+                "forward/interm_embeddings_shapes": [list(emb.shape) for emb in interm_embeddings] if interm_embeddings else []
+            })
 
         ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = self.preprocess_prompts(
             ar_point_prompts=ar_point_prompts,
@@ -169,23 +278,24 @@ class ClimateSAM(nn.Module):
             ori_img_size=ori_img_size
         )
         
+        # Log prompt shapes after preprocessing only if debugging
+        if self.enable_wandb_logging:
+            self.log_prompt_shapes(ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts, "forward_preprocessed")
+        
         if self.use_prompt_generator:
             tc_masks, ar_masks = self.prompt_generator(interm_embeddings) # shape: batch x 2 x 256 x 256
             ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = None, None, None, None
-        # tc_masks, ar_masks = torch.chunk(masks, 2, dim=1) # shape: batch x 1 x 256 x 256 each
-
-        # print(f"TC masks shape: {tc_masks.shape}")
-        # print(f"AR masks shape: {ar_masks.shape}")
+            
+            # Log prompt generator outputs only if debugging
+            if self.enable_wandb_logging and wandb.run:
+                wandb.log({
+                    "forward/prompt_generator_tc_shape": list(tc_masks.shape) if tc_masks is not None else None,
+                    "forward/prompt_generator_ar_shape": list(ar_masks.shape) if ar_masks is not None else None
+                })
             
         tc_sparse_embeddings, tc_dense_embeddings = [], []
         ar_sparse_embeddings, ar_dense_embeddings = [], []
         for batch_idx in range(batch_size):
-            # print(f"ar_point_prompts shape: {ar_point_prompts[batch_idx][0].shape}")
-            # print(f"tc_point_prompts shape: {tc_point_prompts[batch_idx][0].shape}")
-            # print(f"ar_point_prompts label shape: {ar_point_prompts[batch_idx][1].shape}")
-            # print(f"tc_point_prompts label shape: {tc_point_prompts[batch_idx][1].shape}")
-            # print(f"ar_bbox_prompts shape: {ar_bbox_prompts[batch_idx].shape}")
-            # print(f"tc_bbox_prompts shape: {tc_bbox_prompts[batch_idx].shape}")
             current_tc_sparse_embedding, current_tc_dense_embeddings = self.prompt_encoder(
                 points=tc_point_prompts[batch_idx] if tc_point_prompts is not None else None,
                 boxes=tc_bbox_prompts[batch_idx] if tc_bbox_prompts is not None else None,
@@ -203,11 +313,10 @@ class ClimateSAM(nn.Module):
             tc_dense_embeddings.append(current_tc_dense_embeddings)
             ar_dense_embeddings.append(current_ar_dense_embeddings)
 
-        
-        # print(f"TC mask embedding shape: {tc_dense_embeddings.shape}")
-        # print(f"AR mask embedding shape: {ar_dense_embeddings.shape}")
-        # print(f"TC sparse embedding shape: {tc_sparse_embeddings.shape}")
-        # print(f"AR sparse embedding shape: {ar_sparse_embeddings.shape}")
+        # Log prompt embeddings only if debugging
+        if self.enable_wandb_logging:
+            self.log_embeddings(tc_sparse_embeddings, tc_dense_embeddings, "forward/tc_prompt")
+            self.log_embeddings(ar_sparse_embeddings, ar_dense_embeddings, "forward/ar_prompt")
 
         _, tc_pred_masks = self.mask_decoder(
             type = 'TC',  # either 'TQ' or 'AR'
@@ -225,7 +334,7 @@ class ClimateSAM(nn.Module):
             type = 'AR',  # either 'TQ' or 'AR'
             image_embeddings=image_embeddings,
             image_pe=[self.prompt_encoder.get_dense_pe() for _ in range(batch_size)],
-            sparse_prompt_embeddings=ar_sparse_embeddings,
+            sparse_prompt_embeddings= ar_sparse_embeddings,
             dense_prompt_embeddings= ar_dense_embeddings,
             multimask_output=False,
             interm_embeddings=interm_embeddings,
@@ -233,10 +342,10 @@ class ClimateSAM(nn.Module):
             return_all_hq_masks=return_all_hq_masks
         )
         
-        # print(f"TC predicted masks shape: {tc_pred_masks[0].shape}")
-        # print(f"Length of TC predicted masks list: {len(tc_pred_masks)}")
-        # print(f"AR predicted masks shape: {ar_pred_masks[0].shape}")
-        # print(f"Length of AR predicted masks list: {len(ar_pred_masks)}")
+        # Log predicted masks only if debugging
+        if self.enable_wandb_logging:
+            self.log_masks(tc_pred_masks, "forward/tc_predicted", log_images=self.training, max_images=2)
+            self.log_masks(ar_pred_masks, "forward/ar_predicted", log_images=self.training, max_images=2)
         
         # rescale the mask size back to original image size
         tc_postprocess_masks_hq = [m_hq.clone() for m_hq in tc_pred_masks]
@@ -247,10 +356,10 @@ class ClimateSAM(nn.Module):
         for i in range(len(ar_postprocess_masks_hq)):
             ar_postprocess_masks_hq[i] = self.postprocess(output_masks=ar_postprocess_masks_hq[i], ori_img_size=ori_img_size[i])
         
-        # Print the shapes of the postprocessed masks for debugging
-        # for i, (tc_mask, ar_mask) in enumerate(zip(tc_postprocess_masks_hq, ar_postprocess_masks_hq)):
-        #     print(f"Postprocessed TC mask {i} shape: {tc_mask.shape}")
-        #     print(f"Postprocessed AR mask {i} shape: {ar_mask.shape}")
+        # Log postprocessed masks only if debugging
+        if self.enable_wandb_logging:
+            self.log_masks(tc_postprocess_masks_hq, "forward/tc_postprocessed", log_images=self.training, max_images=2)
+            self.log_masks(ar_postprocess_masks_hq, "forward/ar_postprocessed", log_images=self.training, max_images=2)
         
         if not self.training:
             tc_postprocess_masks_hq = self.assemble_raw_masks(tc_postprocess_masks_hq) 
@@ -368,6 +477,127 @@ class ClimateSAM(nn.Module):
             r_m = torch.sum(r_m, dim=0, keepdim=True)
             masks.append(torch.clamp(r_m, max=1.0))
         return masks
+
+    @torch.no_grad()
+    def set_infer_img(self, input: Union[List[torch.Tensor], torch.Tensor]):
+        """Set and preprocess images for inference, storing features for reuse."""
+        if isinstance(input, torch.Tensor):
+            if len(input.shape) == 3:
+                input = [input]
+            elif len(input.shape) == 4:
+                input = [input[i] for i in range(input.shape[0])]
+            else:
+                raise RuntimeError(f"Unsupported input shape: {input.shape}")
+        elif not isinstance(input, list):
+            raise RuntimeError("Input must be tensor or list of tensors")
+        
+        self.ori_infer_img_size = [(img.shape[-2], img.shape[-1]) for img in input]
+        self.ori_infer_img = input
+        
+        # Preprocess images
+        input = self.interpolate_input(torch.stack(input))
+        imgs = input[:, :3, :, :]  # Take first 3 channels
+        imgs = self.preprocess_images(imgs)
+        
+        # Store features for reuse
+        self.img_features, self.interm_features = self.image_encoder(imgs)
+        return imgs
+
+    @torch.no_grad()
+    def infer(
+        self,
+        ar_point_prompts: List[Union[torch.Tensor, None]] = None,
+        tc_point_prompts: List[Union[torch.Tensor, None]] = None,
+        ar_bbox_prompts: List[Union[torch.Tensor, None]] = None,
+        tc_bbox_prompts: List[Union[torch.Tensor, None]] = None,
+        ar_mask_prompts: List[Union[torch.Tensor, None]] = None,
+        tc_mask_prompts: List[Union[torch.Tensor, None]] = None,
+        return_all_hq_masks: bool = False
+    ):
+        """Perform inference using precomputed image features."""
+        if not hasattr(self, 'img_features') or not hasattr(self, 'interm_features'):
+            raise RuntimeError("Must call set_infer_img() before infer()")
+        
+        batch_size = len(self.img_features)
+        
+        # Log inference info only if debugging
+        if self.enable_wandb_logging and wandb.run:
+            wandb.log({
+                "infer/batch_size": batch_size,
+                "infer/img_features_shapes": [list(feat.shape) for feat in self.img_features],
+                "infer/interm_features_count": len(self.interm_features)
+            })
+        
+        # Preprocess prompts
+        ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = self.preprocess_prompts(
+            ar_point_prompts=ar_point_prompts,
+            tc_point_prompts=tc_point_prompts,
+            ar_bbox_prompts=ar_bbox_prompts,
+            tc_bbox_prompts=tc_bbox_prompts,
+            ori_img_size=self.ori_infer_img_size
+        )
+        
+        # Log prompt shapes for inference only if debugging
+        if self.enable_wandb_logging:
+            self.log_prompt_shapes(ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts, "infer")
+        
+        # Handle prompt generator if enabled
+        if self.use_prompt_generator:
+            tc_masks, ar_masks = self.prompt_generator(self.interm_features)
+            ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = None, None, None, None
+        
+        # Encode prompts
+        tc_sparse_embeddings, tc_dense_embeddings = [], []
+        ar_sparse_embeddings, ar_dense_embeddings = [], []
+        
+        for batch_idx in range(batch_size):
+            current_tc_sparse, current_tc_dense = self.prompt_encoder(
+                points=tc_point_prompts[batch_idx] if tc_point_prompts is not None else None,
+                boxes=tc_bbox_prompts[batch_idx] if tc_bbox_prompts is not None else None,
+                masks=tc_mask_prompts[batch_idx] if tc_mask_prompts is not None else None,
+            )
+            
+            current_ar_sparse, current_ar_dense = self.prompt_encoder(
+                points=ar_point_prompts[batch_idx] if ar_point_prompts is not None else None,
+                boxes=ar_bbox_prompts[batch_idx] if ar_bbox_prompts is not None else None,
+                masks=ar_mask_prompts[batch_idx] if ar_mask_prompts is not None else None,
+            )
+            
+            tc_sparse_embeddings.append(current_tc_sparse)
+            ar_sparse_embeddings.append(current_ar_sparse)
+            tc_dense_embeddings.append(current_tc_dense)
+            ar_dense_embeddings.append(current_ar_dense)
+        
+        # Decode masks
+        _, tc_pred_masks = self.mask_decoder(
+            type='TC',
+            image_embeddings=self.img_features,
+            image_pe=[self.prompt_encoder.get_dense_pe() for _ in range(batch_size)],
+            sparse_prompt_embeddings=tc_sparse_embeddings,
+            dense_prompt_embeddings=tc_dense_embeddings,
+            multimask_output=False,
+            interm_embeddings=self.interm_features,
+            return_all_hq_masks=return_all_hq_masks
+        )
+        
+        _, ar_pred_masks = self.mask_decoder(
+            type='AR',
+            image_embeddings=self.img_features,
+            image_pe=[self.prompt_encoder.get_dense_pe() for _ in range(batch_size)],
+            sparse_prompt_embeddings=ar_sparse_embeddings,
+            dense_prompt_embeddings=ar_dense_embeddings,
+            multimask_output=False,
+            interm_embeddings=self.interm_features,
+            return_all_hq_masks=return_all_hq_masks
+        )
+        
+        # Postprocess masks
+        tc_postprocess_masks = [self.postprocess(m.clone(), self.ori_infer_img_size[i]) 
+                               for i, m in enumerate(tc_pred_masks)]
+        ar_postprocess_masks = [self.postprocess(m.clone(), self.ori_infer_img_size[i]) 
+                               for i, m in enumerate(ar_pred_masks)]
+        
+        return tc_postprocess_masks, ar_postprocess_masks
 
 
 
