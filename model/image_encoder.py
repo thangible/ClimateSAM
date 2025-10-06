@@ -1,4 +1,5 @@
 import torch
+import torch.utils.checkpoint as checkpoint
 from torch import nn
 from .layer_module  import Adapter
 
@@ -18,32 +19,63 @@ class SAMImageEncodeWrapper(nn.Module):
 class ClimateSAMImageEncoder(SAMImageEncodeWrapper):
 
     def __init__(
-            self, ori_sam, hq_token: torch.Tensor, fix: bool = True, mlp_ratio=0.25
+            self, 
+            ori_sam,
+            hq_token_ar: torch.Tensor, 
+            hq_token_tc: torch.Tensor,
+            fix: bool = True, 
+            mlp_ratio=0.25,
+            use_checkpoint: bool = True  # Add this parameter
     ):
         super(ClimateSAMImageEncoder, self).__init__(ori_sam=ori_sam, fix=True)
-        
-        
-        self.hq_token = hq_token
+
+        self.use_checkpoint = use_checkpoint
+        self.hq_token_ar = hq_token_ar
+        self.hq_token_tc = hq_token_tc
 
         total_p_layer = len(self.sam_img_encoder.blocks)
         prompt_dim = self.sam_img_encoder.pos_embed.shape[-1]
-        self.hq_token_proj = nn.Sequential(
-            *[Adapter(hq_token.size(-1), prompt_dim, mlp_ratio=mlp_ratio) for _ in range(total_p_layer)]
+        self.hq_token_proj_ar = nn.Sequential(
+            *[Adapter(hq_token_ar.size(-1), prompt_dim, mlp_ratio=mlp_ratio) for _ in range(total_p_layer)]
+        )
+        self.hq_token_proj_tc = nn.Sequential(
+            *[Adapter(hq_token_tc.size(-1), prompt_dim, mlp_ratio=mlp_ratio) for _ in range(total_p_layer)]
         )
 
+    def _checkpoint_block(self, block, x, hq_prompt_tokens):
+        """Wrapper function for checkpointing SAM blocks"""
+        def custom_forward(x_input, prompt_tokens):
+            return block(x_input, prompt_tokens)
+        
+        return checkpoint.checkpoint(
+            custom_forward, 
+            x, 
+            hq_prompt_tokens, 
+            use_reentrant=False
+        )
 
     def forward(self, x):
         x = self.sam_img_encoder.patch_embed(x)
         if self.sam_img_encoder.pos_embed is not None:
             x = x + self.sam_img_encoder.pos_embed
 
-        hq_prompt_tokens = []
-        for i in range(0, len(self.hq_token_proj)):
-            hq_prompt_tokens.append(self.hq_token_proj[i](self.hq_token).unsqueeze(0))
+        hq_prompt_tokens_ar = []
+        hq_prompt_tokens_tc = []
+        for i in range(0, len(self.hq_token_proj_ar)):
+            hq_prompt_tokens_ar.append(self.hq_token_proj_ar[i](self.hq_token_ar).unsqueeze(0))
+        for i in range(0, len(self.hq_token_proj_tc)):
+            hq_prompt_tokens_tc.append(self.hq_token_proj_tc[i](self.hq_token_tc).unsqueeze(0))
 
         interm_embeddings = []
         for i, blk in enumerate(self.sam_img_encoder.blocks):
-            x = blk(x, hq_prompt_tokens[i])
+            hq_prompt_tokens = (hq_prompt_tokens_ar[i] + hq_prompt_tokens_tc[i]) / 2
+            
+            # Use gradient checkpointing only during training
+            if self.use_checkpoint and self.training:
+                x = self._checkpoint_block(blk, x, hq_prompt_tokens)
+            else:
+                x = blk(x, hq_prompt_tokens)
+            
             interm_embeddings.append(x)
 
         x = self.sam_img_encoder.neck(x.permute(0, 3, 1, 2))

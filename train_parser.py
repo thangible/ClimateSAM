@@ -117,6 +117,26 @@ def parse():
     )
     
     parser.add_argument(
+        '--alpha_ar_tversky', default=0.1, type=float,
+        help="Alpha parameter for the Tversky loss for AR. Default is 0.1."
+    )
+
+    parser.add_argument(
+        '--beta_ar_tversky', default=0.9, type=float,
+        help="Beta parameter for the Tversky loss for AR. Default is 0.9."
+    )
+
+    parser.add_argument(
+        '--alpha_tc_tversky', default=0.8, type=float,
+        help="Alpha parameter for the Tversky loss for TC. Default is 0.8."
+    )
+
+    parser.add_argument(
+        '--beta_tc_tversky', default=0.2, type=float,
+        help="Beta parameter for the Tversky loss for TC. Default is 0.2."
+    )
+
+    parser.add_argument(
         '--phase', default='1', type=int, choices=[1, 2, 3, 4],
         help="Phase 1 for image_encoder, Phase 2 for prompt generator, phase 3 for input adapter, phase 4 for all"
     )
@@ -126,6 +146,24 @@ def parse():
         help="MLP ratio for the image encoder. Default is 0.25."
     )
     
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=1, 
+                   help='Number of steps to accumulate gradients before updating')
+
+    parser.add_argument(
+        '--focal_weight', default=1.0, type=float,
+        help="Weight for the Focal loss. Default is 1.0."
+    )
+
+    parser.add_argument(
+        '--tversky_weight', default=3.0, type=float,
+        help="Weight for the Tversky loss. Default is 3.0."
+    )
+    
+    parser.add_argument(
+        '--bce_weight', default=1.0, type=float,
+        help="Weight for the BCE loss. Default is 1.0."
+    )
+
     args = parser.parse_args()
 
     return args

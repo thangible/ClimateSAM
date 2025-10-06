@@ -103,7 +103,7 @@ def plot_with_projection(image, ar_pred, tc_pred, ar_gt, tc_gt, save_path, use_p
     fig.canvas.draw()
     plot_array = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
     plot_array = plot_array.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-    
+
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
     plt.close(fig)
@@ -111,52 +111,6 @@ def plot_with_projection(image, ar_pred, tc_pred, ar_gt, tc_gt, save_path, use_p
     return plot_array, title
 
 
-def calculate_focal_loss(inputs: torch.Tensor, targets: torch.Tensor, gamma: float = 5, alpha: float = 0.75):
-    """
-    Compute the Focal Loss for binary classification.
-    
-    Args:
-        inputs: A float tensor of arbitrary shape. These are the raw logits.
-        targets: A float tensor with the same shape as inputs.
-                 Contains binary labels (0 for negative, 1 for positive).
-        gamma: Focusing parameter that reduces the loss contribution from easy examples. Default is 2.0.
-        alpha: Balancing parameter to balance the importance of positive/negative examples. Default is 0.25.
-    
-    Returns:
-        A scalar focal loss value.
-    """
-    # Apply sigmoid to get probabilities
-    p = inputs.sigmoid()
-    # Compute p_t, which is p if target is 1 and (1 - p) otherwise
-    p_t = p * targets + (1 - p) * (1 - targets)
-    
-    # Compute the alpha factor according to targets
-    alpha_factor = alpha * targets + (1 - alpha) * (1 - targets)
-    # Compute focal weight
-    focal_weight = alpha_factor * (1 - p_t).pow(gamma)
-    
-    # Compute the focal loss
-    loss = -focal_weight * torch.log(p_t.clamp(min=1e-8))
-    return loss.mean()
-
-def calculate_dice_loss(inputs: torch.Tensor, targets: torch.Tensor):
-    """
-    Compute the DICE loss, similar to generalized IOU for masks
-    Args:
-        inputs: A float tensor of arbitrary shape.
-                The predictions for each example.
-        targets: A float tensor with the same shape as inputs. Stores the binary
-                 classification label for each element in inputs
-                (0 for the negative class and 1 for the positive class).
-    """
-    assert inputs.size(0) == targets.size(0)
-    inputs = inputs.sigmoid()
-    inputs, targets = inputs.flatten(1), targets.flatten(1)
-
-    numerator = 2 * (inputs * targets).sum(-1)
-    denominator = inputs.sum(-1) + targets.sum(-1)
-    loss = 1 - (numerator + 1) / (denominator + 1)
-    return loss.mean()
 
 
 ########### SET UP  ############
