@@ -116,7 +116,7 @@ from matplotlib.colors import ListedColormap
 import matplotlib.pyplot as plt
 
 def plot_mask_with_points_and_bbox(mask, ar_points=None, tc_points=None, ar_bbox=None, tc_bbox=None, 
-                                   tc_pred_mask=None, ar_pred_mask=None, radius=8):
+                                   tc_pred_mask=None, ar_pred_mask=None, radius=8, save_path='exp'):
     if isinstance(mask, torch.Tensor):
         mask = mask.cpu().numpy()
     
@@ -206,7 +206,10 @@ def plot_mask_with_points_and_bbox(mask, ar_points=None, tc_points=None, ar_bbox
     ax.legend(handles=legend_elements, loc='lower right', bbox_to_anchor=(1, -0.25), frameon=False, fontsize=14, ncol=4, columnspacing=0.5)
     ax.set_title("Mask with AR/TC Points, BBoxes and Predictions", fontsize=16)
     ax.axis('off')
-    plt.show()
+    
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
+    plt.close(fig)
     
     return fig
 

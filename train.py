@@ -278,10 +278,11 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
                 tc_bbox = tc_bbox_prompts[i]
                 tc_pred_mask = tc_masks[i]
                 ar_pred_mask = ar_masks[i]
+                save_path=os.path.join(worker_args.exp_dir, worker_args.run_name, 'images', f"epoch_{epoch}_step_{val_step}_image_{i}.png")
                 # shape_dict = {'height': mask.shape[0], 'width': mask.shape[1], 'ar_point_shape': ar_points.shape, 'tc_point_shape': tc_points.shape, 'ar_bbox_shape': ar_bbox.shape, 'tc_bbox_shape': tc_bbox.shape, 'tc_pred_shape': tc_pred_mask.shape, 'ar_pred_shape': ar_pred_mask.shape}
-                fig = plot_mask_with_points_and_bbox(mask, ar_points, tc_points, ar_bbox, tc_bbox, tc_pred_mask, ar_pred_mask, radius=8)
+                fig = plot_mask_with_points_and_bbox(mask, ar_points, tc_points, ar_bbox, tc_bbox, tc_pred_mask, ar_pred_mask, radius=8, save_path = save_path)
                 if worker_args.wandb:
-                    wandb.log({f"valid/val_step_{val_step}_image_{i}": wandb.Image(fig, caption=f"Validation Step {val_step} Image {i}"), "epoch": epoch}, step = epoch)
+                    wandb.log({f"valid/val_step_{val_step}_image_{i}": wandb.Image(fig, caption=f"Validation Step {val_step} Image {i}"), "epoch": epoch}, val_step = epoch)
                     print(f"Epoch {epoch}- Image {i} logged to W&B.")
             # imges = [images[i].cpu().numpy() for i in range(len(images))]
             # masks_ar = [ar_masks[i].cpu().numpy() for i in range(len(ar_masks))]
