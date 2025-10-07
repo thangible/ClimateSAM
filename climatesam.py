@@ -133,59 +133,59 @@ class ClimateSAM(nn.Module):
                 f"({100*trainable_params/total_params:.2f}%)")
                     
                 
-    def log_prompt_shapes(self, ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts, prefix="forward"):
-        """Log shapes and sizes of prompts"""
-        if not self.enable_wandb_logging or not wandb.run:
-            return
+    # def log_prompt_shapes(self, ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts, prefix="forward"):
+    #     """Log shapes and sizes of prompts"""
+    #     if not self.enable_wandb_logging or not wandb.run:
+    #         return
             
-        prompt_info = {}
+    #     prompt_info = {}
         
-        if ar_point_prompts is not None:
-            for i, prompt in enumerate(ar_point_prompts):
-                if prompt is not None:
-                    points, labels = prompt
-                    prompt_info[f"{prefix}/ar_point_prompts_{i}_points_shape"] = list(points.shape)
-                    prompt_info[f"{prefix}/ar_point_prompts_{i}_labels_shape"] = list(labels.shape)
-                    prompt_info[f"{prefix}/ar_point_prompts_{i}_num_points"] = points.shape[1] if len(points.shape) > 1 else 0
+    #     if ar_point_prompts is not None:
+    #         for i, prompt in enumerate(ar_point_prompts):
+    #             if prompt is not None:
+    #                 points, labels = prompt
+    #                 prompt_info[f"{prefix}/ar_point_prompts_{i}_points_shape"] = list(points.shape)
+    #                 prompt_info[f"{prefix}/ar_point_prompts_{i}_labels_shape"] = list(labels.shape)
+    #                 prompt_info[f"{prefix}/ar_point_prompts_{i}_num_points"] = points.shape[1] if len(points.shape) > 1 else 0
         
-        if tc_point_prompts is not None:
-            for i, prompt in enumerate(tc_point_prompts):
-                if prompt is not None:
-                    points, labels = prompt
-                    prompt_info[f"{prefix}/tc_point_prompts_{i}_points_shape"] = list(points.shape)
-                    prompt_info[f"{prefix}/tc_point_prompts_{i}_labels_shape"] = list(labels.shape)
-                    prompt_info[f"{prefix}/tc_point_prompts_{i}_num_points"] = points.shape[1] if len(points.shape) > 1 else 0
+    #     if tc_point_prompts is not None:
+    #         for i, prompt in enumerate(tc_point_prompts):
+    #             if prompt is not None:
+    #                 points, labels = prompt
+    #                 prompt_info[f"{prefix}/tc_point_prompts_{i}_points_shape"] = list(points.shape)
+    #                 prompt_info[f"{prefix}/tc_point_prompts_{i}_labels_shape"] = list(labels.shape)
+    #                 prompt_info[f"{prefix}/tc_point_prompts_{i}_num_points"] = points.shape[1] if len(points.shape) > 1 else 0
         
-        if ar_bbox_prompts is not None:
-            for i, bbox in enumerate(ar_bbox_prompts):
-                if bbox is not None:
-                    prompt_info[f"{prefix}/ar_bbox_prompts_{i}_shape"] = list(bbox.shape)
-                    prompt_info[f"{prefix}/ar_bbox_prompts_{i}_num_boxes"] = bbox.shape[0] if len(bbox.shape) > 1 else 0
+    #     if ar_bbox_prompts is not None:
+    #         for i, bbox in enumerate(ar_bbox_prompts):
+    #             if bbox is not None:
+    #                 prompt_info[f"{prefix}/ar_bbox_prompts_{i}_shape"] = list(bbox.shape)
+    #                 prompt_info[f"{prefix}/ar_bbox_prompts_{i}_num_boxes"] = bbox.shape[0] if len(bbox.shape) > 1 else 0
         
-        if tc_bbox_prompts is not None:
-            for i, bbox in enumerate(tc_bbox_prompts):
-                if bbox is not None:
-                    prompt_info[f"{prefix}/tc_bbox_prompts_{i}_shape"] = list(bbox.shape)
-                    prompt_info[f"{prefix}/tc_bbox_prompts_{i}_num_boxes"] = bbox.shape[0] if len(bbox.shape) > 1 else 0
+    #     if tc_bbox_prompts is not None:
+    #         for i, bbox in enumerate(tc_bbox_prompts):
+    #             if bbox is not None:
+    #                 prompt_info[f"{prefix}/tc_bbox_prompts_{i}_shape"] = list(bbox.shape)
+    #                 prompt_info[f"{prefix}/tc_bbox_prompts_{i}_num_boxes"] = bbox.shape[0] if len(bbox.shape) > 1 else 0
         
-        wandb.log(prompt_info)
+    #     wandb.log(prompt_info)
 
-    def log_embeddings(self, sparse_embeddings, dense_embeddings, prefix=""):
-        """Log embedding shapes and statistics"""
-        if not self.enable_wandb_logging or not wandb.run:
-            return
+    # def log_embeddings(self, sparse_embeddings, dense_embeddings, prefix=""):
+    #     """Log embedding shapes and statistics"""
+    #     if not self.enable_wandb_logging or not wandb.run:
+    #         return
             
-        embedding_info = {}
+    #     embedding_info = {}
         
-        for i, (sparse, dense) in enumerate(zip(sparse_embeddings, dense_embeddings)):
-            embedding_info[f"{prefix}_sparse_embedding_{i}_shape"] = list(sparse.shape)
-            embedding_info[f"{prefix}_dense_embedding_{i}_shape"] = list(dense.shape)
-            embedding_info[f"{prefix}_sparse_embedding_{i}_mean"] = sparse.mean().item()
-            embedding_info[f"{prefix}_sparse_embedding_{i}_std"] = sparse.std().item()
-            embedding_info[f"{prefix}_dense_embedding_{i}_mean"] = dense.mean().item()
-            embedding_info[f"{prefix}_dense_embedding_{i}_std"] = dense.std().item()
+    #     for i, (sparse, dense) in enumerate(zip(sparse_embeddings, dense_embeddings)):
+    #         embedding_info[f"{prefix}_sparse_embedding_{i}_shape"] = list(sparse.shape)
+    #         embedding_info[f"{prefix}_dense_embedding_{i}_shape"] = list(dense.shape)
+    #         embedding_info[f"{prefix}_sparse_embedding_{i}_mean"] = sparse.mean().item()
+    #         embedding_info[f"{prefix}_sparse_embedding_{i}_std"] = sparse.std().item()
+    #         embedding_info[f"{prefix}_dense_embedding_{i}_mean"] = dense.mean().item()
+    #         embedding_info[f"{prefix}_dense_embedding_{i}_std"] = dense.std().item()
         
-        wandb.log(embedding_info)
+    #     wandb.log(embedding_info)
 
     def log_masks(self, masks, prefix="", log_images=False, max_images=2):
         """Log mask shapes and optionally visualizations"""
@@ -278,20 +278,20 @@ class ClimateSAM(nn.Module):
             ori_img_size=ori_img_size
         )
         
-        # Log prompt shapes after preprocessing only if debugging
-        if self.enable_wandb_logging:
-            self.log_prompt_shapes(ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts, "forward_preprocessed")
+        # # Log prompt shapes after preprocessing only if debugging
+        # if self.enable_wandb_logging:
+        #     self.log_prompt_shapes(ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts, "forward_preprocessed")
         
         if self.use_prompt_generator:
             tc_masks, ar_masks = self.prompt_generator(interm_embeddings) # shape: batch x 2 x 256 x 256
             ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = None, None, None, None
             
-            # Log prompt generator outputs only if debugging
-            if self.enable_wandb_logging and wandb.run:
-                wandb.log({
-                    "forward/prompt_generator_tc_shape": list(tc_masks.shape) if tc_masks is not None else None,
-                    "forward/prompt_generator_ar_shape": list(ar_masks.shape) if ar_masks is not None else None
-                })
+            # # Log prompt generator outputs only if debugging
+            # if self.enable_wandb_logging and wandb.run:
+            #     wandb.log({
+            #         "forward/prompt_generator_tc_shape": list(tc_masks.shape) if tc_masks is not None else None,
+            #         "forward/prompt_generator_ar_shape": list(ar_masks.shape) if ar_masks is not None else None
+            #     })
             
         tc_sparse_embeddings, tc_dense_embeddings = [], []
         ar_sparse_embeddings, ar_dense_embeddings = [], []
@@ -313,10 +313,10 @@ class ClimateSAM(nn.Module):
             tc_dense_embeddings.append(current_tc_dense_embeddings)
             ar_dense_embeddings.append(current_ar_dense_embeddings)
 
-        # Log prompt embeddings only if debugging
-        if self.enable_wandb_logging:
-            self.log_embeddings(tc_sparse_embeddings, tc_dense_embeddings, "forward/tc_prompt")
-            self.log_embeddings(ar_sparse_embeddings, ar_dense_embeddings, "forward/ar_prompt")
+        # # Log prompt embeddings only if debugging
+        # if self.enable_wandb_logging:
+        #     self.log_embeddings(tc_sparse_embeddings, tc_dense_embeddings, "forward/tc_prompt")
+        #     self.log_embeddings(ar_sparse_embeddings, ar_dense_embeddings, "forward/ar_prompt")
 
         _, tc_pred_masks = self.mask_decoder(
             type = 'TC',  # either 'TQ' or 'AR'
@@ -357,9 +357,9 @@ class ClimateSAM(nn.Module):
             ar_postprocess_masks_hq[i] = self.postprocess(output_masks=ar_postprocess_masks_hq[i], ori_img_size=ori_img_size[i])
         
         # Log postprocessed masks only if debugging
-        if self.enable_wandb_logging:
-            self.log_masks(tc_postprocess_masks_hq, "forward/tc_postprocessed", log_images=self.training, max_images=2)
-            self.log_masks(ar_postprocess_masks_hq, "forward/ar_postprocessed", log_images=self.training, max_images=2)
+        # if self.enable_wandb_logging:
+        #     self.log_masks(tc_postprocess_masks_hq, "forward/tc_postprocessed", log_images=self.training, max_images=2)
+        #     self.log_masks(ar_postprocess_masks_hq, "forward/ar_postprocessed", log_images=self.training, max_images=2)
         
         if not self.training:
             tc_postprocess_masks_hq = self.assemble_raw_masks(tc_postprocess_masks_hq) 
@@ -473,7 +473,7 @@ class ClimateSAM(nn.Module):
         for r_m in raw_masks:
             # discretize the logits into a 0-1 mask
             r_m = self.discretize_mask(r_m)
-            # sum up the prediced masks by all the prompts of a single image
+                        # sum up the prediced masks by all the prompts of a single image
             r_m = torch.sum(r_m, dim=0, keepdim=True)
             masks.append(torch.clamp(r_m, max=1.0))
         return masks
@@ -520,13 +520,13 @@ class ClimateSAM(nn.Module):
         
         batch_size = len(self.img_features)
         
-        # Log inference info only if debugging
-        if self.enable_wandb_logging and wandb.run:
-            wandb.log({
-                "infer/batch_size": batch_size,
-                "infer/img_features_shapes": [list(feat.shape) for feat in self.img_features],
-                "infer/interm_features_count": len(self.interm_features)
-            })
+        # # Log inference info only if debugging
+        # if self.enable_wandb_logging and wandb.run:
+        #     wandb.log({
+        #         "infer/batch_size": batch_size,
+        #         "infer/img_features_shapes": [list(feat.shape) for feat in self.img_features],
+        #         "infer/interm_features_count": len(self.interm_features)
+        #     })
         
         # Preprocess prompts
         ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = self.preprocess_prompts(
@@ -537,9 +537,9 @@ class ClimateSAM(nn.Module):
             ori_img_size=self.ori_infer_img_size
         )
         
-        # Log prompt shapes for inference only if debugging
-        if self.enable_wandb_logging:
-            self.log_prompt_shapes(ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts, "infer")
+        # # Log prompt shapes for inference only if debugging
+        # if self.enable_wandb_logging:
+        #     self.log_prompt_shapes(ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts, "infer")
         
         # Handle prompt generator if enabled
         if self.use_prompt_generator:
@@ -568,10 +568,10 @@ class ClimateSAM(nn.Module):
             tc_dense_embeddings.append(current_tc_dense)
             ar_dense_embeddings.append(current_ar_dense)
         
-        # Log prompt embeddings only if debugging
-        if self.enable_wandb_logging:
-            self.log_embeddings(tc_sparse_embeddings, tc_dense_embeddings, "infer/tc_prompt")
-            self.log_embeddings(ar_sparse_embeddings, ar_dense_embeddings, "infer/ar_prompt")
+        # # Log prompt embeddings only if debugging
+        # if self.enable_wandb_logging:
+        #     self.log_embeddings(tc_sparse_embeddings, tc_dense_embeddings, "infer/tc_prompt")
+        #     self.log_embeddings(ar_sparse_embeddings, ar_dense_embeddings, "infer/ar_prompt")
         
         # Decode masks
         _, tc_pred_masks = self.mask_decoder(
@@ -597,9 +597,9 @@ class ClimateSAM(nn.Module):
         )
         
         # Log predicted masks only if debugging
-        if self.enable_wandb_logging:
-            self.log_masks(tc_pred_masks, "infer/tc_predicted", log_images=False, max_images=2)
-            self.log_masks(ar_pred_masks, "infer/ar_predicted", log_images=False, max_images=2)
+        # if self.enable_wandb_logging:
+        #     self.log_masks(tc_pred_masks, "infer/tc_predicted", log_images=False, max_images=2)
+        #     self.log_masks(ar_pred_masks, "infer/ar_predicted", log_images=False, max_images=2)
         
         # Postprocess masks to original image size
         tc_postprocess_masks = []
@@ -615,13 +615,17 @@ class ClimateSAM(nn.Module):
         
         # Log postprocessed masks only if debugging
         if self.enable_wandb_logging:
-            self.log_masks(tc_postprocess_masks, "infer/tc_postprocessed", log_images=False, max_images=2)
-            self.log_masks(ar_postprocess_masks, "infer/ar_postprocessed", log_images=False, max_images=2)
+            self.log_masks(tc_postprocess_masks, "infer/tc_postprocessed", log_images=True, max_images=2)
+            self.log_masks(ar_postprocess_masks, "infer/ar_postprocessed", log_images=True, max_images=2)
         
         # Assemble raw masks (discretize and combine)
         tc_postprocess_masks = self.assemble_raw_masks(tc_postprocess_masks)
         ar_postprocess_masks = self.assemble_raw_masks(ar_postprocess_masks)
-        
+
+        if self.enable_wandb_logging:
+            self.log_masks(tc_postprocess_masks, "infer/tc_postprocessed", log_images=True, max_images=2)
+            self.log_masks(ar_postprocess_masks, "infer/ar_postprocessed", log_images=True, max_images=2)
+
         return tc_postprocess_masks, ar_postprocess_masks
 
 
