@@ -226,72 +226,49 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
         """
         Plot a mask with AR/TC point and/or box prompts. Optionally log to wandb.
 
-        Parameters:
-          mask: numpy.ndarray or torch.Tensor, shape [H, W]
-          ar_points: numpy.ndarray or torch.Tensor, shape [N, 2] or None
-          tc_points: numpy.ndarray or torch.Tensor, shape [N, 2] or None
-          ar_bbox: numpy.ndarray or torch.Tensor, shape [M, 4] (x1, y1, x2, y2) or None
-          tc_bbox: numpy.ndarray or torch.Tensor, shape [K, 4] (x1, y1, x2, y2) or None
-          color_ar: str, color for AR prompts
-          color_tc: str, color for TC prompts
-          radius: int, radius of the circles
-          wandb_log: bool, whether to log to wandb
-          wandb_key: str, wandb log key
-          epoch: int, epoch for logging
+        All inputs are torch.Tensor.
         """
         import matplotlib.pyplot as plt
 
-        if isinstance(mask, torch.Tensor):
-            mask = mask.cpu().numpy()
+        mask = mask.cpu().numpy()
         plt.figure()
         plt.imshow(mask, cmap='gray')
 
         # Plot AR point prompts
         if ar_points is not None:
-            points = ar_points
-            if isinstance(points, torch.Tensor):
-                points = points.cpu().numpy()
-            if points.ndim == 3:
-                points = points.squeeze(1)
+            points = ar_points.cpu()
             for x, y in points:
-                circle = plt.Circle((x, y), radius, color=color_ar, fill=False, linewidth=2)
+                circle = plt.Circle((x.item(), y.item()), radius, color=color_ar, fill=False, linewidth=2)
                 plt.gca().add_patch(circle)
 
         # Plot TC point prompts
         if tc_points is not None:
-            points = tc_points
-            if isinstance(points, torch.Tensor):
-                points = points.cpu().numpy()
-            if points.ndim == 3:
-                points = points.squeeze(1)
+            points = tc_points.cpu()
             for x, y in points:
-                circle = plt.Circle((x, y), radius, color=color_tc, fill=False, linewidth=2)
+                circle = plt.Circle((x.item(), y.item()), radius, color=color_tc, fill=False, linewidth=2)
                 plt.gca().add_patch(circle)
 
         # Plot AR box prompts
         if ar_bbox is not None:
-            boxes = ar_bbox
-            if isinstance(boxes, torch.Tensor):
-                boxes = boxes.cpu().numpy()
+            boxes = ar_bbox.cpu()
             for box in boxes:
-                x1, y1, x2, y2 = box
+                x1, y1, x2, y2 = box.tolist()
                 rect = plt.Rectangle((x1, y1), x2 - x1, y2 - y1, edgecolor=color_ar, fill=False, linewidth=2)
                 plt.gca().add_patch(rect)
 
         # Plot TC box prompts
         if tc_bbox is not None:
-            boxes = tc_bbox
-            if isinstance(boxes, torch.Tensor):
-                boxes = boxes.cpu().numpy()
+            boxes = tc_bbox.cpu()
             for box in boxes:
-                x1, y1, x2, y2 = box
+                x1, y1, x2, y2 = box.tolist()
                 rect = plt.Rectangle((x1, y1), x2 - x1, y2 - y1, edgecolor=color_tc, fill=False, linewidth=2)
                 plt.gca().add_patch(rect)
 
         plt.title("Mask with Prompts")
         plt.axis('off')
 
-        wandb.log({wandb_key: wandb.Image(plt.gcf()), "epoch": epoch}, step=epoch)
+        if wandb_log and wandb_key is not None:
+            wandb.log({wandb_key: wandb.Image(plt.gcf()), "epoch": epoch}, step=epoch)
 
 
     # Example usage inside validation loop:
