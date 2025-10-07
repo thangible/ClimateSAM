@@ -130,8 +130,8 @@ def plot_mask_with_points_and_bbox(mask, ar_points=None, tc_points=None, ar_bbox
         plt.Line2D([0], [0], marker='x', color='w', label='TC Point', markerfacecolor='cyan', markersize=10, markeredgecolor='black'),
         plt.Line2D([0], [0], color='red', lw=2, label='AR BBox'),
         plt.Line2D([0], [0], color='cyan', lw=2, label='TC BBox'),
-        plt.Line2D([0], [0], color='yellow', lw=0, marker='s', label='Label 1 (yellow)', markerfacecolor='yellow', markersize=10),
-        plt.Line2D([0], [0], color='blue', lw=0, marker='s', label='Label 2 (blue)', markerfacecolor='blue', markersize=10),
+        plt.Line2D([0], [0], color='yellow', lw=0, marker='s', label='TC Groundtruth', markerfacecolor='yellow', markersize=10),
+        plt.Line2D([0], [0], color='blue', lw=0, marker='s', label='AR Groundtruth', markerfacecolor='blue', markersize=10),
         plt.Line2D([0], [0], color='black', lw=0, marker='s', label='Background', markerfacecolor='black', markersize=10)
     ]
 

@@ -232,24 +232,27 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
         # Set inference images once
         images = model.set_infer_img(batch['input'])
         
-            
+        ar_point_prompts=batch['ar_point_prompts']
+        tc_point_prompts=batch['tc_point_prompts']
+        ar_bbox_prompts=batch['ar_bbox_prompts']
+        tc_bbox_prompts=batch['tc_bbox_prompts']
         # Perform inference with prompts
         tc_masks, ar_masks = model.infer(
-            ar_point_prompts=batch['ar_point_prompts'],
-            tc_point_prompts=batch['tc_point_prompts'],
-            ar_bbox_prompts=batch['ar_bbox_prompts'],
-            tc_bbox_prompts=batch['tc_bbox_prompts']
+            ar_point_prompts=ar_point_prompts,
+            tc_point_prompts=tc_point_prompts,
+            ar_bbox_prompts=ar_bbox_prompts,
+            tc_bbox_prompts=tc_bbox_prompts
         )
         
         
         
-        if worker_args.wandb:
-            # Log predicted masks for the first image in the batch
-            wandb.log({
-                f"valid/tc_mask_pred_step_{val_step}": wandb.Image(tc_masks[0].cpu().numpy(), caption=f"TC Mask Prediction (step {val_step})"),
-                f"valid/ar_mask_pred_step_{val_step}": wandb.Image(ar_masks[0].cpu().numpy(), caption=f"AR Mask Prediction (step {val_step})"),
-                "epoch": epoch
-            }, step=epoch)
+        # if worker_args.wandb:
+        #     # Log predicted masks for the first image in the batch
+        #     wandb.log({
+        #         f"valid/tc_mask_pred_step_{val_step}": wandb.Image(tc_masks[0].cpu().numpy(), caption=f"TC Mask Prediction (step {val_step})"),
+        #         f"valid/ar_mask_pred_step_{val_step}": wandb.Image(ar_masks[0].cpu().numpy(), caption=f"AR Mask Prediction (step {val_step})"),
+        #         "epoch": epoch
+        #     }, step=epoch)
         
         # Rest of validation logic remains the same...
         masks_gt = batch['gt_mask']
@@ -269,12 +272,13 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
         if val_step == 1:
             for i in range(len(tc_masks)):
                 mask = masks_gt[i]
-                ar_points = batch['ar_point_prompts'][i]
-                tc_points = batch['tc_point_prompts'][i]
-                ar_bbox = batch['ar_bbox_prompts'][i]
-                tc_bbox = batch['tc_bbox_prompts'][i]
+                ar_points = ar_point_prompts[i]
+                tc_points = tc_point_prompts[i]
+                ar_bbox = ar_bbox_prompts[i]
+                tc_bbox = tc_bbox_prompts[i]
                 tc_pred_mask = tc_masks[i]
                 ar_pred_mask = ar_masks[i]
+                # shape_dict = {'height': mask.shape[0], 'width': mask.shape[1], 'ar_point_shape': ar_points.shape, 'tc_point_shape': tc_points.shape, 'ar_bbox_shape': ar_bbox.shape, 'tc_bbox_shape': tc_bbox.shape, 'tc_pred_shape': tc_pred_mask.shape, 'ar_pred_shape': ar_pred_mask.shape}
                 fig = plot_mask_with_points_and_bbox(mask, ar_points, tc_points, ar_bbox, tc_bbox, tc_pred_mask, ar_pred_mask, radius=8)
                 if worker_args.wandb:
                     wandb.log({f"valid/val_step_{val_step}_image_{i}": wandb.Image(fig, caption=f"Validation Step {val_step} Image {i}"), "epoch": epoch}, step = epoch)
@@ -494,7 +498,7 @@ if __name__ == '__main__':
             os.environ['CUDA_VISIBLE_DEVICES'] = str(used_gpu[0])
         args.used_gpu, args.gpu_num = used_gpu, len(used_gpu)
     else:
-        args.used_gpu, args.gpu_num = [], 01
+        args.used_gpu, args.gpu_num = [], 1
 
     # launch the experiment process for both single-GPU and multi-GPU settings
     if len(args.used_gpu) == 1:
