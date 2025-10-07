@@ -187,38 +187,46 @@ class ClimateSAM(nn.Module):
         
     #     wandb.log(embedding_info)
 
-    def log_masks(self, masks, prefix="", log_images=False, max_images=2):
-        """Log mask shapes and optionally visualizations"""
+    def log_masks(self, masks, prefix="", log_images=False, max_images=2, binary=False):
+        """Log mask shapes and optionally visualizations
+
+        Args:
+            masks: list of torch.Tensor masks
+            prefix: prefix for wandb logging keys
+            log_images: whether to log mask images
+            max_images: max number of images to log
+            binary: if True, visualize mask as binary (0/1), else use colormap
+        """
         if not self.enable_wandb_logging or not wandb.run:
             return
-            
+
         mask_info = {}
-        
+
         for i, mask in enumerate(masks):
             mask_info[f"{prefix}_mask_{i}_shape"] = list(mask.shape)
             mask_info[f"{prefix}_mask_{i}_min"] = mask.min().item()
             mask_info[f"{prefix}_mask_{i}_max"] = mask.max().item()
             mask_info[f"{prefix}_mask_{i}_mean"] = mask.mean().item()
-            
-            if log_images and i < max_images:  # Log first few masks to avoid too many images
-                # Convert to numpy and create visualization
+
+            if log_images and i < max_images:
                 mask_np = mask.detach().cpu().numpy()
-                if len(mask_np.shape) == 4:  # [1, 1, H, W]
+                if len(mask_np.shape) == 4:
                     mask_np = mask_np[0, 0]
-                elif len(mask_np.shape) == 3:  # [1, H, W]
+                elif len(mask_np.shape) == 3:
                     mask_np = mask_np[0]
-                
-                # Create matplotlib figure
+
                 fig, ax = plt.subplots(1, 1, figsize=(6, 6))
-                im = ax.imshow(mask_np, cmap='viridis')
+                if binary:
+                    im = ax.imshow(mask_np, cmap='gray', vmin=0, vmax=1)
+                else:
+                    im = ax.imshow(mask_np, cmap='viridis')
+                    plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
                 ax.set_title(f'{prefix} Mask {i}')
                 ax.axis('off')
-                plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-                
-                # Log to wandb
+
                 mask_info[f"{prefix}_mask_{i}_image"] = wandb.Image(fig)
                 plt.close(fig)
-        
+
         wandb.log(mask_info)
 
     def  forward(
@@ -623,8 +631,8 @@ class ClimateSAM(nn.Module):
         ar_postprocess_masks = self.assemble_raw_masks(ar_postprocess_masks)
 
         if self.enable_wandb_logging:
-            self.log_masks(tc_postprocess_masks, "infer/tc_postprocessed", log_images=True, max_images=2)
-            self.log_masks(ar_postprocess_masks, "infer/ar_postprocessed", log_images=True, max_images=2)
+            self.log_masks(tc_postprocess_masks, "infer/tc_postprocessed", log_images=True, max_images=2, binary=True)
+            self.log_masks(ar_postprocess_masks, "infer/ar_postprocessed", log_images=True, max_images=2, binary=True)
 
         return tc_postprocess_masks, ar_postprocess_masks
 
