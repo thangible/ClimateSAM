@@ -221,54 +221,136 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
 def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args):
     
     import matplotlib.pyplot as plt
-
-    def plot_mask_with_prompts(mask, ar_points=None, tc_points=None, ar_bbox=None, tc_bbox=None, color_ar='blue', color_tc='red', radius=8, wandb_log=False, wandb_key=None, epoch=None):
+    def plot_mask_with_prompts(mask, ar_points=None, tc_points=None, ar_bbox=None, tc_bbox=None, 
+                          wandb_log=False, wandb_key="mask_with_prompts", epoch=None):
         """
-        Plot a mask with AR/TC point and/or box prompts. Optionally log to wandb.
-
-        All inputs are torch.Tensor.
+        Plot ground truth mask with various prompts overlaid for visualization.
+        
+        Args:
+            mask: Ground truth mask tensor (H, W) where 0=background, 1=TC, 2=AR
+            ar_points: AR point prompts tensor of shape (N, 3) where each point is [x, y, label]
+            tc_points: TC point prompts tensor of shape (N, 3) where each point is [x, y, label]
+            ar_bbox: AR bounding box prompts tensor of shape (N, 4) where each box is [x1, y1, x2, y2]
+            tc_bbox: TC bounding box prompts tensor of shape (N, 4) where each box is [x1, y1, x2, y2]
+            wandb_log: Whether to log to wandb
+            wandb_key: Key for wandb logging
+            epoch: Current epoch number
+        
+        Returns:
+            matplotlib figure object
         """
         import matplotlib.pyplot as plt
-
-        mask = mask.cpu().numpy()
-        plt.figure()
-        plt.imshow(mask, cmap='gray')
-
+        import matplotlib.patches as patches
+        import numpy as np
+        
+        # Convert mask to numpy if it's a tensor
+        if hasattr(mask, 'cpu'):
+            mask_np = mask.cpu().numpy()
+        else:
+            mask_np = mask
+        
+        # Squeeze any extra dimensions
+        if len(mask_np.shape) > 2:
+            mask_np = mask_np.squeeze()
+        
+        # Create figure and axis
+        fig, ax = plt.subplots(1, 1, figsize=(10, 8))
+        
+        # Create colored mask: background=black, TC=blue, AR=red
+        colored_mask = np.zeros((*mask_np.shape, 3))
+        colored_mask[mask_np == 1] = [0, 0, 1]  # TC = blue
+        colored_mask[mask_np == 2] = [1, 0, 0]  # AR = red
+        
+        ax.imshow(colored_mask, alpha=0.7)
+        ax.set_title(f'Ground Truth Mask with Prompts (Epoch {epoch})')
+        
         # Plot AR point prompts
-        if ar_points is not None:
-            points = ar_points.cpu()
-            for x, y in points:
-                circle = plt.Circle((x.item(), y.item()), radius, color=color_ar, fill=False, linewidth=2)
-                plt.gca().add_patch(circle)
-
+        if ar_points is not None and len(ar_points) > 0:
+            if hasattr(ar_points, 'cpu'):
+                ar_points_np = ar_points.cpu().numpy()
+            else:
+                ar_points_np = ar_points
+                
+            for point in ar_points_np:
+                x, y, label = point[0], point[1], point[2]
+                color = 'yellow' if label == 1 else 'orange'  # positive=yellow, negative=orange
+                marker = 'o' if label == 1 else 'x'
+                ax.scatter(x, y, c=color, s=100, marker=marker, edgecolors='black', linewidth=2, label=f'AR Point ({label})')
+        
         # Plot TC point prompts
-        if tc_points is not None:
-            points = tc_points.cpu()
-            for x, y in points:
-                circle = plt.Circle((x.item(), y.item()), radius, color=color_tc, fill=False, linewidth=2)
-                plt.gca().add_patch(circle)
-
-        # Plot AR box prompts
-        if ar_bbox is not None:
-            boxes = ar_bbox.cpu()
-            for box in boxes:
-                x1, y1, x2, y2 = box.tolist()
-                rect = plt.Rectangle((x1, y1), x2 - x1, y2 - y1, edgecolor=color_ar, fill=False, linewidth=2)
-                plt.gca().add_patch(rect)
-
-        # Plot TC box prompts
-        if tc_bbox is not None:
-            boxes = tc_bbox.cpu()
-            for box in boxes:
-                x1, y1, x2, y2 = box.tolist()
-                rect = plt.Rectangle((x1, y1), x2 - x1, y2 - y1, edgecolor=color_tc, fill=False, linewidth=2)
-                plt.gca().add_patch(rect)
-
-        plt.title("Mask with Prompts")
-        plt.axis('off')
-
-        if wandb_log and wandb_key is not None:
-            wandb.log({wandb_key: wandb.Image(plt.gcf()), "epoch": epoch}, step=epoch)
+        if tc_points is not None and len(tc_points) > 0:
+            if hasattr(tc_points, 'cpu'):
+                tc_points_np = tc_points.cpu().numpy()
+            else:
+                tc_points_np = tc_points
+                
+            for point in tc_points_np:
+                x, y, label = point[0], point[1], point[2]
+                color = 'cyan' if label == 1 else 'purple'  # positive=cyan, negative=purple
+                marker = 'o' if label == 1 else 'x'
+                ax.scatter(x, y, c=color, s=100, marker=marker, edgecolors='black', linewidth=2, label=f'TC Point ({label})')
+        
+        # Plot AR bounding boxes
+        if ar_bbox is not None and len(ar_bbox) > 0:
+            if hasattr(ar_bbox, 'cpu'):
+                ar_bbox_np = ar_bbox.cpu().numpy()
+            else:
+                ar_bbox_np = ar_bbox
+                
+            for bbox in ar_bbox_np:
+                x1, y1, x2, y2 = bbox[0], bbox[1], bbox[2], bbox[3]
+                width = x2 - x1
+                height = y2 - y1
+                rect = patches.Rectangle((x1, y1), width, height, linewidth=3, 
+                                    edgecolor='yellow', facecolor='none', 
+                                    linestyle='--', label='AR BBox')
+                ax.add_patch(rect)
+        
+        # Plot TC bounding boxes
+        if tc_bbox is not None and len(tc_bbox) > 0:
+            if hasattr(tc_bbox, 'cpu'):
+                tc_bbox_np = tc_bbox.cpu().numpy()
+            else:
+                tc_bbox_np = tc_bbox
+                
+            for bbox in tc_bbox_np:
+                x1, y1, x2, y2 = bbox[0], bbox[1], bbox[2], bbox[3]
+                width = x2 - x1
+                height = y2 - y1
+                rect = patches.Rectangle((x1, y1), width, height, linewidth=3, 
+                                    edgecolor='cyan', facecolor='none', 
+                                    linestyle='--', label='TC BBox')
+                ax.add_patch(rect)
+        
+        # Add legend (remove duplicates)
+        handles, labels = ax.get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        ax.legend(by_label.values(), by_label.keys(), loc='upper right', bbox_to_anchor=(1.0, 1.0))
+        
+        # Add color legend for mask
+        legend_elements = [
+            patches.Patch(color='blue', label='TC (Tropical Cyclone)'),
+            patches.Patch(color='red', label='AR (Atmospheric River)'),
+            patches.Patch(color='black', label='Background')
+        ]
+        ax.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(0.0, 1.0))
+        
+        ax.set_xlim(0, mask_np.shape[1])
+        ax.set_ylim(mask_np.shape[0], 0)  # Flip y-axis for image coordinates
+        ax.set_xlabel('X coordinate')
+        ax.set_ylabel('Y coordinate')
+        
+        plt.tight_layout()
+        
+        # Log to wandb if requested
+        if wandb_log:
+            import wandb
+            wandb.log({
+                wandb_key: wandb.Image(fig, caption=f"Ground truth mask with prompts - Epoch {epoch}")
+            }, step=epoch)
+        
+        return fig
+    
 
 
     # Example usage inside validation loop:
