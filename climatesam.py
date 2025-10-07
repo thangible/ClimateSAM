@@ -245,21 +245,21 @@ class ClimateSAM(nn.Module):
         ori_img_size = [(input[i].shape[-2], input[i].shape[-1]) for i in range(len(input))]
         
         # Log input information only if debugging
-        if self.enable_wandb_logging and wandb.run:
-            wandb.log({
-                "forward/input_batch_size": len(input),
-                "forward/original_img_sizes": ori_img_size,
-                "forward/input_channels": input[0].shape[0] if len(input) > 0 else 0
-            })
+        # if self.enable_wandb_logging and wandb.run:
+        #     wandb.log({
+        #         "forward/input_batch_size": len(input),
+        #         "forward/original_img_sizes": ori_img_size,
+        #         "forward/input_channels": input[0].shape[0] if len(input) > 0 else 0
+        #     })
         
         input = self.interpolate_input(input) # from 16x768x1152 to 16x1024x1024
         
         # Log interpolated input info only if debugging
-        if self.enable_wandb_logging and wandb.run:
-            wandb.log({
-                "forward/interpolated_input_shape": list(input.shape),
-                "forward/sam_img_size": list(self.sam_img_size)
-            })
+        # if self.enable_wandb_logging and wandb.run:
+        #     wandb.log({
+        #         "forward/interpolated_input_shape": list(input.shape),
+        #         "forward/sam_img_size": list(self.sam_img_size)
+        #     })
         
         imgs = input[:, :3, :, :] # from 16x1024x1024 to 3x1024x1024
         imgs = self.preprocess_images(imgs) # normalize the input images
@@ -270,13 +270,13 @@ class ClimateSAM(nn.Module):
         batch_size = len(image_embeddings)
         
         # Log image embeddings info only if debugging
-        if self.enable_wandb_logging and wandb.run:
-            wandb.log({
-                "forward/image_embeddings_batch_size": batch_size,
-                "forward/image_embeddings_shape": [list(emb.shape) for emb in image_embeddings],
-                "forward/interm_embeddings_count": len(interm_embeddings),
-                "forward/interm_embeddings_shapes": [list(emb.shape) for emb in interm_embeddings] if interm_embeddings else []
-            })
+        # if self.enable_wandb_logging and wandb.run:
+        #     wandb.log({
+        #         "forward/image_embeddings_batch_size": batch_size,
+        #         "forward/image_embeddings_shape": [list(emb.shape) for emb in image_embeddings],
+        #         "forward/interm_embeddings_count": len(interm_embeddings),
+        #         "forward/interm_embeddings_shapes": [list(emb.shape) for emb in interm_embeddings] if interm_embeddings else []
+        #     })
 
         ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = self.preprocess_prompts(
             ar_point_prompts=ar_point_prompts,
@@ -351,9 +351,9 @@ class ClimateSAM(nn.Module):
         )
         
         # Log predicted masks only if debugging
-        if self.enable_wandb_logging:
-            self.log_masks(tc_pred_masks, "forward/tc_predicted", log_images=self.training, max_images=2)
-            self.log_masks(ar_pred_masks, "forward/ar_predicted", log_images=self.training, max_images=2)
+        # if self.enable_wandb_logging:
+        #     self.log_masks(tc_pred_masks, "forward/tc_predicted", log_images=self.training, max_images=2)
+        #     self.log_masks(ar_pred_masks, "forward/ar_predicted", log_images=self.training, max_images=2)
         
         # rescale the mask size back to original image size
         tc_postprocess_masks_hq = [m_hq.clone() for m_hq in tc_pred_masks]

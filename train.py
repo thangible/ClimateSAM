@@ -305,23 +305,23 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
         # Set inference images once
         images = model.set_infer_img(batch['input'])
         
-    # Plot masks with prompts for the first image in the batch
-    if val_step == 1 and worker_args.wandb:
-        mask = batch['gt_mask'][0]
-        ar_points = batch['ar_point_prompts'][0] if 'ar_point_prompts' in batch else None
-        tc_points = batch['tc_point_prompts'][0] if 'tc_point_prompts' in batch else None
-        ar_bbox = batch['ar_bbox_prompts'][0] if 'ar_bbox_prompts' in batch else None
-        tc_bbox = batch['tc_bbox_prompts'][0] if 'tc_bbox_prompts' in batch else None
-        plot_mask_with_prompts(
-        mask=mask,
-        ar_points=ar_points,
-        tc_points=tc_points,
-        ar_bbox=ar_bbox,
-        tc_bbox=tc_bbox,
-        wandb_log=True,
-        wandb_key=f"valid/mask_with_prompts_step_{val_step}",
-        epoch=epoch
-        )
+        # Plot masks with prompts for the first image in the batch
+        if val_step == 1 and worker_args.wandb:
+            mask = batch['gt_mask'][0]
+            ar_points = batch['ar_point_prompts'][0] if 'ar_point_prompts' in batch else None
+            tc_points = batch['tc_point_prompts'][0] if 'tc_point_prompts' in batch else None
+            ar_bbox = batch['ar_bbox_prompts'][0] if 'ar_bbox_prompts' in batch else None
+            tc_bbox = batch['tc_bbox_prompts'][0] if 'tc_bbox_prompts' in batch else None
+            plot_mask_with_prompts(
+            mask=mask,
+            ar_points=ar_points,
+            tc_points=tc_points,
+            ar_bbox=ar_bbox,
+            tc_bbox=tc_bbox,
+            wandb_log=True,
+            wandb_key=f"valid/mask_with_prompts_step_{val_step}",
+            epoch=epoch
+            )
         
         # Perform inference with prompts
         tc_masks, ar_masks = model.infer(
