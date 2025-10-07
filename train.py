@@ -7,7 +7,7 @@ import torch.multiprocessing as mp
 import torch.nn.functional as F
 from functools import partial
 from torch.utils.data import DataLoader
-from train_util import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection
+from train_util import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox
 from loss_function import ClimateLoss, compute_climate_loss
 from tqdm import tqdm
 from contextlib import nullcontext
@@ -220,138 +220,6 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
 @torch.no_grad()
 def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args):
     
-    import matplotlib.pyplot as plt
-    def plot_mask_with_prompts(mask, ar_points=None, tc_points=None, ar_bbox=None, tc_bbox=None, 
-                          wandb_log=False, wandb_key="mask_with_prompts", epoch=None):
-        """
-        Plot ground truth mask with various prompts overlaid for visualization.
-        
-        Args:
-            mask: Ground truth mask tensor (H, W) where 0=background, 1=TC, 2=AR
-            ar_points: AR point prompts tensor of shape (N, 3) where each point is [x, y, label]
-            tc_points: TC point prompts tensor of shape (N, 3) where each point is [x, y, label]
-            ar_bbox: AR bounding box prompts tensor of shape (N, 4) where each box is [x1, y1, x2, y2]
-            tc_bbox: TC bounding box prompts tensor of shape (N, 4) where each box is [x1, y1, x2, y2]
-            wandb_log: Whether to log to wandb
-            wandb_key: Key for wandb logging
-            epoch: Current epoch number
-        
-        Returns:
-            matplotlib figure object
-        """
-        import matplotlib.pyplot as plt
-        import matplotlib.patches as patches
-        import numpy as np
-        
-        # Convert mask to numpy if it's a tensor
-        if hasattr(mask, 'cpu'):
-            mask_np = mask.cpu().numpy()
-        else:
-            mask_np = mask
-        
-        # Squeeze any extra dimensions
-        if len(mask_np.shape) > 2:
-            mask_np = mask_np.squeeze()
-        
-        # Create figure and axis
-        fig, ax = plt.subplots(1, 1, figsize=(10, 8))
-        
-        # Create colored mask: background=black, TC=blue, AR=red
-        colored_mask = np.zeros((*mask_np.shape, 3))
-        colored_mask[mask_np == 1] = [0, 0, 1]  # TC = blue
-        colored_mask[mask_np == 2] = [1, 0, 0]  # AR = red
-        
-        ax.imshow(colored_mask, alpha=0.7)
-        ax.set_title(f'Ground Truth Mask with Prompts (Epoch {epoch})')
-        
-        # Plot AR point prompts
-        if ar_points is not None and len(ar_points) > 0:
-            if hasattr(ar_points, 'cpu'):
-                ar_points_np = ar_points.cpu().numpy()
-            else:
-                ar_points_np = ar_points
-                
-            for point in ar_points_np:
-                x, y, label = point[0], point[1], point[2]
-                color = 'yellow' if label == 1 else 'orange'  # positive=yellow, negative=orange
-                marker = 'o' if label == 1 else 'x'
-                ax.scatter(x, y, c=color, s=100, marker=marker, edgecolors='black', linewidth=2, label=f'AR Point ({label})')
-        
-        # Plot TC point prompts
-        if tc_points is not None and len(tc_points) > 0:
-            if hasattr(tc_points, 'cpu'):
-                tc_points_np = tc_points.cpu().numpy()
-            else:
-                tc_points_np = tc_points
-                
-            for point in tc_points_np:
-                x, y, label = point[0], point[1], point[2]
-                color = 'cyan' if label == 1 else 'purple'  # positive=cyan, negative=purple
-                marker = 'o' if label == 1 else 'x'
-                ax.scatter(x, y, c=color, s=100, marker=marker, edgecolors='black', linewidth=2, label=f'TC Point ({label})')
-        
-        # Plot AR bounding boxes
-        if ar_bbox is not None and len(ar_bbox) > 0:
-            if hasattr(ar_bbox, 'cpu'):
-                ar_bbox_np = ar_bbox.cpu().numpy()
-            else:
-                ar_bbox_np = ar_bbox
-                
-            for bbox in ar_bbox_np:
-                x1, y1, x2, y2 = bbox[0], bbox[1], bbox[2], bbox[3]
-                width = x2 - x1
-                height = y2 - y1
-                rect = patches.Rectangle((x1, y1), width, height, linewidth=3, 
-                                    edgecolor='yellow', facecolor='none', 
-                                    linestyle='--', label='AR BBox')
-                ax.add_patch(rect)
-        
-        # Plot TC bounding boxes
-        if tc_bbox is not None and len(tc_bbox) > 0:
-            if hasattr(tc_bbox, 'cpu'):
-                tc_bbox_np = tc_bbox.cpu().numpy()
-            else:
-                tc_bbox_np = tc_bbox
-                
-            for bbox in tc_bbox_np:
-                x1, y1, x2, y2 = bbox[0], bbox[1], bbox[2], bbox[3]
-                width = x2 - x1
-                height = y2 - y1
-                rect = patches.Rectangle((x1, y1), width, height, linewidth=3, 
-                                    edgecolor='cyan', facecolor='none', 
-                                    linestyle='--', label='TC BBox')
-                ax.add_patch(rect)
-        
-        # Add legend (remove duplicates)
-        handles, labels = ax.get_legend_handles_labels()
-        by_label = dict(zip(labels, handles))
-        ax.legend(by_label.values(), by_label.keys(), loc='upper right', bbox_to_anchor=(1.0, 1.0))
-        
-        # Add color legend for mask
-        legend_elements = [
-            patches.Patch(color='blue', label='TC (Tropical Cyclone)'),
-            patches.Patch(color='red', label='AR (Atmospheric River)'),
-            patches.Patch(color='black', label='Background')
-        ]
-        ax.legend(handles=legend_elements, loc='upper left', bbox_to_anchor=(0.0, 1.0))
-        
-        ax.set_xlim(0, mask_np.shape[1])
-        ax.set_ylim(mask_np.shape[0], 0)  # Flip y-axis for image coordinates
-        ax.set_xlabel('X coordinate')
-        ax.set_ylabel('Y coordinate')
-        
-        plt.tight_layout()
-        
-        # Log to wandb if requested
-        if wandb_log:
-            import wandb
-            wandb.log({
-                wandb_key: wandb.Image(fig, caption=f"Ground truth mask with prompts - Epoch {epoch}")
-            }, step=epoch)
-        
-        return fig
-    
-
 
     # Example usage inside validation loop:
     # plot_mask_with_points(batch['gt_mask'][0], batch['tc_point_prompts'])
@@ -364,24 +232,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
         # Set inference images once
         images = model.set_infer_img(batch['input'])
         
-        # Plot masks with prompts for the first image in the batch
-        if val_step == 1 and worker_args.wandb:
-            mask = batch['gt_mask'][0]
-            ar_points = batch['ar_point_prompts'][0] if 'ar_point_prompts' in batch else None
-            tc_points = batch['tc_point_prompts'][0] if 'tc_point_prompts' in batch else None
-            ar_bbox = batch['ar_bbox_prompts'][0] if 'ar_bbox_prompts' in batch else None
-            tc_bbox = batch['tc_bbox_prompts'][0] if 'tc_bbox_prompts' in batch else None
-            plot_mask_with_prompts(
-            mask=mask,
-            ar_points=ar_points,
-            tc_points=tc_points,
-            ar_bbox=ar_bbox,
-            tc_bbox=tc_bbox,
-            wandb_log=True,
-            wandb_key=f"valid/mask_with_prompts_step_{val_step}",
-            epoch=epoch
-            )
-        
+            
         # Perform inference with prompts
         tc_masks, ar_masks = model.infer(
             ar_point_prompts=batch['ar_point_prompts'],
@@ -389,6 +240,8 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
             ar_bbox_prompts=batch['ar_bbox_prompts'],
             tc_bbox_prompts=batch['tc_bbox_prompts']
         )
+        
+        
         
         if worker_args.wandb:
             # Log predicted masks for the first image in the batch
@@ -414,20 +267,32 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
                         raise RuntimeError
         # LOG
         if val_step == 1:
-            imges = [images[i].cpu().numpy() for i in range(len(images))]
-            masks_ar = [ar_masks[i].cpu().numpy() for i in range(len(ar_masks))]
-            masks_tc = [tc_masks[i].cpu().numpy() for i in range(len(tc_masks))]
-            masks_ar_gt = [masks_ar_gts[i].cpu().numpy() for i in range(len(masks_ar_gts))]
-            masks_tc_gt = [masks_tc_gts[i].cpu().numpy() for i in range(len(masks_tc_gts))]
-            for i in range(len(imges)):
-                save_path=os.path.join(worker_args.exp_dir, worker_args.run_name, 'images', f"epoch_{epoch}_step_{val_step}_image_{i}.png")
-                
-                plot, titel = plot_with_projection(imges[i], masks_ar[i], masks_tc[i], masks_ar_gt[i], masks_tc_gt[i], save_path = save_path, epoch=epoch)
-            
-                print(f"Epoch {epoch}- Image {i} saved.")
+            for i in range(len(tc_masks)):
+                mask = masks_gt[i]
+                ar_points = batch['ar_point_prompts'][i]
+                tc_points = batch['tc_point_prompts'][i]
+                ar_bbox = batch['ar_bbox_prompts'][i]
+                tc_bbox = batch['tc_bbox_prompts'][i]
+                tc_pred_mask = tc_masks[i]
+                ar_pred_mask = ar_masks[i]
+                fig = plot_mask_with_points_and_bbox(mask, ar_points, tc_points, ar_bbox, tc_bbox, tc_pred_mask, ar_pred_mask, radius=8)
                 if worker_args.wandb:
-                    wandb.log({f"valid/image_{i}": wandb.Image(plot, caption=titel), "epoch": epoch}, step = epoch)
-            del imges, masks_ar, masks_tc, masks_ar_gt, masks_tc_gt
+                    wandb.log({f"valid/val_step_{val_step}_image_{i}": wandb.Image(fig, caption=f"Validation Step {val_step} Image {i}"), "epoch": epoch}, step = epoch)
+                    print(f"Epoch {epoch}- Image {i} logged to W&B.")
+            # imges = [images[i].cpu().numpy() for i in range(len(images))]
+            # masks_ar = [ar_masks[i].cpu().numpy() for i in range(len(ar_masks))]
+            # masks_tc = [tc_masks[i].cpu().numpy() for i in range(len(tc_masks))]
+            # masks_ar_gt = [masks_ar_gts[i].cpu().numpy() for i in range(len(masks_ar_gts))]
+            # masks_tc_gt = [masks_tc_gts[i].cpu().numpy() for i in range(len(masks_tc_gts))]
+            # for i in range(len(imges)):
+            #     save_path=os.path.join(worker_args.exp_dir, worker_args.run_name, 'images', f"epoch_{epoch}_step_{val_step}_image_{i}.png")
+                
+            #     plot, titel = plot_with_projection(imges[i], masks_ar[i], masks_tc[i], masks_ar_gt[i], masks_tc_gt[i], save_path = save_path, epoch=epoch)
+            
+            #     print(f"Epoch {epoch}- Image {i} saved.")
+            #     if worker_args.wandb:
+            #         wandb.log({f"valid/image_{i}": wandb.Image(plot, caption=titel), "epoch": epoch}, step = epoch)
+            # del imges, masks_ar, masks_tc, masks_ar_gt, masks_tc_gt
             torch.cuda.empty_cache()
             
         ar_metrics.update(tc_masks, masks_ar_gts,  batch['index_name'])
@@ -629,7 +494,7 @@ if __name__ == '__main__':
             os.environ['CUDA_VISIBLE_DEVICES'] = str(used_gpu[0])
         args.used_gpu, args.gpu_num = used_gpu, len(used_gpu)
     else:
-        args.used_gpu, args.gpu_num = [], 0
+        args.used_gpu, args.gpu_num = [], 01
 
     # launch the experiment process for both single-GPU and multi-GPU settings
     if len(args.used_gpu) == 1:
