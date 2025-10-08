@@ -219,7 +219,6 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
 
 @torch.no_grad()
 def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args):
-    
 
     # Example usage inside validation loop:
     # plot_mask_with_points(batch['gt_mask'][0], batch['tc_point_prompts'])
@@ -244,17 +243,6 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
             tc_bbox_prompts=tc_bbox_prompts
         )
         
-        
-        
-        # if worker_args.wandb:
-        #     # Log predicted masks for the first image in the batch
-        #     wandb.log({
-        #         f"valid/tc_mask_pred_step_{val_step}": wandb.Image(tc_masks[0].cpu().numpy(), caption=f"TC Mask Prediction (step {val_step})"),
-        #         f"valid/ar_mask_pred_step_{val_step}": wandb.Image(ar_masks[0].cpu().numpy(), caption=f"AR Mask Prediction (step {val_step})"),
-        #         "epoch": epoch
-        #     }, step=epoch)
-        
-        # Rest of validation logic remains the same...
         masks_gt = batch['gt_mask']
         masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt]
         masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt]
@@ -269,8 +257,8 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
                     if len(masks[i].shape) != 4:
                         raise RuntimeError
         # LOG
-        if val_step == 1:
-            for i in range(len(tc_masks)):
+        if val_step == 0:
+            for i in range(len(ar_point_prompts)):
                 mask = masks_gt[i]
                 ar_points = ar_point_prompts[i]
                 tc_points = tc_point_prompts[i]
@@ -279,10 +267,9 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
                 tc_pred_mask = tc_masks[i]
                 ar_pred_mask = ar_masks[i]
                 save_path=os.path.join(worker_args.exp_dir, worker_args.run_name, 'images', f"epoch_{epoch}_step_{val_step}_image_{i}.png")
-                # shape_dict = {'height': mask.shape[0], 'width': mask.shape[1], 'ar_point_shape': ar_points.shape, 'tc_point_shape': tc_points.shape, 'ar_bbox_shape': ar_bbox.shape, 'tc_bbox_shape': tc_bbox.shape, 'tc_pred_shape': tc_pred_mask.shape, 'ar_pred_shape': ar_pred_mask.shape}
                 fig = plot_mask_with_points_and_bbox(mask, ar_points, tc_points, ar_bbox, tc_bbox, tc_pred_mask, ar_pred_mask, radius=8, save_path = save_path)
                 if worker_args.wandb:
-                    wandb.log({f"valid/val_step_{val_step}_image_{i}": wandb.Image(fig, caption=f"Validation Step {val_step} Image {i}"), "epoch": epoch}, val_step = epoch)
+                    wandb.log({f"valid/val_step_{val_step}_image_{i}": wandb.Image(fig, caption=f"Validation Step {val_step} Image {i}"), "epoch": epoch}, step = epoch)
                     print(f"Epoch {epoch}- Image {i} logged to W&B.")
             # imges = [images[i].cpu().numpy() for i in range(len(images))]
             # masks_ar = [ar_masks[i].cpu().numpy() for i in range(len(ar_masks))]
@@ -411,7 +398,7 @@ def main_worker(worker_id, worker_args):
     )
     val_dataloader = DataLoader(
         dataset=val_dataset, batch_size=val_bs, shuffle=False, num_workers=val_workers,
-        drop_last=False, collate_fn=val_collate_fn
+        drop_last=False, collate_fn=val_collate_fn, worker_init_fn=partial(worker_init_fn, base_seed=3407)
     )
     
     # SET UP MODEL - enable W&B logging only if debugging is True

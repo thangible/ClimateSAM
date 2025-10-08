@@ -22,6 +22,8 @@ import cartopy.feature as cfeature
 import cv2
 import torch
 import numpy as np
+from matplotlib.colors import ListedColormap
+import csv 
 
 
 
@@ -111,12 +113,9 @@ def plot_with_projection(image, ar_pred, tc_pred, ar_gt, tc_gt, save_path, use_p
     return plot_array, title
 
 
-import numpy as np
-from matplotlib.colors import ListedColormap
-import matplotlib.pyplot as plt
 
 def plot_mask_with_points_and_bbox(mask, ar_points=None, tc_points=None, ar_bbox=None, tc_bbox=None, 
-                                   tc_pred_mask=None, ar_pred_mask=None, radius=8, save_path='exp'):
+                                   tc_pred_mask=None, ar_pred_mask=None, radius=8, save_path='exp', axis=False):
     if isinstance(mask, torch.Tensor):
         mask = mask.cpu().numpy()
     
@@ -135,45 +134,94 @@ def plot_mask_with_points_and_bbox(mask, ar_points=None, tc_points=None, ar_bbox
         plt.Line2D([0], [0], color='black', lw=0, marker='s', label='Background', markerfacecolor='black', markersize=10)
     ]
 
+    csv_rows = []  # collect rows to save: kind,label,x,y,x2,y2
+
+    def _points_to_array(obj):
+        if obj is None:
+            return np.empty((0, 2))
+        # If list/tuple (batched), use first element like original code
+        if isinstance(obj, (list, tuple)):
+            obj = obj[0]
+        if obj is None:
+            return np.empty((0, 2))
+        if isinstance(obj, torch.Tensor):
+            pts = obj
+            if pts.ndim == 3:
+                pts = pts.squeeze(1)
+            pts = pts.cpu().numpy()
+        else:
+            pts = np.asarray(obj)
+            if pts.ndim == 3:
+                pts = pts.squeeze(1)
+        if pts.size == 0:
+            return np.empty((0, 2))
+        pts = pts.reshape(-1, 2)
+        return pts
+
+    def _bboxes_to_list(obj):
+        bboxes = []
+        if obj is None:
+            return bboxes
+        # If it's a list/tuple of per-sample tensors, iterate through elements
+        if isinstance(obj, (list, tuple)):
+            for item in obj:
+                if item is None:
+                    continue
+                if isinstance(item, torch.Tensor):
+                    arr = item.squeeze(1).cpu().numpy() if item.ndim == 3 else item.cpu().numpy()
+                else:
+                    arr = np.asarray(item)
+                    if arr.ndim == 3:
+                        arr = arr.squeeze(1)
+                arr = np.atleast_2d(arr.reshape(-1, 4))
+                bboxes.extend(arr.tolist())
+            return bboxes
+        # Single tensor/array
+        if isinstance(obj, torch.Tensor):
+            arr = obj.squeeze(1).cpu().numpy() if obj.ndim == 3 else obj.cpu().numpy()
+        else:
+            arr = np.asarray(obj)
+            if arr.ndim == 3:
+                arr = arr.squeeze(1)
+        arr = np.atleast_2d(arr.reshape(-1, 4))
+        bboxes.extend(arr.tolist())
+        return bboxes
+
     # Plot AR points
-    if ar_points is not None and ar_points[0] is not None:
-        points = ar_points[0]
-        if points.ndim == 3:
-            points = points.squeeze(1)
-        points = points.cpu().numpy()
+    if ar_points is not None and (not isinstance(ar_points, (list, tuple)) or ar_points[0] is not None):
+        points = _points_to_array(ar_points)
         for x, y in points:
             ax.scatter(x, y, marker='x', color='red', s=100, linewidth=3)
+            csv_rows.append(['point', 'AR', float(x), float(y), '', ''])
 
     # Plot TC points
-    if tc_points is not None and tc_points[0] is not None:
-        points = tc_points[0]
-        if points.ndim == 3:
-            points = points.squeeze(1)
-        points = points.cpu().numpy()
+    if tc_points is not None and (not isinstance(tc_points, (list, tuple)) or tc_points[0] is not None):
+        points = _points_to_array(tc_points)
         for x, y in points:
             ax.scatter(x, y, marker='x', color='cyan', s=100, linewidth=3)
+            csv_rows.append(['point', 'TC', float(x), float(y), '', ''])
 
     # Plot AR bounding boxes
     if ar_bbox is not None:
-        if isinstance(ar_bbox, torch.Tensor):
-            bboxes = ar_bbox.squeeze(1).cpu().numpy() if ar_bbox.ndim == 3 else ar_bbox.cpu().numpy()
-            for bbox in bboxes:
-                x1, y1, x2, y2 = bbox
-                width = x2 - x1
-                height = y2 - y1
-                rect = plt.Rectangle((x1, y1), width, height, linewidth=2, edgecolor='red', facecolor='none')
-                ax.add_patch(rect)
+        bboxes = _bboxes_to_list(ar_bbox)
+        for bbox in bboxes:
+            x1, y1, x2, y2 = map(float, bbox)
+            width = x2 - x1
+            height = y2 - y1
+            rect = plt.Rectangle((x1, y1), width, height, linewidth=2, edgecolor='red', facecolor='none')
+            ax.add_patch(rect)
+            csv_rows.append(['bbox', 'AR', x1, y1, x2, y2])
 
     # Plot TC bounding boxes
     if tc_bbox is not None:
-        if isinstance(tc_bbox, torch.Tensor):
-            bboxes = tc_bbox.squeeze(1).cpu().numpy() if tc_bbox.ndim == 3 else tc_bbox.cpu().numpy()
-            for bbox in bboxes:
-                x1, y1, x2, y2 = bbox
-                width = x2 - x1
-                height = y2 - y1
-                rect = plt.Rectangle((x1, y1), width, height, linewidth=2, edgecolor='cyan', facecolor='none')
-                ax.add_patch(rect)
+        bboxes = _bboxes_to_list(tc_bbox)
+        for bbox in bboxes:
+            x1, y1, x2, y2 = map(float, bbox)
+            width = x2 - x1
+            height = y2 - y1
+            rect = plt.Rectangle((x1, y1), width, height, linewidth=2, edgecolor='cyan', facecolor='none')
+            ax.add_patch(rect)
+            csv_rows.append(['bbox', 'TC', x1, y1, x2, y2])
 
     # Plot AR prediction mask as contour lines
     if ar_pred_mask is not None:
@@ -186,7 +234,7 @@ def plot_mask_with_points_and_bbox(mask, ar_points=None, tc_points=None, ar_bbox
             ar_pred_np = ar_pred_np.squeeze()
         
         # Plot contour lines for AR predictions
-        contours_ar = ax.contour(ar_pred_np, levels=[0.5], colors=['orange'], linewidths=2, linestyles='--')
+        ax.contour(ar_pred_np, levels=[0.5], colors=['orange'], linewidths=2, linestyles='--')
         legend_elements.append(plt.Line2D([0], [0], color='orange', lw=2, linestyle='--', label='AR Prediction'))
 
     # Plot TC prediction mask as contour lines
@@ -200,18 +248,141 @@ def plot_mask_with_points_and_bbox(mask, ar_points=None, tc_points=None, ar_bbox
             tc_pred_np = tc_pred_np.squeeze()
         
         # Plot contour lines for TC predictions
-        contours_tc = ax.contour(tc_pred_np, levels=[0.5], colors=['magenta'], linewidths=2, linestyles='-.')
+        ax.contour(tc_pred_np, levels=[0.5], colors=['magenta'], linewidths=2, linestyles='-.')
         legend_elements.append(plt.Line2D([0], [0], color='magenta', lw=2, linestyle='-.', label='TC Prediction'))
 
     ax.legend(handles=legend_elements, loc='lower right', bbox_to_anchor=(1, -0.25), frameon=False, fontsize=14, ncol=4, columnspacing=0.5)
     ax.set_title("Mask with AR/TC Points, BBoxes and Predictions", fontsize=16)
-    ax.axis('off')
+
+    # Show or hide axis/ruler
+    if axis:
+        h, w = mask.shape
+        max_ticks = 10
+        x_ticks = np.unique(np.round(np.linspace(0, w - 1, min(max_ticks, w))).astype(int))
+        y_ticks = np.unique(np.round(np.linspace(0, h - 1, min(max_ticks, h))).astype(int))
+        ax.set_xticks(x_ticks)
+        ax.set_yticks(y_ticks)
+        ax.set_xticklabels([str(int(t)) for t in x_ticks], fontsize=10)
+        ax.set_yticklabels([str(int(t)) for t in y_ticks], fontsize=10)
+        ax.tick_params(axis='both', which='major', length=6)
+        ax.grid(True, color='white', linestyle='--', linewidth=0.5, alpha=0.6)
+    else:
+        ax.axis('off')
     
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    os.makedirs(os.path.dirname(save_path) or '.', exist_ok=True)
     plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
+
+    # Save prompts (points and bboxes) to a CSV with the same base name as save_path
+    csv_path = os.path.splitext(save_path)[0] + '.csv'
+    if csv_rows:
+        with open(csv_path, mode='w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['kind', 'label', 'x', 'y', 'x2', 'y2'])
+            writer.writerows(csv_rows)
+
     plt.close(fig)
     
     return fig
+
+# def plot_mask_with_points_and_bbox(mask, ar_points=None, tc_points=None, ar_bbox=None, tc_bbox=None, 
+#                                    tc_pred_mask=None, ar_pred_mask=None, radius=8, save_path='exp'):
+#     if isinstance(mask, torch.Tensor):
+#         mask = mask.cpu().numpy()
+    
+#     # Custom colormap: 0=black, 1=yellow, 2=blue
+#     cmap = ListedColormap(['black', 'yellow', 'blue'])
+#     fig, ax = plt.subplots(figsize=(10, 8))
+#     ax.imshow(mask, cmap=cmap, vmin=0, vmax=2, alpha=0.7)
+
+#     legend_elements = [
+#         plt.Line2D([0], [0], marker='x', color='w', label='AR Point', markerfacecolor='red', markersize=10, markeredgecolor='black'),
+#         plt.Line2D([0], [0], marker='x', color='w', label='TC Point', markerfacecolor='cyan', markersize=10, markeredgecolor='black'),
+#         plt.Line2D([0], [0], color='red', lw=2, label='AR BBox'),
+#         plt.Line2D([0], [0], color='cyan', lw=2, label='TC BBox'),
+#         plt.Line2D([0], [0], color='yellow', lw=0, marker='s', label='TC Groundtruth', markerfacecolor='yellow', markersize=10),
+#         plt.Line2D([0], [0], color='blue', lw=0, marker='s', label='AR Groundtruth', markerfacecolor='blue', markersize=10),
+#         plt.Line2D([0], [0], color='black', lw=0, marker='s', label='Background', markerfacecolor='black', markersize=10)
+#     ]
+
+#     # Plot AR points
+#     if ar_points is not None and ar_points[0] is not None:
+#         points = ar_points[0]
+#         if points.ndim == 3:
+#             points = points.squeeze(1)
+#         points = points.cpu().numpy()
+#         for x, y in points:
+#             ax.scatter(x, y, marker='x', color='red', s=100, linewidth=3)
+
+#     # Plot TC points
+#     if tc_points is not None and tc_points[0] is not None:
+#         points = tc_points[0]
+#         if points.ndim == 3:
+#             points = points.squeeze(1)
+#         points = points.cpu().numpy()
+#         for x, y in points:
+#             ax.scatter(x, y, marker='x', color='cyan', s=100, linewidth=3)
+
+#     # Plot AR bounding boxes
+#     if ar_bbox is not None:
+#         if isinstance(ar_bbox, torch.Tensor):
+#             bboxes = ar_bbox.squeeze(1).cpu().numpy() if ar_bbox.ndim == 3 else ar_bbox.cpu().numpy()
+#             for bbox in bboxes:
+#                 x1, y1, x2, y2 = bbox
+#                 width = x2 - x1
+#                 height = y2 - y1
+#                 rect = plt.Rectangle((x1, y1), width, height, linewidth=2, edgecolor='red', facecolor='none')
+#                 ax.add_patch(rect)
+
+#     # Plot TC bounding boxes
+#     if tc_bbox is not None:
+#         if isinstance(tc_bbox, torch.Tensor):
+#             bboxes = tc_bbox.squeeze(1).cpu().numpy() if tc_bbox.ndim == 3 else tc_bbox.cpu().numpy()
+#             for bbox in bboxes:
+#                 x1, y1, x2, y2 = bbox
+#                 width = x2 - x1
+#                 height = y2 - y1
+#                 rect = plt.Rectangle((x1, y1), width, height, linewidth=2, edgecolor='cyan', facecolor='none')
+#                 ax.add_patch(rect)
+
+#     # Plot AR prediction mask as contour lines
+#     if ar_pred_mask is not None:
+#         if isinstance(ar_pred_mask, torch.Tensor):
+#             ar_pred_np = ar_pred_mask.cpu().numpy()
+#         else:
+#             ar_pred_np = ar_pred_mask
+        
+#         if ar_pred_np.ndim > 2:
+#             ar_pred_np = ar_pred_np.squeeze()
+        
+#         # Plot contour lines for AR predictions
+#         contours_ar = ax.contour(ar_pred_np, levels=[0.5], colors=['orange'], linewidths=2, linestyles='--')
+#         legend_elements.append(plt.Line2D([0], [0], color='orange', lw=2, linestyle='--', label='AR Prediction'))
+
+#     # Plot TC prediction mask as contour lines
+#     if tc_pred_mask is not None:
+#         if isinstance(tc_pred_mask, torch.Tensor):
+#             tc_pred_np = tc_pred_mask.cpu().numpy()
+#         else:
+#             tc_pred_np = tc_pred_mask
+        
+#         if tc_pred_np.ndim > 2:
+#             tc_pred_np = tc_pred_np.squeeze()
+        
+#         # Plot contour lines for TC predictions
+#         contours_tc = ax.contour(tc_pred_np, levels=[0.5], colors=['magenta'], linewidths=2, linestyles='-.')
+#         legend_elements.append(plt.Line2D([0], [0], color='magenta', lw=2, linestyle='-.', label='TC Prediction'))
+
+#     ax.legend(handles=legend_elements, loc='lower right', bbox_to_anchor=(1, -0.25), frameon=False, fontsize=14, ncol=4, columnspacing=0.5)
+#     ax.set_title("Mask with AR/TC Points, BBoxes and Predictions", fontsize=16)
+#     ax.axis('off')
+    
+#     os.makedirs(os.path.dirname(save_path), exist_ok=True)
+#     plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
+#     plt.close(fig)
+    
+#     return fig
+
+
 
 ########### SET UP  ############
 def worker_init_fn(worker_id: int, base_seed: int, same_worker_seed: bool = True):
