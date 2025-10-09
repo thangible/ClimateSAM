@@ -233,10 +233,10 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
         # Set inference images once
         images = model.set_infer_img(batch['input'])
 
-        ar_point_prompts=copy.deepcopy(batch['ar_point_prompts'])
-        tc_point_prompts=copy.deepcopy(batch['tc_point_prompts'])
-        ar_bbox_prompts=copy.deepcopy(batch['ar_bbox_prompts'])
-        tc_bbox_prompts=copy.deepcopy(batch['tc_bbox_prompts'])
+        ar_point_prompts_copy = copy.deepcopy(batch['ar_point_prompts'])
+        tc_point_prompts_copy = copy.deepcopy(batch['tc_point_prompts'])
+        ar_bbox_prompts_copy = copy.deepcopy(batch['ar_bbox_prompts'])
+        tc_bbox_prompts_copy = copy.deepcopy(batch['tc_bbox_prompts'])
 
         # prompt_debug(batch, text=f"Validation Step {val_step}")
         
@@ -265,15 +265,17 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
         if val_step == 0:
             # Collect all images for this epoch
             wandb_images = {}
-            
+            masks_gt_copy = copy.deepcopy(masks_gt)
+            tc_masks_copy = copy.deepcopy(tc_masks)
+            ar_masks_copy = copy.deepcopy(ar_masks)
             for i in range(len(masks_gt)):
-                mask = masks_gt[i]
-                ar_points = ar_point_prompts[i]
-                tc_points = tc_point_prompts[i]
-                ar_bbox = ar_bbox_prompts[i]
-                tc_bbox = tc_bbox_prompts[i]
-                tc_pred_mask = tc_masks[i]
-                ar_pred_mask = ar_masks[i]
+                mask = masks_gt_copy[i]
+                ar_points = ar_point_prompts_copy[i]
+                tc_points = tc_point_prompts_copy[i]
+                ar_bbox = ar_bbox_prompts_copy[i]
+                tc_bbox = tc_bbox_prompts_copy[i]
+                tc_pred_mask = tc_masks_copy[i]
+                ar_pred_mask = ar_masks_copy[i]
                 save_path = os.path.join(worker_args.exp_dir, worker_args.run_name, 'images', f"epoch_{epoch}_step_{val_step}_image_{i}.png")
                 fig = plot_mask_with_points_and_bbox(mask, ar_points, tc_points, ar_bbox, tc_bbox, tc_pred_mask, ar_pred_mask, radius=8, save_path=save_path, axis=True)
                 
@@ -287,8 +289,8 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
                 wandb_images["epoch"] = epoch
                 wandb.log(wandb_images, step=epoch)
                 print(f"Epoch {epoch} - All {len(wandb_images)-1} images logged to W&B together.")
-            
-            del ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts
+
+            del ar_point_prompts_copy, tc_point_prompts_copy, ar_bbox_prompts_copy, tc_bbox_prompts_copy, masks_gt_copy, tc_masks_copy, ar_masks_copy
             torch.cuda.empty_cache()
             
         ar_metrics.update(tc_masks, masks_ar_gts,  batch['index_name'])
