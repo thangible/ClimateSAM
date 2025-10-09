@@ -25,6 +25,21 @@ import numpy as np
 from matplotlib.colors import ListedColormap
 import csv 
 
+def debug_prompts(batch, step_name=""):
+    print(f"\n=== DEBUG PROMPTS {step_name} ===")
+    for i in range(len(batch['gt_mask'])):
+        mask_shape = batch['gt_mask'][i].shape
+        print(f"Sample {i}: Mask shape: {mask_shape}")
+        
+        # Check AR points
+        if batch['ar_point_prompts'][i] is not None:
+            ar_points = batch['ar_point_prompts'][i][0]  # (N, 2)
+            print(f"  AR points range: x[{ar_points[:, 0].min():.1f}, {ar_points[:, 0].max():.1f}], y[{ar_points[:, 1].min():.1f}, {ar_points[:, 1].max():.1f}]")
+            
+        # Check TC points  
+        if batch['tc_point_prompts'][i] is not None:
+            tc_points = batch['tc_point_prompts'][i][0]  # (N, 2)
+            print(f"  TC points range: x[{tc_points[:, 0].min():.1f}, {tc_points[:, 0].max():.1f}], y[{tc_points[:, 1].min():.1f}, {tc_points[:, 1].max():.1f}]")
 
 
 def plot_with_projection(image, ar_pred, tc_pred, ar_gt, tc_gt, save_path, use_projection=True, epoch=None, title = None):

@@ -7,7 +7,7 @@ import torch.multiprocessing as mp
 import torch.nn.functional as F
 from functools import partial
 from torch.utils.data import DataLoader
-from train_util import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox
+from train_util import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox, debug_prompts
 from loss_function import ClimateLoss, compute_climate_loss
 from tqdm import tqdm
 from contextlib import nullcontext
@@ -104,6 +104,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
                                     tc_mask_prompts = batch['tc_mask_prompts']
                                     )
             
+            debug_prompts(batch, step_name=f"Train Step {train_step}")
             masks_ar_gt = batch['ar_object_masks']
             masks_tc_gt = batch['tc_object_masks']
             
@@ -235,6 +236,9 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
         tc_point_prompts=batch['tc_point_prompts']
         ar_bbox_prompts=batch['ar_bbox_prompts']
         tc_bbox_prompts=batch['tc_bbox_prompts']
+        
+        debug_prompts(ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts)
+        
         # Perform inference with prompts
         tc_masks, ar_masks = model.infer(
             ar_point_prompts=ar_point_prompts,
