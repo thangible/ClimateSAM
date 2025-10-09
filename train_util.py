@@ -25,21 +25,49 @@ import numpy as np
 from matplotlib.colors import ListedColormap
 import csv 
 
-def debug_prompts(batch, step_name=""):
-    print(f"\n=== DEBUG PROMPTS {step_name} ===")
-    for i in range(len(batch['gt_mask'])):
-        mask_shape = batch['gt_mask'][i].shape
-        print(f"Sample {i}: Mask shape: {mask_shape}")
+def prompt_debug(batch, text, max_x=1152, max_y=768):
+    print(f"Debugging prompts for {text}")
+    ar_points = batch['ar_point_prompts'] 
+    tc_points = batch['tc_point_prompts']
+    ar_bbox = batch['ar_bbox_prompts']  
+    tc_bbox = batch['tc_bbox_prompts']
+    # print(f"AR Points: {ar_points}")
+    # print(f"TC Points: {tc_points}")
+    # print(f"AR BBoxes: {ar_bbox}")
+    # print(f"TC BBoxes: {tc_bbox}")
+    
+    batch_num = len(ar_points) if ar_points is not None else (len(ar_bbox))
+    for i in range(batch_num):
         
-        # Check AR points
-        if batch['ar_point_prompts'][i] is not None:
-            ar_points = batch['ar_point_prompts'][i][0]  # (N, 2)
-            print(f"  AR points range: x[{ar_points[:, 0].min():.1f}, {ar_points[:, 0].max():.1f}], y[{ar_points[:, 1].min():.1f}, {ar_points[:, 1].max():.1f}]")
+        if ar_points[i] is not None:
+            ar_points_i = ar_points[i][0].squeeze(1)
+            x_ar, y_ar = ar_points_i[:,0], ar_points_i[:,1]
+            if x_ar.max() > max_x or y_ar.max() > max_y:
+                print(f"AR Points out of bounds: x max {x_ar.max()}, y max {y_ar.max()}")
+        if tc_points[i] is not None:
+            tc_points_i = tc_points[i][0].squeeze(1)
+            x_tc, y_tc = tc_points_i[:,0], tc_points_i[:,1]
+            if x_tc.max() > max_x or y_tc.max() > max_y:
+                print(f"TC Points out of bounds: x max {x_tc.max()}, y max {y_tc.max()}")
+                
+        ar_bbox_i = ar_bbox[i]
+        if ar_bbox_i is not None:
+            ar_bbox_i = ar_bbox_i.squeeze(1)
+            x_1_ar, y_1_ar, x_2_ar, y_2_ar = ar_bbox_i[:,0], ar_bbox_i[:,1], ar_bbox_i[:,2], ar_bbox_i[:,3]
+            if x_1_ar.max() > max_x or y_1_ar.max() > max_y or x_2_ar.max() > max_x or y_2_ar.max() > max_y:
+                print(f"AR BBox out of bounds: x1 max {x_1_ar.max()}, y1 max {y_1_ar.max()}, x2 max {x_2_ar.max()}, y2 max {y_2_ar.max()}")
             
-        # Check TC points  
-        if batch['tc_point_prompts'][i] is not None:
-            tc_points = batch['tc_point_prompts'][i][0]  # (N, 2)
-            print(f"  TC points range: x[{tc_points[:, 0].min():.1f}, {tc_points[:, 0].max():.1f}], y[{tc_points[:, 1].min():.1f}, {tc_points[:, 1].max():.1f}]")
+                
+        tc_bbox_i = tc_bbox[i]
+        if tc_bbox_i is not None:
+            tc_bbox_i = tc_bbox_i.squeeze(1)
+            x_1_tc, y_1_tc, x_2_tc, y_2_tc = tc_bbox_i[:,0], tc_bbox_i[:,1], tc_bbox_i[:,2], tc_bbox_i[:,3]
+            if x_1_tc.max() > max_x or y_1_tc.max() > max_y or x_2_tc.max() > max_x or y_2_tc.max() > max_y:
+             print(f"TC BBox out of bounds: x1 max {x_1_tc.max()}, y1 max {y_1_tc.max()}, x2 max {x_2_tc.max()}, y2 max {y_2_tc.max()}")
+             
+    print("Prompt debug check completed.")
+        
+    
 
 
 def plot_with_projection(image, ar_pred, tc_pred, ar_gt, tc_gt, save_path, use_projection=True, epoch=None, title = None):

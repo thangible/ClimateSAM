@@ -7,7 +7,7 @@ import torch.multiprocessing as mp
 import torch.nn.functional as F
 from functools import partial
 from torch.utils.data import DataLoader
-from train_util import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox, debug_prompts
+from train_util import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug
 from loss_function import ClimateLoss, compute_climate_loss
 from tqdm import tqdm
 from contextlib import nullcontext
@@ -104,7 +104,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
                                     tc_mask_prompts = batch['tc_mask_prompts']
                                     )
             
-            debug_prompts(batch, step_name=f"Train Step {train_step}")
+            prompt_debug(batch, 'Train Step {train_step}')
             masks_ar_gt = batch['ar_object_masks']
             masks_tc_gt = batch['tc_object_masks']
             
@@ -237,7 +237,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
         ar_bbox_prompts=batch['ar_bbox_prompts']
         tc_bbox_prompts=batch['tc_bbox_prompts']
         
-        debug_prompts(ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts)
+        prompt_debug(batch, text=f"Validation Step {val_step}")
         
         # Perform inference with prompts
         tc_masks, ar_masks = model.infer(
@@ -271,7 +271,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
                 tc_pred_mask = tc_masks[i]
                 ar_pred_mask = ar_masks[i]
                 save_path=os.path.join(worker_args.exp_dir, worker_args.run_name, 'images', f"epoch_{epoch}_step_{val_step}_image_{i}.png")
-                fig = plot_mask_with_points_and_bbox(mask, ar_points, tc_points, ar_bbox, tc_bbox, tc_pred_mask, ar_pred_mask, radius=8, save_path = save_path)
+                fig = plot_mask_with_points_and_bbox(mask, ar_points, tc_points, ar_bbox, tc_bbox, tc_pred_mask, ar_pred_mask, radius=8, save_path = save_path, axis=True)
                 if worker_args.wandb:
                     wandb.log({f"valid/val_step_{val_step}_image_{i}": wandb.Image(fig, caption=f"Validation Step {val_step} Image {i}"), "epoch": epoch}, step = epoch)
                     print(f"Epoch {epoch}- Image {i} logged to W&B.")
