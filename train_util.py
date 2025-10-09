@@ -44,11 +44,13 @@ def prompt_debug(batch, text, max_x=1152, max_y=768):
             x_ar, y_ar = ar_points_i[:,0], ar_points_i[:,1]
             if x_ar.max() > max_x or y_ar.max() > max_y:
                 print(f"AR Points out of bounds: x max {x_ar.max()}, y max {y_ar.max()}")
+                print(batch['gt_mask'][i].shape)
         if tc_points[i] is not None:
             tc_points_i = tc_points[i][0].squeeze(1)
             x_tc, y_tc = tc_points_i[:,0], tc_points_i[:,1]
             if x_tc.max() > max_x or y_tc.max() > max_y:
                 print(f"TC Points out of bounds: x max {x_tc.max()}, y max {y_tc.max()}")
+                print(batch['gt_mask'][i].shape)
                 
         ar_bbox_i = ar_bbox[i]
         if ar_bbox_i is not None:
@@ -56,6 +58,7 @@ def prompt_debug(batch, text, max_x=1152, max_y=768):
             x_1_ar, y_1_ar, x_2_ar, y_2_ar = ar_bbox_i[:,0], ar_bbox_i[:,1], ar_bbox_i[:,2], ar_bbox_i[:,3]
             if x_1_ar.max() > max_x or y_1_ar.max() > max_y or x_2_ar.max() > max_x or y_2_ar.max() > max_y:
                 print(f"AR BBox out of bounds: x1 max {x_1_ar.max()}, y1 max {y_1_ar.max()}, x2 max {x_2_ar.max()}, y2 max {y_2_ar.max()}")
+                print(batch['gt_mask'][i].shape)
             
                 
         tc_bbox_i = tc_bbox[i]
@@ -63,8 +66,10 @@ def prompt_debug(batch, text, max_x=1152, max_y=768):
             tc_bbox_i = tc_bbox_i.squeeze(1)
             x_1_tc, y_1_tc, x_2_tc, y_2_tc = tc_bbox_i[:,0], tc_bbox_i[:,1], tc_bbox_i[:,2], tc_bbox_i[:,3]
             if x_1_tc.max() > max_x or y_1_tc.max() > max_y or x_2_tc.max() > max_x or y_2_tc.max() > max_y:
-             print(f"TC BBox out of bounds: x1 max {x_1_tc.max()}, y1 max {y_1_tc.max()}, x2 max {x_2_tc.max()}, y2 max {y_2_tc.max()}")
-             
+                print(f"TC BBox out of bounds: x1 max {x_1_tc.max()}, y1 max {y_1_tc.max()}, x2 max {x_2_tc.max()}, y2 max {y_2_tc.max()}")
+                print(batch['gt_mask'][i].shape)
+        print(batch['gt_mask'][i].shape)
+        
     print("Prompt debug check completed.")
         
     

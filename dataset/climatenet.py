@@ -72,6 +72,9 @@ class ClimateDataset(Dataset):
         
         prompt_type = random.choice(['bbox', 'point']) 
         prompt_dict = extract_point_and_bbox_prompts_from_climatenet_mask(mask = mask, prompt_type = prompt_type)
+        self.prompt_check(prompt_dict)
+        
+        
         
         return {
             "input": data,
@@ -90,6 +93,48 @@ class ClimateDataset(Dataset):
             "ar_object_masks" : prompt_dict['ar_object_masks'],
             "tc_object_masks" : prompt_dict['tc_object_masks']
         }
+        
+    def prompt_check(self, prompt_dict):
+        """
+        Check if prompt coordinates are within valid image dimensions.
+        Print warnings if x > 1152 or y > 768.
+        """
+        max_x = 1152
+        max_y = 768
+        
+        # Check AR point prompts
+        if prompt_dict['ar_point_prompts'][0] is not None:
+            ar_points = prompt_dict['ar_point_prompts'][0]
+            for i, point in enumerate(ar_points):
+                x, y = point[0]  # point is in format [[x, y]]
+                if x > max_x or y > max_y:
+                    print(f"AR point prompt {i} out of bounds: x={x}, y={y} (max: x={max_x}, y={max_y})")
+        
+        # Check TC point prompts
+        if prompt_dict['tc_point_prompts'][0] is not None:
+            tc_points = prompt_dict['tc_point_prompts'][0]
+            for i, point in enumerate(tc_points):
+                x, y = point[0]  # point is in format [[x, y]]
+                if x > max_x or y > max_y:
+                    print(f"TC point prompt {i} out of bounds: x={x}, y={y} (max: x={max_x}, y={max_y})")
+        
+        # Check AR bbox prompts
+        if prompt_dict['ar_bbox_prompts'] is not None:
+            ar_bboxes = prompt_dict['ar_bbox_prompts']
+            for i, bbox in enumerate(ar_bboxes):
+                x1, y1, x2, y2 = bbox[0]  # bbox is in format [[x1, y1, x2, y2]]
+                if x1 > max_x or x2 > max_x or y1 > max_y or y2 > max_y:
+                    print(f"AR bbox prompt {i} out of bounds: x1={x1}, y1={y1}, x2={x2}, y2={y2} (max: x={max_x}, y={max_y})")
+        
+        # Check TC bbox prompts
+        if prompt_dict['tc_bbox_prompts'] is not None:
+            tc_bboxes = prompt_dict['tc_bbox_prompts']
+            for i, bbox in enumerate(tc_bboxes):
+                x1, y1, x2, y2 = bbox[0]  # bbox is in format [[x1, y1, x2, y2]]
+                if x1 > max_x or x2 > max_x or y1 > max_y or y2 > max_y:
+                    print(f"TC bbox prompt {i} out of bounds: x1={x1}, y1={y1}, x2={x2}, y2={y2} (max: x={max_x}, y={max_y})")
+            
+        
         
     def calculate_stats(self):
         """
