@@ -295,25 +295,15 @@ class ClimateDataset(Dataset):
         """
         batch_dict = {key: [] for key in batch[0].keys()}
         
-        while len(batch) != 0:
-            ele_dict = batch[0]
-            if ele_dict is not None:
-                for key in ele_dict.keys():
-                    if key not in batch_dict.keys():
-                        batch_dict[key] = []
-                    batch_dict[key].append(ele_dict[key])
-            # remove the redundant data for memory safety
-            batch.remove(ele_dict)
-
+        # Fix: Single loop to process all samples
         for sample in batch:
-            for key, value in sample.items():
-                batch_dict[key].append(value)
-
+            if sample is not None:
+                for key, value in sample.items():
+                    batch_dict[key].append(value)
+    
         # Convert inputs and masks to tensors
         batch_dict['input'] = torch.stack([torch.from_numpy(inp).float() for inp in batch_dict['input']])
         batch_dict['gt_mask'] = [torch.from_numpy(mask).long() for mask in batch_dict['gt_mask']]
-
-        # Optional: Stack if all are same shape (e.g., during training with fixed size)
-        # Otherwise, leave as list to handle variable-sized input
-        return batch_dict
     
+        return batch_dict
+
