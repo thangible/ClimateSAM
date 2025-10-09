@@ -227,6 +227,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
     valid_pbar = tqdm(total=len(val_dataloader), desc='valid', leave=False)
     
     for val_step, batch in enumerate(val_dataloader):
+        prompt_debug(batch, text=f"Before batch_to_cuda Step {val_step}")
         batch = batch_to_cuda(batch, device)
         
         # Set inference images once
