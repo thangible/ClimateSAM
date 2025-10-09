@@ -350,18 +350,18 @@ def main_worker(worker_id, worker_args):
     val_collate_fn = val_dataset.collate_fn
 
     if hasattr(worker_args, 'debugging') and worker_args.debugging:
-        debug_size = getattr(worker_args, 'debug_size', 50)  # Default to 50 samples
+        debug_size = getattr(worker_args, 'debug_size', 10)  # Default to 50 samples
         indices = list(range(min(debug_size, len(train_dataset))))
         train_dataset = torch.utils.data.Subset(train_dataset, indices)
         print(f"Debug mode: Using only {len(train_dataset)} training samples")
 
-        debug_val_size = getattr(worker_args, 'debug_val_size', 10)  # Default to 10 samples
+        debug_val_size = getattr(worker_args, 'debug_val_size', 5)  # Default to 10 samples
         val_indices = list(range(min(debug_val_size, len(val_dataset))))
         val_dataset = torch.utils.data.Subset(val_dataset, val_indices)
         print(f"Debug mode: Using only {len(val_dataset)} validation samples")
         
-        max_epoch_num = 10
-        worker_args.valid_per_epochs = 2
+        max_epoch_num = 2
+        worker_args.valid_per_epochs = 1
         print(f"Debug mode: Setting max_epoch_num to {max_epoch_num} and valid_per_epochs to {worker_args.valid_per_epochs}")
         
     
