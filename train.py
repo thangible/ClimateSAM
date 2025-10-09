@@ -266,7 +266,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
             # Collect all images for this epoch
             wandb_images = {}
             
-            for i in range(len(ar_point_prompts)):
+            for i in range(len(masks_gt)):
                 mask = masks_gt[i]
                 ar_points = ar_point_prompts[i]
                 tc_points = tc_point_prompts[i]

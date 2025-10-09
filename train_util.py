@@ -168,18 +168,18 @@ def plot_mask_with_points_and_bbox(mask, ar_points=None, tc_points=None, ar_bbox
         mask = mask.cpu().numpy()
     
     # Custom colormap: 0=black, 1=yellow, 2=blue
-    cmap = ListedColormap(['black', 'yellow', 'blue'])
+    cmap = ListedColormap(['black', 'green', 'blue'])
     fig, ax = plt.subplots(figsize=(10, 8))
     ax.imshow(mask, cmap=cmap, vmin=0, vmax=2, alpha=0.7)
 
     legend_elements = [
-        plt.Line2D([0], [0], marker='x', color='w', label='AR Point', markerfacecolor='red', markersize=10, markeredgecolor='black'),
-        plt.Line2D([0], [0], marker='x', color='w', label='TC Point', markerfacecolor='cyan', markersize=10, markeredgecolor='black'),
+        plt.Line2D([0], [0], marker='x', color='red', label='AR Point', markerfacecolor='red', markersize=10, markeredgecolor='red'),
+        plt.Line2D([0], [0], marker='x', color='cyan', label='TC Point', markerfacecolor='cyan', markersize=10, markeredgecolor='cyan'),
         plt.Line2D([0], [0], color='red', lw=2, label='AR BBox'),
         plt.Line2D([0], [0], color='cyan', lw=2, label='TC BBox'),
-        plt.Line2D([0], [0], color='yellow', lw=0, marker='s', label='TC Groundtruth', markerfacecolor='yellow', markersize=10),
+        plt.Line2D([0], [0], color='green', lw=0, marker='s', label='TC Groundtruth', markerfacecolor='green', markersize=10, markeredgecolor='black'),
         plt.Line2D([0], [0], color='blue', lw=0, marker='s', label='AR Groundtruth', markerfacecolor='blue', markersize=10),
-        plt.Line2D([0], [0], color='black', lw=0, marker='s', label='Background', markerfacecolor='black', markersize=10)
+        # plt.Line2D([0], [0], color='black', lw=0, marker='s', label='Background', markerfacecolor='black', markersize=10)
     ]
 
     csv_rows = []  # collect rows to save: kind,label,x,y,x2,y2
@@ -239,14 +239,14 @@ def plot_mask_with_points_and_bbox(mask, ar_points=None, tc_points=None, ar_bbox
     if ar_points is not None and (not isinstance(ar_points, (list, tuple)) or ar_points[0] is not None):
         points = _points_to_array(ar_points)
         for x, y in points:
-            ax.scatter(x, y, marker='x', color='red', s=100, linewidth=3)
+            ax.scatter(x, y, marker='x', color='red', s=50, linewidth=1)
             csv_rows.append(['point', 'AR', float(x), float(y), '', ''])
 
     # Plot TC points
     if tc_points is not None and (not isinstance(tc_points, (list, tuple)) or tc_points[0] is not None):
         points = _points_to_array(tc_points)
         for x, y in points:
-            ax.scatter(x, y, marker='x', color='cyan', s=100, linewidth=3)
+            ax.scatter(x, y, marker='x', color='cyan', s=50, linewidth=1)
             csv_rows.append(['point', 'TC', float(x), float(y), '', ''])
 
     # Plot AR bounding boxes
@@ -256,7 +256,7 @@ def plot_mask_with_points_and_bbox(mask, ar_points=None, tc_points=None, ar_bbox
             x1, y1, x2, y2 = map(float, bbox)
             width = x2 - x1
             height = y2 - y1
-            rect = plt.Rectangle((x1, y1), width, height, linewidth=2, edgecolor='red', facecolor='none')
+            rect = plt.Rectangle((x1, y1), width, height, linewidth=1, edgecolor='red', facecolor='none')
             ax.add_patch(rect)
             csv_rows.append(['bbox', 'AR', x1, y1, x2, y2])
 
@@ -267,7 +267,7 @@ def plot_mask_with_points_and_bbox(mask, ar_points=None, tc_points=None, ar_bbox
             x1, y1, x2, y2 = map(float, bbox)
             width = x2 - x1
             height = y2 - y1
-            rect = plt.Rectangle((x1, y1), width, height, linewidth=2, edgecolor='cyan', facecolor='none')
+            rect = plt.Rectangle((x1, y1), width, height, linewidth=1, edgecolor='cyan', facecolor='none')
             ax.add_patch(rect)
             csv_rows.append(['bbox', 'TC', x1, y1, x2, y2])
 
