@@ -4,24 +4,29 @@ import torch.nn.functional as F
 from .layer_module import LayerNorm2d
 
 class PromptGenerator(nn.Module):
-    def __init__(self, pool_size: tuple = (2, 2), fused_channels: int = 128, in_channels: int = 768, out_channels: int = 2):
+    def __init__(self, pool_size: tuple = (2, 2),
+                 fused_channels: int = 128,
+                 in_channels: int = 768,
+                 out_channels: int = 2,
+                 num_features: int = 12,
+                 features_per_block: int = 3):
         super(PromptGenerator, self).__init__()  
+        
+        # Calculate number of blocks based on total features and features per block
+        self.num_blocks = num_features // features_per_block
+        self.features_per_block = features_per_block
+        
+        if num_features % features_per_block != 0:
+            raise ValueError(f"num_features ({num_features}) must be divisible by features_per_block ({features_per_block})")
              
         self.pool = nn.AdaptiveAvgPool2d(pool_size)
-        # Create four blocks.
-        # Each block processes a group of 3 features.
-        # - block_feature_upsamplers: Upsample each individual feature in the group.
-        #   The number of ConvTranspose2d layers increases by block.
-        # - block_fuse_convs: Fuse the three upsampled features via a Conv2d.
-        #   For blocks 2 and 4, we downsample spatially (stride=2) during fusion.
-        # - block_out_trans: After fusion (and possible concatenation with previous block output), 
-        #   upsample the fused feature for the next block.
+        # Create blocks based on calculated number
         self.input_reduction = nn.ModuleList()
         self.block_feature_upsamplers = nn.ModuleList()
         self.block_fuse_convs = nn.ModuleList()
         self.block_out_trans = nn.ModuleList()
         
-        for block_idx in range(4):
+        for block_idx in range(self.num_blocks):
             self.input_reduction.append(
                 nn.Sequential(
                 nn.Conv2d(in_channels, fused_channels, kernel_size=1, padding=0, bias=False),
@@ -38,10 +43,10 @@ class PromptGenerator(nn.Module):
                 ])
             )
             # Fuse the three features:
-            # The concatenation will have 3*fused_channels channels.
+            # The concatenation will have features_per_block*fused_channels channels.
             self.block_fuse_convs.append(
                 nn.Sequential(
-                    nn.Conv2d(3 * fused_channels, fused_channels, kernel_size=1),
+                    nn.Conv2d(features_per_block * fused_channels, fused_channels, kernel_size=1),
                     # LayerNorm2d(fused_channels),
                     # nn.ReLU(),
                     nn.Conv2d(fused_channels, fused_channels, kernel_size=3, padding=1, stride=2),
@@ -58,7 +63,7 @@ class PromptGenerator(nn.Module):
             )
 
         self.neck = nn.Sequential(
-            nn.Conv2d(4 * fused_channels, fused_channels, kernel_size=1, padding=0),  # fused_channelsx1024x1024
+            nn.Conv2d(self.num_blocks * fused_channels, fused_channels, kernel_size=1, padding=0),  # fused_channelsx1024x1024
             nn.ReLU()
         )
         
@@ -75,21 +80,22 @@ class PromptGenerator(nn.Module):
     def forward(self, feat_list):
         """
         Args:
-            feat_list: list of 12 feature maps, each of shape (B, 64, 64, 768)
+            feat_list: list of feature maps, each of shape (B, 64, 64, 768)
         Returns:
-            fused_feats: final upsampled feature from last block.
-            box_out: output from box_mlp.
+            tc_mask, ar_mask: output masks
         """
-        # Reverse the feature list and process in groups of 3.
+        # Reverse the feature list and process in groups.
         # Permute feature maps from (B, 64, 64, 768) to (B, 768, 64, 64)
         feat_list = [f.permute(0, 3, 1, 2) for f in feat_list]
         reversed_feats = feat_list[::-1]
         # box_queries_list = []
         prev_up = None
-        for block_idx in range(4):
+        for block_idx in range(self.num_blocks):
             
-            # Get group of 3 features for this block.
-            group = reversed_feats[block_idx*3:(block_idx+1)*3]
+            # Get group of features for this block.
+            start_idx = block_idx * self.features_per_block
+            end_idx = (block_idx + 1) * self.features_per_block
+            group = reversed_feats[start_idx:end_idx]
             # reduce the input channels to fused_channels.
             reduced_group = [self.input_reduction[block_idx](f) for f in group]
             # Upsample each feature using the corresponding block upsampler.

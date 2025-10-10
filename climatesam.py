@@ -63,7 +63,18 @@ class ClimateSAM(nn.Module):
             use_checkpoint=use_checkpoint  # Add this line
         )
         if self.use_prompt_generator:
-          self.prompt_generator = PromptGenerator(in_channels = self.image_encoder.sam_img_encoder.num_features)
+            num_features_map = {
+                'vit_b': 12,
+                'vit_l': 24,
+                'vit_h': 32  # Assuming ViT-H has 32 layers
+            }
+            feature_per_block = {
+                'vit_b': 3,
+                'vit_l': 6,
+                'vit_h': 9  # Assuming ViT-H has 4 features per block
+            }
+            self.prompt_generator = PromptGenerator(num_features=num_features_map[model_type],
+                                                    features_per_block=feature_per_block[model_type])
         self.prompt_encoder = PromptEncoderWrapper(ori_sam=self.ori_sam, fix=True)
         
         #set weights for input adaptation:
@@ -106,7 +117,7 @@ class ClimateSAM(nn.Module):
             # Phase 3: Train only input_adapt
             # self.enable_prompt_generator()
             for n, c in self.named_children():
-                if n not in ['image_encoder', 'mask_decoder', 'input_adapter']:
+                if n not in ['input_adapter']:
                     c.eval()
                 else:
                     c.train(mode = mode)
@@ -141,61 +152,6 @@ class ClimateSAM(nn.Module):
             trainable_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
             print(f"Phase {phase}: Trainable params = {trainable_params}/{total_params} "
                 f"({100*trainable_params/total_params:.2f}%)")
-                    
-                
-    # def log_prompt_shapes(self, ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts, prefix="forward"):
-    #     """Log shapes and sizes of prompts"""
-    #     if not self.enable_wandb_logging or not wandb.run:
-    #         return
-            
-    #     prompt_info = {}
-        
-    #     if ar_point_prompts is not None:
-    #         for i, prompt in enumerate(ar_point_prompts):
-    #             if prompt is not None:
-    #                 points, labels = prompt
-    #                 prompt_info[f"{prefix}/ar_point_prompts_{i}_points_shape"] = list(points.shape)
-    #                 prompt_info[f"{prefix}/ar_point_prompts_{i}_labels_shape"] = list(labels.shape)
-    #                 prompt_info[f"{prefix}/ar_point_prompts_{i}_num_points"] = points.shape[1] if len(points.shape) > 1 else 0
-        
-    #     if tc_point_prompts is not None:
-    #         for i, prompt in enumerate(tc_point_prompts):
-    #             if prompt is not None:
-    #                 points, labels = prompt
-    #                 prompt_info[f"{prefix}/tc_point_prompts_{i}_points_shape"] = list(points.shape)
-    #                 prompt_info[f"{prefix}/tc_point_prompts_{i}_labels_shape"] = list(labels.shape)
-    #                 prompt_info[f"{prefix}/tc_point_prompts_{i}_num_points"] = points.shape[1] if len(points.shape) > 1 else 0
-        
-    #     if ar_bbox_prompts is not None:
-    #         for i, bbox in enumerate(ar_bbox_prompts):
-    #             if bbox is not None:
-    #                 prompt_info[f"{prefix}/ar_bbox_prompts_{i}_shape"] = list(bbox.shape)
-    #                 prompt_info[f"{prefix}/ar_bbox_prompts_{i}_num_boxes"] = bbox.shape[0] if len(bbox.shape) > 1 else 0
-        
-    #     if tc_bbox_prompts is not None:
-    #         for i, bbox in enumerate(tc_bbox_prompts):
-    #             if bbox is not None:
-    #                 prompt_info[f"{prefix}/tc_bbox_prompts_{i}_shape"] = list(bbox.shape)
-    #                 prompt_info[f"{prefix}/tc_bbox_prompts_{i}_num_boxes"] = bbox.shape[0] if len(bbox.shape) > 1 else 0
-        
-    #     wandb.log(prompt_info)
-
-    # def log_embeddings(self, sparse_embeddings, dense_embeddings, prefix=""):
-    #     """Log embedding shapes and statistics"""
-    #     if not self.enable_wandb_logging or not wandb.run:
-    #         return
-            
-    #     embedding_info = {}
-        
-    #     for i, (sparse, dense) in enumerate(zip(sparse_embeddings, dense_embeddings)):
-    #         embedding_info[f"{prefix}_sparse_embedding_{i}_shape"] = list(sparse.shape)
-    #         embedding_info[f"{prefix}_dense_embedding_{i}_shape"] = list(dense.shape)
-    #         embedding_info[f"{prefix}_sparse_embedding_{i}_mean"] = sparse.mean().item()
-    #         embedding_info[f"{prefix}_sparse_embedding_{i}_std"] = sparse.std().item()
-    #         embedding_info[f"{prefix}_dense_embedding_{i}_mean"] = dense.mean().item()
-    #         embedding_info[f"{prefix}_dense_embedding_{i}_std"] = dense.std().item()
-        
-    #     wandb.log(embedding_info)
 
     def log_masks(self, masks, prefix="", log_images=False, max_images=2, binary=False):
         """Log mask shapes and optionally visualizations
@@ -401,6 +357,7 @@ class ClimateSAM(nn.Module):
         if hasattr(self, 'prompt_generator'):
             del self.prompt_generator
         self.use_prompt_generator = False
+    
     
     @staticmethod
     def postprocess(output_masks: torch.Tensor, ori_img_size: Tuple):

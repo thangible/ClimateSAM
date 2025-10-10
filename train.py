@@ -348,7 +348,7 @@ def main_worker(worker_id, worker_args):
     dataset_dir = worker_args.data_dir
     train_dataset = ClimateDataset(
         data_dir=dataset_dir, train_flag=True, shot_num=worker_args.shot_num,
-        augmented=True
+        augmented=False
     )
     val_dataset = ClimateDataset(data_dir=dataset_dir, train_flag=False, augmented=False)
     
@@ -439,13 +439,15 @@ def main_worker(worker_id, worker_args):
     optimizer, scheduler = setup_optimizer_and_scheduler(model, worker_args)
     
     if worker_args.phase == 2:
-        image_encoder_path = os.path.join(worker_args.exp_dir, f"phase_1_weights.pth")
-        phase_1_checkpoint = torch.load(image_encoder_path, map_location=device)
-        print(f"Pretrained weights from phase 1 loaded from {image_encoder_path}")
-        model.image_encoder.load_state_dict(phase_1_checkpoint['image_encoder'])
+        image_encoder_path = os.path.join(worker_args.exp_dir, f"phase_2_weights.pth")
+        phase_2_checkpoint = torch.load(image_encoder_path, map_location=device)
+        print(f"Pretrained weights from phase 2 loaded from {image_encoder_path}")
+        model.image_encoder.load_state_dict(phase_2_checkpoint['image_encoder'])
         print(f"Image encoder weights loaded from {image_encoder_path}")
-        model.mask_decoder.load_state_dict(phase_1_checkpoint['mask_decoder'])
+        model.mask_decoder.load_state_dict(phase_2_checkpoint['mask_decoder'])
         print(f"Mask decoder weights loaded from {image_encoder_path}")
+        model.input_adapter.load_state_dict(phase_2_checkpoint['input_adapter'])
+        print(f"Input adapter weights loaded from {image_encoder_path}")
         # optimizer.add_param_group({'params': model.input_adapter.parameters()})
 
     if worker_args.phase == 3:
