@@ -81,11 +81,11 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
     if local_rank == 0:
         # Outer progress bar for batches
         batch_pbar = tqdm(total=len(train_dataloader), desc=f'Epoch {epoch}/{max_epoch_num} - Batches', position=0, leave=True)
-        # Inner progress bar for optimizer steps
-        step_pbar = tqdm(total=effective_steps, desc='Optimizer Steps', position=1, leave=True)
-    else:
-        batch_pbar = None
-        step_pbar = None
+    #     # Inner progress bar for optimizer steps
+    #     step_pbar = tqdm(total=effective_steps, desc='Optimizer Steps', position=1, leave=True)
+    # else:
+    #     batch_pbar = None
+    #     step_pbar = None
     
     step_count = 0 
     # Initialize accumulated loss for logging across the entire epoch
@@ -172,14 +172,14 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
                 step_loss_dict = {key: epoch_loss_dict[key] / epoch_loss_count for key in epoch_loss_dict.keys()}
             
             # Update step progress bar with current average losses
-            if step_pbar:
-                step_pbar.update(1)
-                step_pbar.set_postfix({
-                    'step': f"{effective_step}/{effective_steps}",
-                    'total_loss': f"{step_loss_dict.get('total_loss', 0):.4f}",
-                    'focal': f"{step_loss_dict.get('focal_loss', 0):.4f}",
-                    'tversky': f"{step_loss_dict.get('tversky_loss', 0):.4f}"
-                })
+            # if step_pbar:
+            #     step_pbar.update(1)
+            #     step_pbar.set_postfix({
+            #         'step': f"{effective_step}/{effective_steps}",
+            #         'total_loss': f"{step_loss_dict.get('total_loss', 0):.4f}",
+            #         'focal': f"{step_loss_dict.get('focal_loss', 0):.4f}",
+            #         'tversky': f"{step_loss_dict.get('tversky_loss', 0):.4f}"
+            #     })
                 
             step_count += 1
 
@@ -190,8 +190,8 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         optimizer.zero_grad()
         step_count += 1
         epoch_loss_count += 1
-        if step_pbar:
-            step_pbar.update(1)
+        # if step_pbar:
+        #     step_pbar.update(1)
     
     # Calculate average losses for the entire epoch
     if epoch_loss_count > 0:
@@ -214,8 +214,8 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
     # Close progress bars
     if batch_pbar:
         batch_pbar.close()
-    if step_pbar:
-        step_pbar.close()
+    # if step_pbar:
+    #     step_pbar.close()
             
     scheduler.step()
 
@@ -293,8 +293,8 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
             del ar_point_prompts_copy, tc_point_prompts_copy, ar_bbox_prompts_copy, tc_bbox_prompts_copy, masks_gt_copy, tc_masks_copy, ar_masks_copy
             torch.cuda.empty_cache()
             
-        ar_metrics.update(tc_masks, masks_ar_gts,  batch['index_name'])
-        tc_metrics.update(ar_masks, masks_tc_gts,  batch['index_name'])
+        tc_metrics.update(tc_masks, masks_tc_gts,  batch['index_name'])
+        ar_metrics.update(ar_masks, masks_ar_gts,  batch['index_name'])
         valid_pbar.update(1)
         str_step_info = "Epoch: {epoch}/{epochs:4}.".format(
             epoch=epoch, epochs=max_epoch_num
