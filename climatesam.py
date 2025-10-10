@@ -80,7 +80,7 @@ class ClimateSAM(nn.Module):
             for out_ch in range(self.input_adapter[0].weight.shape[0]):
                 for in_ch in input_weights:
                     self.input_adapter[0].weight[out_ch, in_ch, 0, 0] = 1.0    
-        self.input_adapter[0].weight.requires_grad = False # freeze the input adaptation layer
+        # self.input_adapter[0].weight.requires_grad = False # freeze the input adaptation layer
                 
         del self.ori_sam.mask_decoder # remove the mask decoder in original SAM to avoid redundant params in model object
         
@@ -110,11 +110,14 @@ class ClimateSAM(nn.Module):
                     c.eval()
                 else:
                     c.train(mode = mode)
+                    if n == 'input_adapter':
+                        for param in c.parameters():
+                            param.requires_grad = True
             if verbose:
                 print("Training input_adapter along with image_encoder and mask_decoder")
 
-        elif phase == 1:
-            # Phase 2: Train only prompt_encoder
+        elif phase == 3:
+            # Phase 3: Train only prompt_encoder
             self.enable_prompt_generator()
             for n, c in self.named_children():
                 if n not in ['prompt_generator']:
