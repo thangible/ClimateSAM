@@ -446,7 +446,7 @@ def main_worker(worker_id, worker_args):
         print(f"Image encoder weights loaded from {image_encoder_path}")
         model.mask_decoder.load_state_dict(phase_1_checkpoint['mask_decoder'])
         print(f"Mask decoder weights loaded from {image_encoder_path}")
-        optimizer.add_param_group({'params': model.input_adapter.parameters()})
+        # optimizer.add_param_group({'params': model.input_adapter.parameters()})
 
     if worker_args.phase == 3:
         model.enable_prompt_generator()
