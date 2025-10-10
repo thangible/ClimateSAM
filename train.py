@@ -485,6 +485,17 @@ def main_worker(worker_id, worker_args):
                         print(f"Image encoder saved to {save_path}")
                         wandb.save(save_path)
                         print(f"Image encoder saved to wandb: {save_path}")
+                    if worker_args.phase == 2:
+                        save_path = os.path.join(worker_args.exp_dir, f"phase_2_weights.pth")
+                        phase_2_weights = {
+                            'image_encoder': model.image_encoder.state_dict(),
+                            'mask_decoder': model.mask_decoder.state_dict(),
+                            'input_adapter': model.input_adapter.state_dict(),
+                        }
+                        torch.save(phase_2_weights, save_path)
+                        print(f"Image encoder saved to {save_path}")
+                        wandb.save(save_path)
+                        print(f"Image encoder saved to wandb: {save_path}")
         
 if __name__ == '__main__':
     print("Starting training process...")
