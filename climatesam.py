@@ -433,8 +433,8 @@ class ClimateSAM(nn.Module):
                             ar_bbox_prompts = None,
                             tc_bbox_prompts = None,
                             ori_img_size = None):
-        
-        for i in range(len(ori_img_size)):
+        batch_num = len(ori_img_size)
+        for i in range(batch_num):
             h_scale = self.sam_img_size[0] / ori_img_size[i][0]
             w_scale = self.sam_img_size[1] / ori_img_size[i][1]
         
@@ -466,7 +466,6 @@ class ClimateSAM(nn.Module):
                     ar_bbox_prompts[i][..., 2]  *= w_scale
                     ar_bbox_prompts[i][..., 3]  *= h_scale
                     ar_bbox_prompts[i] = torch.round(ar_bbox_prompts[i])
-
 
         
         return ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts

@@ -119,7 +119,7 @@ def get_prompts_from_binary_mask(binary_mask, connectivity = 8, threshold = 50, 
                 points.append([chosen_point])
     
     object_masks = torch.from_numpy(np.stack(object_masks, axis = 0)).to(torch.float32).unsqueeze(1)
-    noisy_masks = make_noisy_mask_on_objects(object_masks) if prompt_type == 'noisy_mask' else None
+    noisy_masks = make_noisy_mask_on_objects(object_masks) if prompt_type == 'mask' else None
     points = torch.from_numpy(np.stack(points, axis = 0)).to(torch.float32) if prompt_type == 'point' else None
     bboxes = torch.from_numpy(np.stack(bboxes, axis = 0)).to(torch.float32) if prompt_type == 'bbox' else None
     
