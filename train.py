@@ -433,10 +433,19 @@ def main_worker(worker_id, worker_args):
             print(f"Image encoder weights loaded from {image_encoder_path}")
             model.mask_decoder.load_state_dict(phase_1_checkpoint['mask_decoder'])
             print(f"Mask decoder weights loaded from {image_encoder_path}")
+    if worker_args.phase == 2:
+        image_encoder_path = os.path.join(worker_args.exp_dir, f"phase_1_weights.pth")
+        phase_1_checkpoint = torch.load(image_encoder_path, map_location=device)
+        print(f"Pretrained weights from phase 1 loaded from {image_encoder_path}")
+        model.image_encoder.load_state_dict(phase_1_checkpoint['image_encoder'])
+        print(f"Image encoder weights loaded from {image_encoder_path}")
+        model.mask_decoder.load_state_dict(phase_1_checkpoint['mask_decoder'])
+        print(f"Mask decoder weights loaded from {image_encoder_path}")
+        optimizer.add_param_group({'params': model.input_adapter.parameters()})
             
     # Optimizer and scheduler
     optimizer, scheduler = setup_optimizer_and_scheduler(model, worker_args)
-    if worker_args.phase == 2:
+    if worker_args.phase == 3:
         model.enable_prompt_generator()
         optimizer.add_param_group({'params': model.prompt_generator.parameters()})
     best_miou_tc = 0

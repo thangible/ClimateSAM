@@ -40,9 +40,14 @@ class ClimateSAM(nn.Module):
         self.sam_img_size = (self.ori_sam.image_encoder.img_size, self.ori_sam.image_encoder.img_size)
         
         # ClimateSAM model
-        self.input_adapt = nn.Sequential(
+        self.input_adapter = nn.Sequential(
+            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1), # Wider layer, spatial context
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.Conv2d(32, 16, kernel_size=1, stride=1, padding=0), # Bottleneck
+            nn.ReLU(),
             nn.Conv2d(16, 3, kernel_size=1, stride=1, padding=0),
-        )
+            )
         
         self.mask_decoder = MaskDecoderHQ(
             model_type, self.ori_sam.mask_decoder.state_dict()
@@ -65,17 +70,17 @@ class ClimateSAM(nn.Module):
         # Zero out all weights 
         # Define the channels where you want high weights
         with torch.no_grad():
-            self.input_adapt[0].weight.zero_()  
+            self.input_adapter[0].weight.zero_()  
             if input_weights is None:
                 # Default input_weights correspond to indices of specific climate variables:
                 # 'TMQ' (Total Precipitable Water Vapor), 'U850' (Zonal Wind at 850 hPa), 
                 # and 'V850' (Meridional Wind at 850 hPa).
                 input_weights = [0, 1, 2] # for 'TMQ', 'U850', 'V850'
             # For instance, set those weights to 1.0 for every output channel
-            for out_ch in range(self.input_adapt[0].weight.shape[0]):
+            for out_ch in range(self.input_adapter[0].weight.shape[0]):
                 for in_ch in input_weights:
-                    self.input_adapt[0].weight[out_ch, in_ch, 0, 0] = 1.0    
-        self.input_adapt[0].weight.requires_grad = False # freeze the input adaptation layer
+                    self.input_adapter[0].weight[out_ch, in_ch, 0, 0] = 1.0    
+        self.input_adapter[0].weight.requires_grad = False # freeze the input adaptation layer
                 
         del self.ori_sam.mask_decoder # remove the mask decoder in original SAM to avoid redundant params in model object
         
@@ -96,8 +101,19 @@ class ClimateSAM(nn.Module):
                     c.train(mode=mode)
             if verbose:
                 print("Training image_encoder")
-
+                
         elif phase == 2:
+            # Phase 3: Train only input_adapt
+            # self.enable_prompt_generator()
+            for n, c in self.named_children():
+                if n not in ['image_encoder', 'mask_decoder', 'input_adapter']:
+                    c.eval()
+                else:
+                    c.train(mode = mode)
+            if verbose:
+                print("Training input_adapter along with image_encoder and mask_decoder")
+
+        elif phase == 1:
             # Phase 2: Train only prompt_encoder
             self.enable_prompt_generator()
             for n, c in self.named_children():
@@ -109,16 +125,7 @@ class ClimateSAM(nn.Module):
                 print("Training prompt_encoder and prompt_generator")
             
             
-        elif phase == 3:
-            # Phase 3: Train only input_adapt
-            self.enable_prompt_generator()
-            for n, c in self.named_children():
-                if n not in 'input_adapt':
-                    c.eval()
-                else:
-                    c.train(mode = mode)
-            if verbose:
-                print("Training input_adapt")
+        
             
         if verbose:
                   
@@ -244,13 +251,6 @@ class ClimateSAM(nn.Module):
     ):
         ori_img_size = [(input[i].shape[-2], input[i].shape[-1]) for i in range(len(input))]
         
-        # Log input information only if debugging
-        # if self.enable_wandb_logging and wandb.run:
-        #     wandb.log({
-        #         "forward/input_batch_size": len(input),
-        #         "forward/original_img_sizes": ori_img_size,
-        #         "forward/input_channels": input[0].shape[0] if len(input) > 0 else 0
-        #     })
         
         input = self.interpolate_input(input) # from 16x768x1152 to 16x1024x1024
         
@@ -262,6 +262,7 @@ class ClimateSAM(nn.Module):
         #     })
         
         imgs = input[:, :3, :, :] # from 16x1024x1024 to 3x1024x1024
+        imgs = self.input_adapter(input) # from 16x1024x1024 to 3x1024x1024
         imgs = self.preprocess_images(imgs) # normalize the input images
         
         # encode the images
