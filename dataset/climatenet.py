@@ -10,7 +10,7 @@ from .transforms  import Compose, HorizontalFlip, VerticalFlip, RandomHorizontal
 from .climatenet_util import extract_point_and_bbox_prompts_from_climatenet_mask
 
 class ClimateDataset(Dataset):
-    def __init__(self, data_dir, train_flag=True, reset_flag=False, transforms=None,  **prompt_kwargs):
+    def __init__(self, data_dir, train_flag=True, reset_flag=False, augmented=False,  **prompt_kwargs):
         """
         Parameters:
             data_dir (str): Directory containing the .nc files.
@@ -27,9 +27,10 @@ class ClimateDataset(Dataset):
             raise ValueError(f"No .nc files found in directory: {sub_dir}")
 
         self.train_flag = train_flag
+        self.augmented = augmented
         self.transforms = Compose([HorizontalFlip(p = 0.5), 
                                   VerticalFlip(p = 0.5), 
-                                  RandomHorizontalRoll(p = 0.5, shift_limit=(0.5))]) if self.train_flag else None
+                                  RandomHorizontalRoll(p = 0.5, shift_limit=(0.5))]) if self.train_flag and self.augmented else None
         
         # self.transforms = None
 
