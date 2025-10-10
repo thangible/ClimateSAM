@@ -8,7 +8,6 @@ from typing import List, Tuple, Union
 
 import torch
 
-
 class BaseTransform(ABC):
     def __init__(self, p: float = 1.0, **kwargs):
         assert 0.0 < p <= 1.0
@@ -47,49 +46,71 @@ class Compose:
         return dict(image=image, mask=mask)
 
 
+## Spatial Transforms Reworked for (F, H, W) Image
+
 class VerticalFlip(BaseTransform):
     def apply(self, image: np.ndarray, mask: np.ndarray = None):
-        image = np.ascontiguousarray(image[::-1, ...])
+        # Image (F, H, W): flip along H-axis (axis 1)
+        image = np.ascontiguousarray(image[:, ::-1, ...]) 
+        
+        # Mask (H, W): flip along H-axis (axis 0)
         if mask is not None:
             mask = np.ascontiguousarray(mask[::-1, ...])
+            
         return image, mask
 
 
 class HorizontalFlip(BaseTransform):
     def apply(self, image: np.ndarray, mask: np.ndarray = None):
-        image = np.ascontiguousarray(image[:, ::-1, ...])
+        # Image (F, H, W): flip along W-axis (axis 2)
+        image = np.ascontiguousarray(image[:, :, ::-1, ...])
+        
+        # Mask (H, W): flip along W-axis (axis 1)
         if mask is not None:
             mask = np.ascontiguousarray(mask[:, ::-1, ...])
+            
         return image, mask
 
 
-class RandomCrop(BaseTransform):
-    def end_init_hook(self, scale: Union[List[float], float] = [0.1, 1.0]):
-        if isinstance(scale, float):
-            scale = [scale, scale]
-        # assert scale[0] > 0.0 and 0.0 < scale[1] <= 1.0
-        assert scale[0] > 0.0
-        self.scale = scale
-
+class RandomHorizontalRoll(BaseTransform):
+    """
+    Cyclically shifts the image content horizontally (Roll). 
+    The content that shifts off one side wraps around to the other side.
+    """
+    def end_init_hook(self, shift_limit: Union[Tuple[float, float], float] = (-0.2, 0.2)):
+        """
+        Initializes the random shift limits.
+        
+        Args:
+            shift_limit: A float or a tuple (min_ratio, max_ratio) for the horizontal shift.
+        """
+        if isinstance(shift_limit, float):
+            self.shift_limit = (-shift_limit, shift_limit)
+        else:
+            self.shift_limit = shift_limit
+            
+        assert self.shift_limit[0] < self.shift_limit[1]
+        assert -1.0 <= self.shift_limit[0] and self.shift_limit[1] <= 1.0
 
     def apply(self, image: np.ndarray, mask: np.ndarray = None):
-        height, width = image.shape[:2]
-        area = height * width
-        aspect_ratio = width / height
-        while True:
-            crop_factor = random.uniform(*self.scale)
-            target_area = crop_factor * area
-            crop_height = int(round(math.sqrt(target_area / aspect_ratio)))
-            crop_width = int(round(math.sqrt(target_area * aspect_ratio)))
-            if 0 < crop_height <= height and 0 < crop_width <= width:
-                break
+        """
+        Performs the cyclic shift (roll) on the image and mask.
+        """
+        # Get H, W from image. Image shape is (F, H, W)
+        _, height, width = image.shape[:3] 
 
-        height_crop_start = random.randint(0, height - crop_height)
-        height_crop_end = height_crop_start + crop_height
-        width_crop_start = random.randint(0, width - crop_width)
-        width_crop_end = width_crop_start + crop_width
+        # 1. Determine random shift ratio within limits
+        shift_ratio = random.uniform(*self.shift_limit)
 
-        image = image[height_crop_start:height_crop_end, width_crop_start:width_crop_end]
+        # 2. Convert ratio to integer pixel shift 'k'
+        # k > 0 shifts content to the right
+        k = int(shift_ratio * width)
+
+        # 3. Apply numpy.roll for cyclic shift along axis=2 (width) for image (F, H, W)
+        image = np.roll(image, k, axis=2) 
+
+        # 4. Apply numpy.roll for cyclic shift along axis=1 (width) for mask (H, W)
         if mask is not None:
-            mask = mask[height_crop_start:height_crop_end, width_crop_start:width_crop_end]
+            mask = np.roll(mask, k, axis=1)
+
         return image, mask

@@ -6,7 +6,7 @@ import torch
 from PIL import Image
 from torch.utils.data import Dataset
 import cv2
-from .transforms  import Compose
+from .transforms  import Compose, HorizontalFlip, VerticalFlip, RandomHorizontalRoll
 from .climatenet_util import extract_point_and_bbox_prompts_from_climatenet_mask
 
 class ClimateDataset(Dataset):
@@ -27,8 +27,12 @@ class ClimateDataset(Dataset):
             raise ValueError(f"No .nc files found in directory: {sub_dir}")
 
         self.train_flag = train_flag
-        self.transforms = Compose(transforms) if transforms else None
+        self.transforms = Compose([HorizontalFlip(p = 0.5), 
+                                  VerticalFlip(p = 0.5), 
+                                  RandomHorizontalRoll(p = 0.5, shift_limit=(0.5))]) if self.train_flag else None
         
+        # self.transforms = None
+
         # Store prompt generation parameters.
         self.prompt_kwargs = prompt_kwargs
         
@@ -59,20 +63,27 @@ class ClimateDataset(Dataset):
         
         # Generate the binary mask from the dataset.
         mask = self.get_labels(dataset)  # see function below
-        
+        mask_before_shape = mask.shape
         # Generate inputs
         data = dataset.to_array().sel(variable=self.variables).values.squeeze()
-                
+        data_before_shape = data.shape 
         # Apply Z-normalization to the data
         data = self.minmax_per_channel_to_image(data)
-        
-        rgb_image = self.to_image(dataset, var_1='TMQ', var_2='U850', var_3='V850')
+
+        # Apply transforms (if any)
+        if self.transforms:
+            transform_dict = self.transforms(data, mask)
+            data, mask = transform_dict['image'], transform_dict['mask']
+            assert data.shape == data_before_shape, f"Data shape changed after transforms: {data.shape} vs {data_before_shape}"
+            assert mask.shape == mask_before_shape, f"Mask shape changed after transforms: {mask.shape} vs {mask_before_shape}"
+
+        # rgb_image = self.to_image(dataset, var_1='TMQ', var_2='U850', var_3='V850')
         # Return a dictionary that matches the expected format.
         
         
         prompt_type = random.choice(['bbox', 'point', 'mask']) if self.train_flag else random.choice(['point', 'bbox'])
         prompt_dict = extract_point_and_bbox_prompts_from_climatenet_mask(mask = mask, prompt_type = prompt_type)
-        self.prompt_check(prompt_dict)
+        # self.prompt_check(prompt_dict)
         
         
         
@@ -253,6 +264,7 @@ class ClimateDataset(Dataset):
         # Remove the batch dimension if it exists (1, H, W, C) → (H, W, C)
         if rgb_image.shape[0] == 1:
             rgb_image = np.squeeze(rgb_image, axis=0) 
+        
 
         return rgb_image
     
