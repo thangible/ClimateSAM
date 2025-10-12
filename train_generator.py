@@ -359,7 +359,7 @@ def validate_one_epoch(epoch, val_dataloader, climatesam, prompt_generator, devi
         # Set inference images once
         
         _, _, interm_features = climatesam.set_infer_img(batch['input'])
-        tc_masks, ar_masks = prompt_generator.get_masks(interm_features)
+        tc_masks, ar_masks = prompt_generator(interm_features)
         masks_gt = batch['gt_mask']
         masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt]
         masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt]

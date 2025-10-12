@@ -38,10 +38,16 @@ class PromptGenerator(nn.Module):
             # Upsample each feature (by a factor of 2 each ConvTranspose2d)
             self.block_feature_upsamplers.append(
                 nn.Sequential(*[
-                    nn.ConvTranspose2d(fused_channels, fused_channels, kernel_size=2, stride=2)
+                    nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
                     for i in range(num_layers)
                 ])
             )
+            # self.block_feature_upsamplers.append(
+            #     nn.Sequential(*[
+            #         nn.ConvTranspose2d(fused_channels, fused_channels, kernel_size=2, stride=2)
+            #         for i in range(num_layers)
+            #     ])
+            # )
             # Fuse the three features:
             # The concatenation will have features_per_block*fused_channels channels.
             self.block_fuse_convs.append(
