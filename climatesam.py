@@ -467,7 +467,7 @@ class ClimateSAM(nn.Module):
         
         # Store features for reuse
         self.img_features, self.interm_features = self.image_encoder(imgs)
-        return imgs
+        return imgs, self.img_features, self.interm_features
 
     @torch.no_grad()
     def infer(

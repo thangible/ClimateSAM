@@ -10,7 +10,7 @@ from .transforms  import Compose, HorizontalFlip, VerticalFlip, RandomHorizontal
 from .climatenet_util import extract_point_and_bbox_prompts_from_climatenet_mask
 
 class ClimateDataset(Dataset):
-    def __init__(self, data_dir, train_flag=True, reset_flag=False, augmented=False, grid_prompt=False, **prompt_kwargs):
+    def __init__(self, data_dir, train_flag=True, reset_flag=False, augmented=False, generate_prompt=False, **prompt_kwargs):
         """
         Parameters:
             data_dir (str): Directory containing the .nc files.
@@ -28,7 +28,7 @@ class ClimateDataset(Dataset):
 
         self.train_flag = train_flag
         self.augmented = augmented
-        self.grid_prompt = grid_prompt
+        self.generate_prompt = generate_prompt
         self.transforms = Compose([HorizontalFlip(p = 0.5), 
                                   VerticalFlip(p = 0.5), 
                                   RandomHorizontalRoll(p = 0.5, shift_limit=(0.5))]) if self.train_flag and self.augmented else None
@@ -82,25 +82,22 @@ class ClimateDataset(Dataset):
         # rgb_image = self.to_image(dataset, var_1='TMQ', var_2='U850', var_3='V850')
         # Return a dictionary that matches the expected format.
 
-        if self.grid_prompt:
-            ar_point_prompts = self.generate_grid_prompts(mask == 2, num_points=16)
-            tc_point_prompts = self.generate_grid_prompts(mask == 1, num_points=16)
+        
+        if self.generate_prompt:
+            prompt_type = random.choice(['bbox', 'point', 'mask']) if self.train_flag else random.choice(['point', 'bbox'])
+            prompt_dict = extract_point_and_bbox_prompts_from_climatenet_mask(mask = mask, prompt_type = prompt_type)
+        else:
             prompt_dict = {
-                'ar_point_prompts': ar_point_prompts,
-                'tc_point_prompts': tc_point_prompts,
+                'ar_point_prompts': (None, None),
+                'tc_point_prompts': (None, None),
                 'ar_bbox_prompts': None,
                 'tc_bbox_prompts': None,
                 'ar_mask_prompts': None,
                 'tc_mask_prompts': None,
-                'ar_object_masks': None,
-                'tc_object_masks': None
+                'ar_object_masks' : None,
+                'tc_object_masks' : None
             }
-        else:
-            prompt_type = random.choice(['bbox', 'point', 'mask']) if self.train_flag else random.choice(['point', 'bbox'])
-            prompt_dict = extract_point_and_bbox_prompts_from_climatenet_mask(mask = mask, prompt_type = prompt_type)
         # self.prompt_check(prompt_dict)
-        
-        
         
         return {
             "input": data,
@@ -329,7 +326,7 @@ class ClimateDataset(Dataset):
 
         for y in y_coords:
             for x in x_coords:
-                prompts.append((x, y))
+                prompts.append([(x, y)])
 
         points = torch.from_numpy(np.stack(prompts, axis=0)).to(torch.float32)
         labels = torch.ones(points.shape[0], dtype=torch.float32).unsqueeze(1)  

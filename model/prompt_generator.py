@@ -69,12 +69,12 @@ class PromptGenerator(nn.Module):
         
         self.mask1_conv =  nn.Sequential(
             nn.Conv2d(fused_channels, fused_channels, kernel_size=4, stride=2, groups=2, padding=1),  # 2x518x518
-            nn.Conv2d(fused_channels, 1, kernel_size=4, stride=2,  padding=1)  # 2x256x256
+            nn.Conv2d(fused_channels, 1, kernel_size=4, stride=2,  padding=1)  # 1x256x256
             )
         
         self.mask2_conv = nn.Sequential(
             nn.Conv2d(fused_channels, fused_channels, kernel_size=4, stride=2, groups=2, padding=1),  # 2x518x518
-            nn.Conv2d(fused_channels, 1, kernel_size=4, stride=2, padding=1)  # 2x256x256
+            nn.Conv2d(fused_channels, 1, kernel_size=4, stride=2, padding=1)  # 1x256x256
             )
 
     def forward(self, feat_list):
@@ -124,3 +124,15 @@ class PromptGenerator(nn.Module):
         ar_mask = self.mask2_conv(neck_out)
         
         return tc_mask, ar_mask
+
+    def get_binary_mask(self, mask):
+        prob = torch.sigmoid(mask)
+        return (prob > 0.5).type_as(mask)
+
+    def get_masks(self, feat_list):
+        tc_mask, ar_mask = self.forward(feat_list)
+        tc_mask_bin = self.get_binary_mask(tc_mask)
+        ar_mask_bin = self.get_binary_mask(ar_mask)
+
+        return tc_mask_bin, ar_mask_bin
+        
