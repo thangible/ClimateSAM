@@ -67,15 +67,29 @@ class PromptGenerator(nn.Module):
             nn.ReLU()
         )
         
-        self.mask1_conv =  nn.Sequential(
-            nn.Conv2d(fused_channels, fused_channels, kernel_size=4, stride=2, groups=2, padding=1),  # 2x518x518
-            nn.Conv2d(fused_channels, 1, kernel_size=4, stride=2,  padding=1)  # 1x256x256
-            )
+        self.mask1_conv = nn.Sequential(
+            nn.Conv2d(fused_channels, fused_channels, kernel_size=3, padding=1),  # maintain spatial size
+            nn.ReLU(),
+            nn.ConvTranspose2d(fused_channels, fused_channels, kernel_size=2, stride=2),  # 2x upsampling
+            nn.Conv2d(fused_channels, 1, kernel_size=3, padding=1)  # 1x1024x1024
+        )
         
         self.mask2_conv = nn.Sequential(
-            nn.Conv2d(fused_channels, fused_channels, kernel_size=4, stride=2, groups=2, padding=1),  # 2x518x518
-            nn.Conv2d(fused_channels, 1, kernel_size=4, stride=2, padding=1)  # 1x256x256
-            )
+            nn.Conv2d(fused_channels, fused_channels, kernel_size=3, padding=1),  # maintain spatial size
+            nn.ReLU(),
+            nn.ConvTranspose2d(fused_channels, fused_channels, kernel_size=2, stride=2),  # 2x upsampling
+            nn.Conv2d(fused_channels, 1, kernel_size=3, padding=1)  # 1x1024x1024
+        )
+        
+        # self.mask1_conv =  nn.Sequential(
+        #     nn.Conv2d(fused_channels, fused_channels, kernel_size=4, stride=2, groups=2, padding=1),  # 2x518x518
+        #     nn.Conv2d(fused_channels, 1, kernel_size=4, stride=2,  padding=1)  # 1x256x256
+        #     )
+        
+        # self.mask2_conv = nn.Sequential(
+        #     nn.Conv2d(fused_channels, fused_channels, kernel_size=4, stride=2, groups=2, padding=1),  # 2x518x518
+        #     nn.Conv2d(fused_channels, 1, kernel_size=4, stride=2, padding=1)  # 1x256x256
+        #     )
 
     def forward(self, feat_list):
         """

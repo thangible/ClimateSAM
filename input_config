@@ -8,8 +8,8 @@ run_name = train_climate_sam_phase_2
 
 [BATCH CONFIG]
 ; num_workers = None
-gradient_accumulation_steps = 4
-train_bs = 32
+gradient_accumulation_steps = 8
+train_bs = 16
 
 val_bs = 4
 ; weight_decay = 1e-4

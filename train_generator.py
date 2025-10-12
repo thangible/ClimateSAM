@@ -174,9 +174,15 @@ def main_worker(worker_id, worker_args):
         'vit_l': 6,
         'vit_h': 9  # Assuming ViT-H has 4 features per block
     }
+    in_channels = {
+        'vit_b': 768,
+        'vit_l': 1024,
+        'vit_h': 1280
+    }
     
     prompt_generator = PromptGenerator(num_features=num_features_map[worker_args.sam_type],
-                                       features_per_block=feature_per_block[worker_args.sam_type]
+                                       features_per_block=feature_per_block[worker_args.sam_type],
+                                       in_channels= in_channels[worker_args.sam_type]
                                       ).to(device=device)
     
     optimizer, scheduler = setup_optimizer_and_scheduler(prompt_generator, worker_args)
@@ -341,7 +347,7 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompt_generator, optim
     
 @torch.no_grad()
 def validate_one_epoch(epoch, val_dataloader, climatesam, prompt_generator, device,  ar_metrics, tc_metrics, max_epoch_num, worker_args):
-    prompt_generator.eval()
+    # prompt_generator.eval()
     valid_pbar = tqdm(total=len(val_dataloader), desc='valid', leave=False)
     
     for val_step, batch in enumerate(val_dataloader):
