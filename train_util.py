@@ -296,8 +296,8 @@ def plot_mask_with_points_and_bbox(mask, ar_points=None, tc_points=None, ar_bbox
             tc_pred_np = tc_pred_np.squeeze()
         
         # Plot contour lines for TC predictions
-        ax.contour(tc_pred_np, levels=[0.5], colors=['magenta'], linewidths=2, linestyles='-.')
-        legend_elements.append(plt.Line2D([0], [0], color='magenta', lw=2, linestyle='-.', label='TC Prediction'))
+        ax.contour(tc_pred_np, levels=[0.5], colors=['magenta'], linewidths=2, linestyles='-')
+        legend_elements.append(plt.Line2D([0], [0], color='magenta', lw=2, linestyle='-', label='TC Prediction'))
 
     ax.legend(handles=legend_elements, loc='lower right', bbox_to_anchor=(1, -0.25), frameon=False, fontsize=14, ncol=4, columnspacing=0.5)
     ax.set_title("Mask with AR/TC Points, BBoxes and Predictions", fontsize=16)

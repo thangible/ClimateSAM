@@ -365,6 +365,38 @@ def validate_one_epoch(epoch, val_dataloader, climatesam, prompt_generator, devi
                     if len(masks[i].shape) != 4:
                         raise RuntimeError
                     
+        if val_step == 0:
+            wandb_images = {}
+            masks_gt_copy = copy.deepcopy(masks_gt)
+            tc_masks_copy = copy.deepcopy(tc_masks)
+            ar_masks_copy = copy.deepcopy(ar_masks)
+            for i in range(len(masks_gt)):
+                mask = masks_gt_copy[i]
+                ar_points = None
+                tc_points = None
+                ar_bbox = None
+                tc_bbox = None
+                tc_pred_mask = tc_masks_copy[i]
+                ar_pred_mask = ar_masks_copy[i]
+                save_path = os.path.join(worker_args.exp_dir, worker_args.run_name, 'images', f"epoch_{epoch}_step_{val_step}_image_{i}.png")
+                fig = plot_mask_with_points_and_bbox(mask, ar_points, tc_points, ar_bbox, tc_bbox, tc_pred_mask, ar_pred_mask, radius=8, save_path=save_path, axis=True)
+                
+                # Collect images for batch logging
+                if worker_args.wandb:
+                    wandb_images[f"valid/val_step_{val_step}_image_{i}"] = wandb.Image(fig, caption=f"Validation Step {val_step} Image {i}")
+                    print(f"Epoch {epoch} - Image {i} prepared for logging.")
+            
+            # Log all images at once for the same epoch
+            if worker_args.wandb and wandb_images:
+                wandb_images["epoch"] = epoch
+                wandb.log(wandb_images, step=epoch)
+                print(f"Epoch {epoch} - All {len(wandb_images)-1} images logged to W&B together.")
+
+            del ar_point_prompts_copy, tc_point_prompts_copy, ar_bbox_prompts_copy, tc_bbox_prompts_copy, masks_gt_copy, tc_masks_copy, ar_masks_copy
+            torch.cuda.empty_cache()
+                
+            
+                    
         
     
     tc_metrics.update(tc_masks, masks_tc_gts,  batch['index_name'])
