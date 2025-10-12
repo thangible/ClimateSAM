@@ -135,6 +135,9 @@ class ClimateSAM(nn.Module):
                     c.eval()
                 else:
                     c.train(mode=mode)
+                    if n == 'prompt_generator':
+                        for param in c.parameters():
+                            param.requires_grad = True
             if verbose:
                 print("Training prompt_encoder and prompt_generator")
             
@@ -254,12 +257,7 @@ class ClimateSAM(nn.Module):
             tc_masks, ar_masks = self.prompt_generator(interm_embeddings) # shape: batch x 2 x 256 x 256
             ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = None, None, None, None
             
-            # # Log prompt generator outputs only if debugging
-            # if self.enable_wandb_logging and wandb.run:
-            #     wandb.log({
-            #         "forward/prompt_generator_tc_shape": list(tc_masks.shape) if tc_masks is not None else None,
-            #         "forward/prompt_generator_ar_shape": list(ar_masks.shape) if ar_masks is not None else None
-            #     })
+
             
         tc_sparse_embeddings, tc_dense_embeddings = [], []
         ar_sparse_embeddings, ar_dense_embeddings = [], []

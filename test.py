@@ -350,7 +350,7 @@ def main_worker(worker_id, worker_args):
         data_dir=dataset_dir, train_flag=True, shot_num=worker_args.shot_num,
         augmented=False
     )
-    val_dataset = ClimateDataset(data_dir=dataset_dir, train_flag=False, augmented=False)
+    val_dataset = ClimateDataset(data_dir=dataset_dir, train_flag=False, augmented=False, grid_prompt=True)
     
     train_collate_fn = train_dataset.collate_fn
     val_collate_fn = val_dataset.collate_fn
@@ -461,10 +461,8 @@ def main_worker(worker_id, worker_args):
     
     scaler = torch.amp.GradScaler('cuda') 
     print(f"Validation will be performed every {worker_args.valid_per_epochs} epochs.")
-    model.train(mode = True, phase = worker_args.phase, verbose=True)
+    # model.train(mode = True, phase = worker_args.phase, verbose=True)
     for epoch in range(1, max_epoch_num + 1):
-        train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler)
-        if epoch % worker_args.valid_per_epochs == 0 or epoch == max_epoch_num:
             miou_tc, miou_ar = validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args)
             print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}")
             if miou_tc > best_miou_tc:
@@ -476,29 +474,7 @@ def main_worker(worker_id, worker_args):
             if (miou_tc + miou_ar) / 2 > best_miou_total:
                 best_miou_total = (miou_tc + miou_ar) / 2
                 print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
-                if worker_args.save_model and epoch > 4:
-                    if worker_args.phase == 1:
-                        save_path = os.path.join(worker_args.exp_dir, f"phase_1_weights.pth")
-                        phase_1_weights = {
-                            'image_encoder': model.image_encoder.state_dict(),
-                            'mask_decoder': model.mask_decoder.state_dict(),
-                        }
-                        torch.save(phase_1_weights, save_path)
-                        print(f"Image encoder saved to {save_path}")
-                        wandb.save(save_path)
-                        print(f"Image encoder saved to wandb: {save_path}")
-                    if worker_args.phase == 2:
-                        save_path = os.path.join(worker_args.exp_dir, f"phase_2_weights.pth")
-                        phase_2_weights = {
-                            'image_encoder': model.image_encoder.state_dict(),
-                            'mask_decoder': model.mask_decoder.state_dict(),
-                            'input_adapter': model.input_adapter.state_dict(),
-                        }
-                        torch.save(phase_2_weights, save_path)
-                        print(f"Image encoder saved to {save_path}")
-                        wandb.save(save_path)
-                        print(f"Image encoder saved to wandb: {save_path}")
-        
+
 if __name__ == '__main__':
     print("Starting training process...")
     args = parse()
