@@ -71,14 +71,16 @@ class PromptGenerator(nn.Module):
             nn.Conv2d(fused_channels, fused_channels, kernel_size=3, padding=1),  # maintain spatial size
             nn.ReLU(),
             # nn.ConvTranspose2d(fused_channels, fused_channels, kernel_size=2, stride=2),  # 2x upsampling
-            nn.Conv2d(fused_channels, 1, kernel_size=3, padding=1)  # 1x1024x1024
+            nn.Conv2d(fused_channels, 1, kernel_size=3, padding=1),  # 1x1024x1024
+            nn.Sigmoid()
         )
         
         self.mask2_conv = nn.Sequential(
             nn.Conv2d(fused_channels, fused_channels, kernel_size=3, padding=1),  # maintain spatial size
             nn.ReLU(),
             # nn.ConvTranspose2d(fused_channels, fused_channels, kernel_size=2, stride=2),  # 2x upsampling
-            nn.Conv2d(fused_channels, 1, kernel_size=3, padding=1)  # 1x1024x1024
+            nn.Conv2d(fused_channels, 1, kernel_size=3, padding=1),  # 1x1024x1024
+            nn.Sigmoid()
         )
         
         # self.mask1_conv =  nn.Sequential(
@@ -137,20 +139,9 @@ class PromptGenerator(nn.Module):
         tc_mask = self.mask1_conv(neck_out)
         ar_mask = self.mask2_conv(neck_out)
         
-        return tc_mask, ar_mask
-
-    def get_binary_mask(self, mask):
-        prob = torch.sigmoid(mask)
-        bin_mask = (prob > 0.5).type_as(mask)
-        bin_mask = F.interpolate(bin_mask, size=(768, 1152), mode='nearest')
+        tc_mask = F.interpolate(tc_mask, size=(768, 1152), mode='bilinear', align_corners=False)
+        ar_mask = F.interpolate(ar_mask, size=(768, 1152), mode='bilinear', align_corners=False)
         
-        return bin_mask.squeeze()
+        return tc_mask.squeeze(), ar_mask.squeeze()
 
-
-    def get_masks(self, feat_list):
-        tc_mask, ar_mask = self.forward(feat_list)
-        tc_mask_bin = self.get_binary_mask(tc_mask)
-        ar_mask_bin = self.get_binary_mask(ar_mask)
-
-        return tc_mask_bin, ar_mask_bin
         

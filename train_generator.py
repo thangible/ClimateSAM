@@ -243,14 +243,13 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompt_generator, optim
     
     for train_step, batch in enumerate(train_dataloader):
         batch = batch_to_cuda(batch, device)
-        
+        _, _, interm_features = climatesam.set_infer_img(batch['input'])
+        masks_gt = batch['gt_mask']
+        masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt]
+        masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt]
         with torch.amp.autocast('cuda'):
-            _, _, interm_features = climatesam.set_infer_img(batch['input'])
-            tc_masks, ar_masks = prompt_generator.get_masks(interm_features)
             
-            masks_gt = batch['gt_mask']
-            masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt]
-            masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt]
+            tc_masks, ar_masks = prompt_generator(interm_features)
             
             # some processing to make sure the masks are in the right shape
             # for masks in [masks_ar_gts, masks_tc_gts, ar_masks, tc_masks]:
@@ -358,7 +357,7 @@ def validate_one_epoch(epoch, val_dataloader, climatesam, prompt_generator, devi
         batch = batch_to_cuda(batch, device)
         
         # Set inference images once
-        images = climatesam.set_infer_img(batch['input'])
+        
         _, _, interm_features = climatesam.set_infer_img(batch['input'])
         tc_masks, ar_masks = prompt_generator.get_masks(interm_features)
         masks_gt = batch['gt_mask']
