@@ -246,21 +246,21 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompt_generator, optim
         
         with torch.amp.autocast('cuda'):
             _, _, interm_features = climatesam.set_infer_img(batch['input'])
-            tc_masks, ar_masks = prompt_generator(interm_features)
+            tc_masks, ar_masks = prompt_generator.get_masks(interm_features)
             
             masks_gt = batch['gt_mask']
             masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt]
             masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt]
             
             # some processing to make sure the masks are in the right shape
-            for masks in [masks_ar_gts, masks_tc_gts, ar_masks, tc_masks]:
-                    for i in range(len(masks)):
-                        if len(masks[i].shape) == 2:
-                            masks[i] = masks[i][None, None, :]
-                        if len(masks[i].shape) == 3:
-                            masks[i] = masks[i][:, None, :]
-                        if len(masks[i].shape) != 4:
-                            raise RuntimeError
+            # for masks in [masks_ar_gts, masks_tc_gts, ar_masks, tc_masks]:
+            #         for i in range(len(masks)):
+            #             if len(masks[i].shape) == 2:
+            #                 masks[i] = masks[i][None, None, :]
+            #             if len(masks[i].shape) == 3:
+            #                 masks[i] = masks[i][:, None, :]
+            #             if len(masks[i].shape) != 4:
+            #                 raise RuntimeError
                         
             loss_dict = compute_climate_loss(
                 ar_masks=ar_masks,
@@ -283,6 +283,10 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompt_generator, optim
             epoch_loss_dict[key] += value.item() / gradient_accumulation_steps
         
         backward_context = nullcontext
+        with backward_context():
+            scaler.scale(total_loss).backward()
+            
+            
         if batch_pbar:
                 batch_pbar.update(1)
                 batch_pbar.set_postfix({
@@ -362,14 +366,14 @@ def validate_one_epoch(epoch, val_dataloader, climatesam, prompt_generator, devi
         masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt]
         
         # some processing to make sure the masks are in the right shape
-        for masks in [masks_ar_gts, masks_tc_gts, ar_masks, tc_masks]:
-                for i in range(len(masks)):
-                    if len(masks[i].shape) == 2:
-                        masks[i] = masks[i][None, None, :]
-                    if len(masks[i].shape) == 3:
-                        masks[i] = masks[i][:, None, :]
-                    if len(masks[i].shape) != 4:
-                        raise RuntimeError
+        # for masks in [masks_ar_gts, masks_tc_gts, ar_masks, tc_masks]:
+        #         for i in range(len(masks)):
+        #             if len(masks[i].shape) == 2:
+        #                 masks[i] = masks[i][None, None, :]
+        #             if len(masks[i].shape) == 3:
+        #                 masks[i] = masks[i][:, None, :]
+        #             if len(masks[i].shape) != 4:
+        #                 raise RuntimeError
                     
         if val_step == 0:
             wandb_images = {}
