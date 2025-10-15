@@ -138,11 +138,36 @@ def main_worker(worker_id, worker_args):
     )
     
     cgnetprompter = CGNetPrompter(weights_path='pretrained/weights_cgnet.pth', device=device, worker_args=worker_args)
-    cgnetprompter.train(dataloader=train_dataloader, epochs=5)
+    
+    count = 0
+    for batch in val_dataloader:
+
+        features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
+        prompt_dict = cgnetprompter.get_prompts(features, prompt_type='point')
+        
+        print(f"Prompt dictionary keys: {list(prompt_dict.keys())}")
+        for key, value in prompt_dict.items():
+            if isinstance(value, torch.Tensor):
+                print(f"{key}: Tensor with shape {value.shape}")
+            elif isinstance(value, list):
+                print(f"{key}: List with length {len(value)}")
+                if len(value) > 0 and isinstance(value[0], torch.Tensor):
+                    print(f"  First item shape: {value[0].shape}")
+                # if len(value) > 0:
+                #     print(value[0])
+            elif isinstance(value, tuple):
+                print(f"{key}: Tuple with length {len(value)}")
+                print(f"  First element type: {type(value[0])}")
+                print(f"  Second element type: {type(value[1])}")
+            else:
+                print(f"{key}: {type(value)}")
+        count += 1
+        if count >= 1:
+            break
     
     
-    
-    
+        
+        # Do something with the prompts
     ##########################
     ###########################
     

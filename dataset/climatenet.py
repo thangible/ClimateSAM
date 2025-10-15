@@ -8,6 +8,7 @@ from torch.utils.data import Dataset
 import cv2
 from .transforms  import Compose, HorizontalFlip, VerticalFlip, RandomHorizontalRoll
 from .climatenet_util import extract_point_and_bbox_prompts_from_climatenet_mask
+from model.prompt.cgnet import CGNetPrompter
 
 class ClimateDataset(Dataset):
     def __init__(self, data_dir, train_flag=True, reset_flag=False, augmented=False, generate_prompt=False, **prompt_kwargs):
@@ -28,6 +29,7 @@ class ClimateDataset(Dataset):
 
         self.train_flag = train_flag
         self.augmented = augmented
+        self.cg_prompter = None
         self.generate_prompt = generate_prompt
         self.transforms = Compose([HorizontalFlip(p = 0.5), 
                                   VerticalFlip(p = 0.5), 
@@ -60,6 +62,14 @@ class ClimateDataset(Dataset):
         }
         
         # self.mean_std_dict = self.calculate_stats() 
+
+    # def get_cg_prompter(self, worker_args, device):
+    #     cg_prompter = CGNetPrompter(weights_path='pretrained/weights_cgnet.pth', device=device, worker_args=worker_args)
+    #     self.cg_prompter = cg_prompter
+    #     print("CGNet prompter initialized.")
+        
+        
+        
 
     def __getitem__(self, index):
         # Use filename as the unique index name.
@@ -98,6 +108,7 @@ class ClimateDataset(Dataset):
         if self.generate_prompt:
             prompt_type = random.choice(['bbox', 'point', 'mask']) if self.train_flag else random.choice(['point', 'bbox'])
             prompt_dict = extract_point_and_bbox_prompts_from_climatenet_mask(mask = mask, prompt_type = prompt_type)
+            
         else:
             prompt_dict = {
                 'ar_point_prompts': (None, None),

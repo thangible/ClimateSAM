@@ -4,6 +4,7 @@ import numpy as np
 from tqdm import tqdm
 import os
 import torch.nn.functional as F
+from .create_prompt_from_mask import extract_point_and_bbox_prompts_from_pred_masks
 
 
 class CGNetPrompter:
@@ -40,6 +41,20 @@ class CGNetPrompter:
                 self.optimizer.step()
                 self.optimizer.zero_grad() 
 
+            if epoch == 1:
+                import matplotlib.pyplot as plt
+                fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+                axes[0].imshow(labels[0].cpu().numpy(), cmap='viridis')
+                axes[0].set_title('Ground Truth')
+                axes[1].imshow(predictions[0].cpu().numpy(), cmap='viridis')
+                axes[1].set_title('Predictions')
+                plt.show()
+                plot_path = os.path.join(self.exp_dir, f"epoch_{epoch}_plot.png")
+                fig.savefig(plot_path)
+                plt.close(fig)
+                print(f"Saved image at {plot_path}")
+                
+                
             print('Epoch stats:')
             print(aggregate_cm)
             ious = get_iou_perClass(aggregate_cm)
@@ -54,16 +69,26 @@ class CGNetPrompter:
         
         
     @torch.no_grad()
-    def get_aux_mask(self, image):
+    def get_aux_mask(self, bacth_input):
         '''
         Given an input image, return the auxiliary mask from CGNet.
         '''
         self.cgnet_model.eval()
         with torch.no_grad():
-            output = self.cgnet_model(image)
+            output = self.cgnet_model(bacth_input)
             outputs = torch.softmax(output, 1)
         preds = torch.max(outputs, 1)[1]
         return preds
+    
+    @torch.no_grad()
+    def get_prompts(self, batch_input, prompt_type='point', noisy_mask_threshold=0.5):
+        '''
+        Given an input image, return the prompts from CGNet.
+        '''
+        pred_masks = self.get_aux_mask(batch_input)
+        prompt_dict = extract_point_and_bbox_prompts_from_pred_masks(preds=pred_masks, device=self.device, prompt_type=prompt_type)
+
+        return prompt_dict
 
     
     
