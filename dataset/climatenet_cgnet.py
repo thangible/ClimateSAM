@@ -9,8 +9,8 @@ import cv2
 from .transforms  import Compose, HorizontalFlip, VerticalFlip, RandomHorizontalRoll
 from .climatenet_util import extract_point_and_bbox_prompts_from_climatenet_mask
 
-class ClimateDataset(Dataset):
-    def __init__(self, data_dir, train_flag=True, reset_flag=False, augmented=False, generate_prompt=False, **prompt_kwargs):
+class ClimateDatasetCGNet(Dataset):
+    def __init__(self, data_dir, train_flag=True, reset_flag=False, augmented=False, generate_prompt=False, z_transform=True, **prompt_kwargs):
         """
         Parameters:
             data_dir (str): Directory containing the .nc files.
@@ -29,6 +29,7 @@ class ClimateDataset(Dataset):
         self.train_flag = train_flag
         self.augmented = augmented
         self.generate_prompt = generate_prompt
+        self.z_transform = z_transform
         self.transforms = Compose([HorizontalFlip(p = 0.5), 
                                   VerticalFlip(p = 0.5), 
                                   RandomHorizontalRoll(p = 0.5, shift_limit=(0.5))]) if self.train_flag and self.augmented else None
@@ -49,17 +50,17 @@ class ClimateDataset(Dataset):
         self.variables = ['TMQ', 'U850', 'V850', 'UBOT', 'VBOT', 'QREFHT', 'PS', 'PSL', 
                         'T200', 'T500', 'PRECT', 'TS', 'TREFHT', 'Z1000', 'Z200', 'ZBOT']
         
-        
-        # Define the path to save the mean and std values.
-        self.mean_std_path = os.path.join(data_dir, "mean_std.npy")
-        self.cgnet_fields = {
+        self.fields = {
             "TMQ": {"mean": 19.21859, "std": 15.81723},
             "U850": {"mean": 1.55302, "std": 8.29764},
             "V850": {"mean": 0.25413, "std": 6.23163},
             "PSL": {"mean": 100814.414, "std": 1461.2227},
         }
         
-        # self.mean_std_dict = self.calculate_stats() 
+        
+        # Define the path to save the mean and std values.
+        self.mean_std_path = os.path.join(data_dir, "mean_std.npy")
+        self.mean_std_dict = self.calculate_stats() 
 
     def __getitem__(self, index):
         # Use filename as the unique index name.
@@ -68,120 +69,115 @@ class ClimateDataset(Dataset):
 
         # Load the .nc file.
         dataset = xr.load_dataset(file_path)
-        
-        # CG INPUT
-        cgnet_input = dataset[list(self.cgnet_fields)].to_array()
-        for variable_name, stats in self.cgnet_fields.items():
-            var = cgnet_input.sel(variable=variable_name).values
-            var -= stats['mean']
-            var /= stats['std']
-        cgnet_input = cgnet_input.transpose('time', 'variable', 'lat', 'lon')
-        
-        # SAM INPUT
-        sam_input = dataset.to_array().sel(variable=self.variables).values.squeeze()
-        sam_input = self.minmax_per_channel_to_image(sam_input)
+
+        # Apply Z-normalization if enabled
+        if self.z_transform:
+            self.z_normalize(dataset)
+
+        # Generate the binary mask from the dataset.
         mask = self.get_labels(dataset)  # see function below
         
-        # # Apply transforms (if any)
-        # if self.transforms:
-        #     mask_before_shape = mask.shape
-        #     data_before_shape = sam_input.shape 
-        #     transform_dict = self.transforms(sam_input, mask)
-        #     sam_input, mask = transform_dict['image'], transform_dict['mask']
-        #     assert sam_input.shape == data_before_shape, f"Data shape changed after transforms: {sam_input.shape} vs {data_before_shape}"
-        #     assert mask.shape == mask_before_shape, f"Mask shape changed after transforms: {mask.shape} vs {mask_before_shape}"
+        mask_before_shape = mask.shape
+        # Generate inputs
+        data = dataset.to_array().sel(variable=self.fields.keys).values.squeeze()
+        data_before_shape = data.shape 
+        # Apply Z-normalization to the data
+        # data = self.minmax_per_channel_to_image(data)
+
+        # Apply transforms (if any)
+        if self.transforms:
+            transform_dict = self.transforms(data, mask)
+            data, mask = transform_dict['image'], transform_dict['mask']
+            assert data.shape == data_before_shape, f"Data shape changed after transforms: {data.shape} vs {data_before_shape}"
+            assert mask.shape == mask_before_shape, f"Mask shape changed after transforms: {mask.shape} vs {mask_before_shape}"
+            
+        return data, mask, index_name
 
         # rgb_image = self.to_image(dataset, var_1='TMQ', var_2='U850', var_3='V850')
         # Return a dictionary that matches the expected format.
 
         
-        if self.generate_prompt:
-            prompt_type = random.choice(['bbox', 'point', 'mask']) if self.train_flag else random.choice(['point', 'bbox'])
-            prompt_dict = extract_point_and_bbox_prompts_from_climatenet_mask(mask = mask, prompt_type = prompt_type)
-        else:
-            prompt_dict = {
-                'ar_point_prompts': (None, None),
-                'tc_point_prompts': (None, None),
-                'ar_bbox_prompts': None,
-                'tc_bbox_prompts': None,
-                'ar_mask_prompts': None,
-                'tc_mask_prompts': None,
-                'ar_object_masks' : None,
-                'tc_object_masks' : None
-            }
-        # self.prompt_check(prompt_dict)
+        # if self.generate_prompt:
+        #     prompt_type = random.choice(['bbox', 'point', 'mask']) if self.train_flag else random.choice(['point', 'bbox'])
+        #     prompt_dict = extract_point_and_bbox_prompts_from_climatenet_mask(mask = mask, prompt_type = prompt_type)
+        # else:
+        #     prompt_dict = {
+        #         'ar_point_prompts': (None, None),
+        #         'tc_point_prompts': (None, None),
+        #         'ar_bbox_prompts': None,
+        #         'tc_bbox_prompts': None,
+        #         'ar_mask_prompts': None,
+        #         'tc_mask_prompts': None,
+        #         'ar_object_masks' : None,
+        #         'tc_object_masks' : None
+        #     }
+        # # self.prompt_check(prompt_dict)
         
-        return {
-            "input": sam_input,
-            'cgnet_input': cgnet_input,
-            "gt_mask": mask,     # binary mask.
-            "index_name": index_name,
+        # return {
+        #     "input": data,
+        #     "gt_mask": mask,     # binary mask.
+        #     "index_name": index_name,
             
-            "ar_point_prompts": prompt_dict['ar_point_prompts'],
-            "tc_point_prompts": prompt_dict['tc_point_prompts'],
+        #     "ar_point_prompts": prompt_dict['ar_point_prompts'],
+        #     "tc_point_prompts": prompt_dict['tc_point_prompts'],
             
-            "ar_bbox_prompts": prompt_dict['ar_bbox_prompts'],
-            "tc_bbox_prompts": prompt_dict['tc_bbox_prompts'],
+        #     "ar_bbox_prompts": prompt_dict['ar_bbox_prompts'],
+        #     "tc_bbox_prompts": prompt_dict['tc_bbox_prompts'],
             
-            "ar_mask_prompts": prompt_dict['ar_mask_prompts'],
-            "tc_mask_prompts": prompt_dict['tc_mask_prompts'],
+        #     "ar_mask_prompts": prompt_dict['ar_mask_prompts'],
+        #     "tc_mask_prompts": prompt_dict['tc_mask_prompts'],
             
-            "ar_object_masks" : prompt_dict['ar_object_masks'],
-            "tc_object_masks" : prompt_dict['tc_object_masks']
-        }
+        #     "ar_object_masks" : prompt_dict['ar_object_masks'],
+        #     "tc_object_masks" : prompt_dict['tc_object_masks']
+        # }
         
-    # def z_normalize(self, data):
-    #     # Build a dict of per-variable stats so you can iterate: for variable_name, stats in self.fields.items()
-    #     self.fields = {
-    #         "TMQ": {"mean": 19.21859, "std": 15.81723},
-    #         "U850": {"mean": 1.55302, "std": 8.29764},
-    #         "V850": {"mean": 0.25413, "std": 6.23163},
-    #         "PSL": {"mean": 100814.414, "std": 1461.2227},
-    #     }
-    #     for variable_name, stats in self.fields.items():   
-    #         var = features.sel(variable=variable_name).values
-    #         var -= stats['mean']
-    #         var /= stats['std']
+    def z_normalize(self, dataset):
+        # Build a dict of per-variable stats so you can iterate: for variable_name, stats in self.fields.items()
 
-    # def prompt_check(self, prompt_dict):
-    #     """
-    #     Check if prompt coordinates are within valid image dimensions.
-    #     Print warnings if x > 1152 or y > 768.
-    #     """
-    #     max_x = 1152
-    #     max_y = 768
+        for variable_name, stats in self.fields.items():
+            var = dataset.sel(variable=variable_name).values
+            var -= stats['mean']
+            var /= stats['std']
+
+    def prompt_check(self, prompt_dict):
+        """
+        Check if prompt coordinates are within valid image dimensions.
+        Print warnings if x > 1152 or y > 768.
+        """
+        max_x = 1152
+        max_y = 768
         
-    #     # Check AR point prompts
-    #     if prompt_dict['ar_point_prompts'][0] is not None:
-    #         ar_points = prompt_dict['ar_point_prompts'][0]
-    #         for i, point in enumerate(ar_points):
-    #             x, y = point[0]  # point is in format [[x, y]]
-    #             if x > max_x or y > max_y:
-    #                 print(f"AR point prompt {i} out of bounds: x={x}, y={y} (max: x={max_x}, y={max_y})")
+        # Check AR point prompts
+        if prompt_dict['ar_point_prompts'][0] is not None:
+            ar_points = prompt_dict['ar_point_prompts'][0]
+            for i, point in enumerate(ar_points):
+                x, y = point[0]  # point is in format [[x, y]]
+                if x > max_x or y > max_y:
+                    print(f"AR point prompt {i} out of bounds: x={x}, y={y} (max: x={max_x}, y={max_y})")
         
-    #     # Check TC point prompts
-    #     if prompt_dict['tc_point_prompts'][0] is not None:
-    #         tc_points = prompt_dict['tc_point_prompts'][0]
-    #         for i, point in enumerate(tc_points):
-    #             x, y = point[0]  # point is in format [[x, y]]
-    #             if x > max_x or y > max_y:
-    #                 print(f"TC point prompt {i} out of bounds: x={x}, y={y} (max: x={max_x}, y={max_y})")
+        # Check TC point prompts
+        if prompt_dict['tc_point_prompts'][0] is not None:
+            tc_points = prompt_dict['tc_point_prompts'][0]
+            for i, point in enumerate(tc_points):
+                x, y = point[0]  # point is in format [[x, y]]
+                if x > max_x or y > max_y:
+                    print(f"TC point prompt {i} out of bounds: x={x}, y={y} (max: x={max_x}, y={max_y})")
         
-    #     # Check AR bbox prompts
-    #     if prompt_dict['ar_bbox_prompts'] is not None:
-    #         ar_bboxes = prompt_dict['ar_bbox_prompts']
-    #         for i, bbox in enumerate(ar_bboxes):
-    #             x1, y1, x2, y2 = bbox[0]  # bbox is in format [[x1, y1, x2, y2]]
-    #             if x1 > max_x or x2 > max_x or y1 > max_y or y2 > max_y:
-    #                 print(f"AR bbox prompt {i} out of bounds: x1={x1}, y1={y1}, x2={x2}, y2={y2} (max: x={max_x}, y={max_y})")
+        # Check AR bbox prompts
+        if prompt_dict['ar_bbox_prompts'] is not None:
+            ar_bboxes = prompt_dict['ar_bbox_prompts']
+            for i, bbox in enumerate(ar_bboxes):
+                x1, y1, x2, y2 = bbox[0]  # bbox is in format [[x1, y1, x2, y2]]
+                if x1 > max_x or x2 > max_x or y1 > max_y or y2 > max_y:
+                    print(f"AR bbox prompt {i} out of bounds: x1={x1}, y1={y1}, x2={x2}, y2={y2} (max: x={max_x}, y={max_y})")
         
-    #     # Check TC bbox prompts
-    #     if prompt_dict['tc_bbox_prompts'] is not None:
-    #         tc_bboxes = prompt_dict['tc_bbox_prompts']
-    #         for i, bbox in enumerate(tc_bboxes):
-    #             x1, y1, x2, y2 = bbox[0]  # bbox is in format [[x1, y1, x2, y2]]
-    #             if x1 > max_x or x2 > max_x or y1 > max_y or y2 > max_y:
-    #                 print(f"TC bbox prompt {i} out of bounds: x1={x1}, y1={y1}, x2={x2}, y2={y2} (max: x={max_x}, y={max_y})")
+        # Check TC bbox prompts
+        if prompt_dict['tc_bbox_prompts'] is not None:
+            tc_bboxes = prompt_dict['tc_bbox_prompts']
+            for i, bbox in enumerate(tc_bboxes):
+                x1, y1, x2, y2 = bbox[0]  # bbox is in format [[x1, y1, x2, y2]]
+                if x1 > max_x or x2 > max_x or y1 > max_y or y2 > max_y:
+                    print(f"TC bbox prompt {i} out of bounds: x1={x1}, y1={y1}, x2={x2}, y2={y2} (max: x={max_x}, y={max_y})")
             
         
         
@@ -233,39 +229,39 @@ class ClimateDataset(Dataset):
     #     # Return a dictionary with channel-wise mean and std
     #     return result
     
-    def z_normalize(self, data):
-        """
-        Normalize the data using Z-normalization: (X - mean) / std
-        """
-        mean = self.mean_std_dict["mean"]
-        std = self.mean_std_dict["std"]
+    # def z_normalize(self, data):
+    #     """
+    #     Normalize the data using Z-normalization: (X - mean) / std
+    #     """
+    #     mean = self.mean_std_dict["mean"]
+    #     std = self.mean_std_dict["std"]
         
-        # Z-normalization for each channel
-        normalized_data = (data - mean) / std
+    #     # Z-normalization for each channel
+    #     normalized_data = (data - mean) / std
         
-        return normalized_data
+    #     return normalized_data
     
-    def z_normalize_and_scale(self, data):
-        """
-        Normalize the data using Z-normalization: (X - mean) / std, then scale it to [0, 255].
-        """
-        # Z-normalize the data
-        mean = self.mean_std_dict["mean"][:, np.newaxis, np.newaxis]
-        std = self.mean_std_dict["std"][:, np.newaxis, np.newaxis]
-        normalized_data = (data - mean) / std
+    # def z_normalize_and_scale(self, data):
+    #     """
+    #     Normalize the data using Z-normalization: (X - mean) / std, then scale it to [0, 255].
+    #     """
+    #     # Z-normalize the data
+    #     mean = self.mean_std_dict["mean"][:, np.newaxis, np.newaxis]
+    #     std = self.mean_std_dict["std"][:, np.newaxis, np.newaxis]
+    #     normalized_data = (data - mean) / std
 
-        # Scale to [0, 255]
-        normalized_data_min = normalized_data.min(axis=(0, 1), keepdims=True)
-        normalized_data_max = normalized_data.max(axis=(0, 1), keepdims=True)
+    #     # Scale to [0, 255]
+    #     normalized_data_min = normalized_data.min(axis=(0, 1), keepdims=True)
+    #     normalized_data_max = normalized_data.max(axis=(0, 1), keepdims=True)
         
-        # Clip values to ensure they stay within the range [0, 1] before multiplying by 255
-        epsilon = 1e-8  # Small value to prevent division by zero
-        scaled_data = np.clip((normalized_data - normalized_data_min) / (normalized_data_max - normalized_data_min + epsilon), 0, 1) * 255
+    #     # Clip values to ensure they stay within the range [0, 1] before multiplying by 255
+    #     epsilon = 1e-8  # Small value to prevent division by zero
+    #     scaled_data = np.clip((normalized_data - normalized_data_min) / (normalized_data_max - normalized_data_min + epsilon), 0, 1) * 255
         
-        # Convert to uint8 for image representation
-        scaled_data = scaled_data.astype(np.uint8)
+    #     # Convert to uint8 for image representation
+    #     scaled_data = scaled_data.astype(np.uint8)
         
-        return scaled_data
+    #     return scaled_data
 
     def __len__(self):
         return len(self.files)
@@ -304,7 +300,7 @@ class ClimateDataset(Dataset):
     #         rgb_image = np.squeeze(rgb_image, axis=0) 
         
 
-        return rgb_image
+    #     return rgb_image
     
     def minmax_per_channel_to_image(self, data):
         """
@@ -378,7 +374,6 @@ class ClimateDataset(Dataset):
         # Convert inputs and masks to tensors
         batch_dict['input'] = torch.stack([torch.from_numpy(inp).float() for inp in batch_dict['input']])
         batch_dict['gt_mask'] = [torch.from_numpy(mask).long() for mask in batch_dict['gt_mask']]
-        batch_dict['cgnet_input'] =  torch.Tensor(xr.concat(batch_dict['cgnet_input'], dim='time').values)
     
         return batch_dict
 

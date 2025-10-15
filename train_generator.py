@@ -147,7 +147,7 @@ def main_worker(worker_id, worker_args):
         model_type=worker_args.sam_type, 
         mlp_ratio=worker_args.image_encoder_mlp_ratio,
         enable_wandb_logging=getattr(worker_args, 'debugging', False)  # Only log if debugging=True
-    ).to(device='cpu')
+    ).to(device=device)
     
     
     image_encoder_path = os.path.join(worker_args.exp_dir, f"phase_2_weights.pth")
@@ -243,7 +243,7 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompt_generator, optim
     
     for train_step, batch in enumerate(train_dataloader):
         batch = batch_to_cuda(batch, device)
-        interm_features = get_infer_features(climatesam, batch['input'], device)
+        _, _, interm_features = climatesam.set_infer_img(batch['input'])
         masks_gt = batch['gt_mask']
         masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt]
         masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt]
@@ -347,13 +347,13 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompt_generator, optim
 
     scheduler.step()
 
-def get_infer_features(climatesam, batch_input, device):
-    # Temporarily move to GPU for inference
-    climatesam.to(device)
-    _, _, interm_features = climatesam.set_infer_img(batch_input)
-    # Move back to CPU to free GPU memory
-    climatesam.to('cpu')
-    return interm_features
+# def get_infer_features(climatesam, batch_input, device):
+#     # Temporarily move to GPU for inference
+#     climatesam.to(device)
+#     _, _, interm_features = climatesam.set_infer_img(batch_input)
+#     # Move back to CPU to free GPU memory
+#     climatesam.to('cpu')
+#     return interm_features
     
 @torch.no_grad()
 def validate_one_epoch(epoch, val_dataloader, climatesam, prompt_generator, device,  ar_metrics, tc_metrics, max_epoch_num, worker_args):
