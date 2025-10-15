@@ -1,14 +1,8 @@
 
 
-
-
-
-
-
-
-
-
-
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 ###########################################################################
 #CGNet: A Light-weight Context Guided Network for Semantic Segmentation
@@ -113,10 +107,6 @@ class CGNetModule(nn.Module):
         return out
       
 
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
 
 class Wrap(torch.nn.Module):
 

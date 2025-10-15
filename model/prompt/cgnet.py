@@ -1,15 +1,19 @@
-from cgnet_module import CGNetModule
+from .cgnet_module import CGNetModule
 import torch
 import numpy as np
 from tqdm import tqdm
 import os
+import torch.nn.functional as F
+
 
 class CGNetPrompter:
     def __init__(self, weights_path, device, worker_args):
         self.cgnet_model = CGNetModule(classes=3, channels=4)
         self.cgnet_model.load_state_dict(torch.load(weights_path, map_location=device))
+        self.cgnet_model.to(device) 
         self.exp_dir = worker_args.exp_dir
         self.device = device
+        self.optimizer = torch.optim.Adam(self.cgnet_model.parameters(), lr=1e-4)
 
     def train(self, dataloader, epochs):
         self.cgnet_model.train()
@@ -21,9 +25,8 @@ class CGNetPrompter:
             for batch in epoch_loader:
                 
                 features = batch['cgnet_input'].to(device=self.device, dtype=torch.float32)
-                labels = batch['gt_mask'].to(device=self.device, dtype=torch.float32)
-                
-                
+                # labels = [x.to(device=self.device, dtype=torch.float32) for x in batch['gt_mask']]
+                labels = torch.stack([x.to(self.device, dtype=torch.long) for x in batch['gt_mask']])
                 outputs = torch.softmax(self.cgnet_model(features), 1)
 
                 # Update training CM
@@ -81,7 +84,7 @@ def jaccard_loss(logits, true, eps=1e-7):
         jacc_loss: the Jaccard loss.
     """
     num_classes = logits.shape[1]
-    true_1_hot = torch.eye(num_classes)[true.squeeze(1)]
+    true_1_hot = torch.eye(num_classes, device=true.device)[true.squeeze(1)]
     true_1_hot = true_1_hot.permute(0, 3, 1, 2).float()
     probas = F.softmax(logits, dim=1)
     true_1_hot = true_1_hot.type(logits.type())
