@@ -1,3 +1,4 @@
+import random
 from .cgnet_module import CGNetModule
 import torch
 import numpy as np
@@ -86,7 +87,8 @@ class CGNetPrompter:
         Given an input image, return the prompts from CGNet.
         '''
         pred_masks = self.get_aux_mask(batch_input)
-        prompt_dict = extract_point_and_bbox_prompts_from_pred_masks(preds=pred_masks, device=self.device, prompt_type=prompt_type)
+        prompt_type = random.choice(['point', 'bbox']) 
+        prompt_dict = extract_point_and_bbox_prompts_from_pred_masks(preds=pred_masks, device=self.device, prompt_type=prompt_type, threshold=20)
 
         return prompt_dict
 

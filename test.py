@@ -234,10 +234,12 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, pro
         features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
         prompt_dict = prompter.get_prompts(features, prompt_type='point')
         
+        prompt_dict = batch_to_cuda(prompt_dict, device)
+        
         # Set inference images once
         images = model.set_infer_img(batch['input'])
 
-        # ar_point_prompts_copy = copy.deepcopy(batch['ar_point_prompts'])
+        ar_point_prompts_copy = copy.deepcopy(prompt_dict['ar_point_prompts'])
         tc_point_prompts_copy = copy.deepcopy(prompt_dict['tc_point_prompts'])
         ar_bbox_prompts_copy = copy.deepcopy(prompt_dict['ar_bbox_prompts'])
         tc_bbox_prompts_copy = copy.deepcopy(prompt_dict['tc_bbox_prompts'])

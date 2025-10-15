@@ -144,25 +144,32 @@ def main_worker(worker_id, worker_args):
 
         features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
         prompt_dict = cgnetprompter.get_prompts(features, prompt_type='point')
-        
-        print(f"Prompt dictionary keys: {list(prompt_dict.keys())}")
-        for key, value in prompt_dict.items():
-            if isinstance(value, torch.Tensor):
-                print(f"{key}: Tensor with shape {value.shape}")
-            elif isinstance(value, list):
-                print(f"{key}: List with length {len(value)}")
-                if len(value) > 0 and isinstance(value[0], torch.Tensor):
-                    print(f"  First item shape: {value[0].shape}")
-                # if len(value) > 0:
-                #     print(value[0])
-            elif isinstance(value, tuple):
-                print(f"{key}: Tuple with length {len(value)}")
-                print(f"  First element type: {type(value[0])}")
-                print(f"  Second element type: {type(value[1])}")
-            else:
-                print(f"{key}: {type(value)}")
-        count += 1
-        if count >= 1:
+
+
+
+        point = prompt_dict['ar_point_prompts'][0]
+        if point is not None:
+            print(f"AR Point Prompts shape: {point[0].shape if point[0] is not None else None}, Labels shape: {point[1].shape if point[1] is not None else None}")        
+        # print(f"Prompt dictionary keys: {list(prompt_dict.keys())}")
+        # for key, value in prompt_dict.items():
+        #     if isinstance(value, torch.Tensor):
+        #         print(f"{key}: Tensor with shape {value.shape}")
+        #     elif isinstance(value, list):
+        #         print(f"{key}: List with length {len(value)}")
+        #         if len(value) > 0 and isinstance(value[0], torch.Tensor):
+        #             print(f"  First item shape: {value[0].shape}")
+        #         else:
+        #             print(f"  First item type: {type(value[0])}")
+        #         # if len(value) > 0:
+        #         #     print(value[0])
+        #     elif isinstance(value, tuple):
+        #         print(f"{key}: Tuple with length {len(value)}")
+        #         print(f"  First element type: {type(value[0])}")
+        #         print(f"  Second element type: {type(value[1])}")
+        #     else:
+        #         print(f"{key}: {type(value)}")
+        # count += 1
+        if count >= 4:
             break
     
     

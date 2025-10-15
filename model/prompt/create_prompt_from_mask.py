@@ -19,20 +19,18 @@ def extract_point_and_bbox_prompts_from_pred_masks(preds: torch.Tensor, device=N
         tc_mask = (mask_np == 1).astype(np.uint8)
         
         # Extract prompts for each class
+        
         ar_object_masks, ar_points, ar_bboxes, ar_noisy_masks = get_prompts_from_binary_mask(ar_mask, connectivity, threshold, centroid_ratio, prompt_type)
         tc_object_masks, tc_points, tc_bboxes, tc_noisy_masks = get_prompts_from_binary_mask(tc_mask, connectivity, threshold, centroid_ratio, prompt_type)
         
-        # For point prompts, prepare the labels (if applicable)
-        if prompt_type == 'point':
-            ar_point_count = ar_points.shape[0] if ar_points is not None else 0
-            tc_point_count = tc_points.shape[0] if tc_points is not None else 0
-            ar_point_labels = torch.ones(ar_point_count, dtype=torch.float32).unsqueeze(1) if ar_point_count > 0 else None
-            tc_point_labels = torch.ones(tc_point_count, dtype=torch.float32).unsqueeze(1) if tc_point_count > 0 else None
-            ar_point_prompts = (ar_points, ar_point_labels)
-            tc_point_prompts = (tc_points, tc_point_labels)
-        else:
-            ar_point_prompts = None
-            tc_point_prompts = None
+       
+        ar_point_count = ar_points.shape[0] if ar_points is not None else 0
+        tc_point_count = tc_points.shape[0] if tc_points is not None else 0
+        ar_point_labels = torch.ones(ar_point_count, dtype=torch.float32).unsqueeze(1) if ar_point_count > 0 else None
+        tc_point_labels = torch.ones(tc_point_count, dtype=torch.float32).unsqueeze(1) if tc_point_count > 0 else None
+        ar_point_prompts = (ar_points, ar_point_labels)
+        tc_point_prompts = (tc_points, tc_point_labels)
+       
 
         prompt_dict = {
             'ar_point_prompts': ar_point_prompts,
@@ -48,6 +46,11 @@ def extract_point_and_bbox_prompts_from_pred_masks(preds: torch.Tensor, device=N
         
     # Convert the list of dictionaries to a dictionary of lists
     prompt_dict = {key: [d[key] if d[key] is not None else None for d in prompt_list] for key in prompt_list[0]}
+    # Move the tensors back to the specified device if provided
+    # if device is not None:
+    #     for key in prompt_dict:
+    #         if prompt_dict[key] is not None:
+    #             prompt_dict[key] = [item.to(device) if isinstance(item, torch.Tensor) else item for item in prompt_dict[key]]
     return prompt_dict
 
 
@@ -90,12 +93,14 @@ def get_prompts_from_binary_mask(binary_mask, connectivity=8, threshold=50, cent
                 # With probability based on centroid_ratio, select the centroid
                 chosen_point = random_point if np.random.rand() > centroid_ratio else object_centroid
                 points.append([chosen_point])
+        else:
+            return None, None, None, None  # If any object is below threshold, return None
     
-    object_masks = torch.from_numpy(np.stack(object_masks_list, axis=0)).to(torch.float32).unsqueeze(1)
+    object_masks = torch.from_numpy(np.stack(object_masks_list, axis=0)).to(torch.float32).unsqueeze(1) if object_masks_list else None
     noisy_masks = make_noisy_mask_on_objects(object_masks) if prompt_type == 'mask' else None
-    points = torch.from_numpy(np.stack(points, axis=0)).to(torch.float32) if prompt_type == 'point' and points is not None else None
-    bboxes = torch.from_numpy(np.stack(bboxes, axis=0)).to(torch.float32) if prompt_type == 'bbox' and bboxes is not None else None
-    
+    points = torch.from_numpy(np.stack(points, axis=0)).to(torch.float32) if prompt_type == 'point' else None
+    bboxes = torch.from_numpy(np.stack(bboxes, axis=0)).to(torch.float32) if prompt_type == 'bbox' else None
+
     return object_masks, points, bboxes, noisy_masks
 
 
