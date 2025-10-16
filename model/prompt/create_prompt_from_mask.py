@@ -88,10 +88,13 @@ def get_prompts_from_binary_mask(binary_mask, connectivity=8, threshold=50, cent
             if prompt_type == 'point':
                 object_points = np.argwhere(object_mask)
                 object_centroid = np.round(centroids[obj_index]).astype(int)[::-1]  # (x, y) format
+                
+                
                 random_idx = np.random.randint(len(object_points))
-                random_point = object_points[random_idx][::-1]  # (x, y)
+                random_point = object_points[random_idx]  
                 # With probability based on centroid_ratio, select the centroid
                 chosen_point = random_point if np.random.rand() > centroid_ratio else object_centroid
+                chosen_point = chosen_point[::-1]
                 points.append([chosen_point])
         else:
             return None, None, None, None  # If any object is below threshold, return None

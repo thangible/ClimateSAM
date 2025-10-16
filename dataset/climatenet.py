@@ -92,14 +92,14 @@ class ClimateDataset(Dataset):
         sam_input = self.minmax_per_channel_to_image(sam_input)
         mask = self.get_labels(dataset)  # see function below
         
-        # # Apply transforms (if any)
-        # if self.transforms:
-        #     mask_before_shape = mask.shape
-        #     data_before_shape = sam_input.shape 
-        #     transform_dict = self.transforms(sam_input, mask)
-        #     sam_input, mask = transform_dict['image'], transform_dict['mask']
-        #     assert sam_input.shape == data_before_shape, f"Data shape changed after transforms: {sam_input.shape} vs {data_before_shape}"
-        #     assert mask.shape == mask_before_shape, f"Mask shape changed after transforms: {mask.shape} vs {mask_before_shape}"
+        # Apply transforms (if any)
+        if self.transforms:
+            mask_before_shape = mask.shape
+            data_before_shape = sam_input.shape 
+            transform_dict = self.transforms(sam_input, mask)
+            sam_input, mask = transform_dict['image'], transform_dict['mask']
+            assert sam_input.shape == data_before_shape, f"Data shape changed after transforms: {sam_input.shape} vs {data_before_shape}"
+            assert mask.shape == mask_before_shape, f"Mask shape changed after transforms: {mask.shape} vs {mask_before_shape}"
 
         # rgb_image = self.to_image(dataset, var_1='TMQ', var_2='U850', var_3='V850')
         # Return a dictionary that matches the expected format.

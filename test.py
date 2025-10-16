@@ -232,7 +232,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, pro
         batch = batch_to_cuda(batch, device)
         
         features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
-        prompt_dict = prompter.get_prompts(features, prompt_type='point')
+        prompt_dict = prompter.get_prompts(features, prompt_type='mask')
         
         prompt_dict = batch_to_cuda(prompt_dict, device)
         
@@ -447,7 +447,7 @@ def main_worker(worker_id, worker_args):
     best_miou_total = 0
     ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
-    prompter = CGNetPrompter(weights_path='pretrained/weights_cgnet.pth', device=device, worker_args=worker_args)
+    prompter = CGNetPrompter(weights_path='exp/cgnet_weight.pth', device=device, worker_args=worker_args)
 
     # scaler = torch.amp.GradScaler('cuda')
     print(f"Validation will be performed every {worker_args.valid_per_epochs} epochs.")

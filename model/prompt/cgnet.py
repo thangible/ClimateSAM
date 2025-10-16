@@ -19,6 +19,7 @@ class CGNetPrompter:
 
     def train(self, dataloader, epochs):
         self.cgnet_model.train()
+        best_ious = 0
         for epoch in range(1, epochs):
             print(f'Epoch {epoch}:')
             epoch_loader = tqdm(dataloader)
@@ -36,13 +37,13 @@ class CGNetPrompter:
                 aggregate_cm += get_cm(predictions, labels, 3)
 
                 # Pass backward
-                loss = jaccard_loss(outputs, labels)
+                loss = dice_bce_loss(outputs, labels)
                 epoch_loader.set_description(f'Loss: {loss.item()}')
                 loss.backward()
                 self.optimizer.step()
                 self.optimizer.zero_grad() 
 
-            if epoch == 1:
+            if epoch % 5 == 1:
                 import matplotlib.pyplot as plt
                 fig, axes = plt.subplots(1, 2, figsize=(10, 5))
                 axes[0].imshow(labels[0].cpu().numpy(), cmap='viridis')
@@ -58,7 +59,11 @@ class CGNetPrompter:
                 
             print('Epoch stats:')
             print(aggregate_cm)
-            ious = get_iou_perClass(aggregate_cm)
+            ious = get_iou_perClass(aggregate_cm)[1:]
+            if ious.mean() > best_ious and epoch > 10:
+                best_ious = ious.mean()
+                self.save_model()
+                print(f"New best model saved with mean IoU: {best_ious}")
             print('IOUs: ', ious, ', mean: ', ious.mean())
             
     def save_model(self,):
@@ -87,7 +92,7 @@ class CGNetPrompter:
         Given an input image, return the prompts from CGNet.
         '''
         pred_masks = self.get_aux_mask(batch_input)
-        prompt_type = random.choice(['point', 'bbox']) 
+        # prompt_type = random.choice(['point', 'bbox']) 
         prompt_dict = extract_point_and_bbox_prompts_from_pred_masks(preds=pred_masks, device=self.device, prompt_type=prompt_type, threshold=20)
 
         return prompt_dict
@@ -121,6 +126,35 @@ def jaccard_loss(logits, true, eps=1e-7):
     union = cardinality - intersection
     jacc_loss = (intersection / (union + eps)).mean()
     return (1 - jacc_loss)
+
+def dice_bce_loss(logits, true, eps=1e-7):
+    """Computes the Dice loss combined with Binary Cross-Entropy (BCE) loss.
+    Args:
+        true: a tensor of shape [B, H, W] or [B, 1, H, W].
+        logits: a tensor of shape [B, C, H, W]. Corresponds to
+            the raw output or logits of the model.
+        eps: added to the denominator for numerical stability.
+    Returns:
+        loss: the combined Dice and BCE loss.
+    """
+    num_classes = logits.shape[1]
+    true_1_hot = torch.eye(num_classes, device=true.device)[true.squeeze(1)]
+    true_1_hot = true_1_hot.permute(0, 3, 1, 2).float()
+    probas = F.softmax(logits, dim=1)
+    true_1_hot = true_1_hot.type(logits.type())
+    dims = (0,) + tuple(range(2, true.ndimension()))
+    
+    # Dice Loss
+    intersection = torch.sum(probas * true_1_hot, dims)
+    cardinality = torch.sum(probas + true_1_hot, dims)
+    dice_loss = (2. * intersection / (cardinality + eps)).mean()
+    
+    # BCE Loss
+    bce_loss = F.cross_entropy(logits, true.squeeze(1))
+    
+    # Combined Loss
+    loss = (1 - dice_loss) + bce_loss
+    return loss
 
 def get_iou_perClass(confM):
     """
