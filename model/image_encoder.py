@@ -36,10 +36,10 @@ class ClimateSAMImageEncoder(SAMImageEncodeWrapper):
         total_p_layer = len(self.sam_img_encoder.blocks)
         prompt_dim = self.sam_img_encoder.pos_embed.shape[-1]
         self.hq_token_proj_ar = nn.Sequential(
-            *[Adapter(hq_token_ar.size(-1), prompt_dim, mlp_ratio=mlp_ratio) for _ in range(total_p_layer)]
+            *[Adapter(hq_token_ar.size(-1), prompt_dim//2, mlp_ratio=mlp_ratio) for _ in range(total_p_layer)]
         )
         self.hq_token_proj_tc = nn.Sequential(
-            *[Adapter(hq_token_tc.size(-1), prompt_dim, mlp_ratio=mlp_ratio) for _ in range(total_p_layer)]
+            *[Adapter(hq_token_tc.size(-1), prompt_dim//2, mlp_ratio=mlp_ratio) for _ in range(total_p_layer)]
         )
 
     def _checkpoint_block(self, block, x, hq_prompt_tokens):
@@ -68,7 +68,7 @@ class ClimateSAMImageEncoder(SAMImageEncodeWrapper):
 
         interm_embeddings = []
         for i, blk in enumerate(self.sam_img_encoder.blocks):
-            hq_prompt_tokens = (hq_prompt_tokens_ar[i] + hq_prompt_tokens_tc[i]) / 2
+            hq_prompt_tokens = torch.cat((hq_prompt_tokens_ar[i], hq_prompt_tokens_tc[i]), dim=-1)
             
             # Use gradient checkpointing only during training
             if self.use_checkpoint and self.training:
