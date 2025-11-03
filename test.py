@@ -17,6 +17,7 @@ from dataset.climatenet import ClimateDataset
 from evaluator import StreamSegMetrics
 import copy
 import wandb
+from model.prompt.cgnet import CGNetPrompter
 
 def worker_init_fn(worker_id: int, base_seed: int, same_worker_seed: bool = True):
     """
@@ -220,7 +221,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
     scheduler.step()
 
 @torch.no_grad()
-def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args):
+def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, prompter, device, max_epoch_num, worker_args):
 
     # Example usage inside validation loop:
     # plot_mask_with_points(batch['gt_mask'][0], batch['tc_point_prompts'])
@@ -230,22 +231,27 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
     for val_step, batch in enumerate(val_dataloader):
         batch = batch_to_cuda(batch, device)
         
+        features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
+        prompt_dict = prompter.get_prompts(features, prompt_type='mask')
+        
+        prompt_dict = batch_to_cuda(prompt_dict, device)
+        
         # Set inference images once
         images = model.set_infer_img(batch['input'])
 
-        ar_point_prompts_copy = copy.deepcopy(batch['ar_point_prompts'])
-        tc_point_prompts_copy = copy.deepcopy(batch['tc_point_prompts'])
-        ar_bbox_prompts_copy = copy.deepcopy(batch['ar_bbox_prompts'])
-        tc_bbox_prompts_copy = copy.deepcopy(batch['tc_bbox_prompts'])
+        ar_point_prompts_copy = copy.deepcopy(prompt_dict['ar_point_prompts'])
+        tc_point_prompts_copy = copy.deepcopy(prompt_dict['tc_point_prompts'])
+        ar_bbox_prompts_copy = copy.deepcopy(prompt_dict['ar_bbox_prompts'])
+        tc_bbox_prompts_copy = copy.deepcopy(prompt_dict['tc_bbox_prompts'])
 
         # prompt_debug(batch, text=f"Validation Step {val_step}")
         
         # Perform inference with prompts
         tc_masks, ar_masks = model.infer(
-            ar_point_prompts=batch['ar_point_prompts'],
-            tc_point_prompts=batch['tc_point_prompts'],
-            ar_bbox_prompts=batch['ar_bbox_prompts'],
-            tc_bbox_prompts=batch['tc_bbox_prompts']
+            ar_point_prompts=prompt_dict['ar_point_prompts'],
+            tc_point_prompts=prompt_dict['tc_point_prompts'],
+            ar_bbox_prompts=prompt_dict['ar_bbox_prompts'],
+            tc_bbox_prompts=prompt_dict['tc_bbox_prompts']
         )
         
         masks_gt = batch['gt_mask']
@@ -392,16 +398,16 @@ def main_worker(worker_id, worker_args):
     if worker_args.num_workers is not None:
         train_workers, val_workers = worker_args.num_workers, worker_args.num_workers
         
-    sampler = None
+    # sampler = None
     if torch.distributed.is_initialized():
         sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
         actual_train_bs = int(actual_train_bs / torch.distributed.get_world_size())
         
-    train_dataloader = DataLoader(
-        dataset=train_dataset, batch_size=actual_train_bs, shuffle=sampler is None, num_workers=train_workers,
-        sampler=sampler, drop_last=False, collate_fn=train_collate_fn,
-        worker_init_fn=partial(worker_init_fn, base_seed=3407)
-    )
+    # train_dataloader = DataLoader(
+    #     dataset=train_dataset, batch_size=actual_train_bs, shuffle=sampler is None, num_workers=train_workers,
+    #     sampler=sampler, drop_last=False, collate_fn=train_collate_fn,
+    #     worker_init_fn=partial(worker_init_fn, base_seed=3407)
+    # )
     val_dataloader = DataLoader(
         dataset=val_dataset, batch_size=val_bs, shuffle=False, num_workers=val_workers,
         drop_last=False, collate_fn=val_collate_fn, worker_init_fn=partial(worker_init_fn, base_seed=3407)
@@ -423,47 +429,31 @@ def main_worker(worker_id, worker_args):
             print(f"Error initializing DistributedDataParallel: {e}")
             model = model.to(device=device)
     
-    # Load pretrained weights
-    if worker_args.load_pretrained:
-        if worker_args.phase == 1:
-            image_encoder_path = os.path.join(worker_args.exp_dir, f"phase_1_weights.pth")
-            phase_1_checkpoint = torch.load(image_encoder_path, map_location=device)
-            print(f"Pretrained weights from phase 1 loaded from {image_encoder_path}")
-            model.image_encoder.load_state_dict(phase_1_checkpoint['image_encoder'])
-            print(f"Image encoder weights loaded from {image_encoder_path}")
-            model.mask_decoder.load_state_dict(phase_1_checkpoint['mask_decoder'])
-            print(f"Mask decoder weights loaded from {image_encoder_path}")
-    
-            
     # Optimizer and scheduler
     optimizer, scheduler = setup_optimizer_and_scheduler(model, worker_args)
     
-    if worker_args.phase == 2:
-        image_encoder_path = os.path.join(worker_args.exp_dir, f"phase_2_weights.pth")
-        phase_2_checkpoint = torch.load(image_encoder_path, map_location=device)
-        print(f"Pretrained weights from phase 2 loaded from {image_encoder_path}")
-        model.image_encoder.load_state_dict(phase_2_checkpoint['image_encoder'])
-        print(f"Image encoder weights loaded from {image_encoder_path}")
-        model.mask_decoder.load_state_dict(phase_2_checkpoint['mask_decoder'])
-        print(f"Mask decoder weights loaded from {image_encoder_path}")
-        model.input_adapter.load_state_dict(phase_2_checkpoint['input_adapter'])
-        print(f"Input adapter weights loaded from {image_encoder_path}")
-        # optimizer.add_param_group({'params': model.input_adapter.parameters()})
+    image_encoder_path = os.path.join(worker_args.exp_dir, f"phase_2_weights.pth")
+    phase_2_checkpoint = torch.load(image_encoder_path, map_location=device)
+    print(f"Pretrained weights from phase 2 loaded from {image_encoder_path}")
+    model.image_encoder.load_state_dict(phase_2_checkpoint['image_encoder'])
+    print(f"Image encoder weights loaded from {image_encoder_path}")
+    model.mask_decoder.load_state_dict(phase_2_checkpoint['mask_decoder'])
+    print(f"Mask decoder weights loaded from {image_encoder_path}")
+    model.input_adapter.load_state_dict(phase_2_checkpoint['input_adapter'])
+    print(f"Input adapter weights loaded from {image_encoder_path}")
 
-    if worker_args.phase == 3:
-        model.enable_prompt_generator()
-        optimizer.add_param_group({'params': model.prompt_generator.parameters()})
     best_miou_tc = 0
     best_miou_ar = 0
     best_miou_total = 0
     ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
-    
-    scaler = torch.amp.GradScaler('cuda') 
+    prompter = CGNetPrompter(weights_path='exp/cgnet_weight.pth', device=device, worker_args=worker_args)
+
+    # scaler = torch.amp.GradScaler('cuda')
     print(f"Validation will be performed every {worker_args.valid_per_epochs} epochs.")
     # model.train(mode = True, phase = worker_args.phase, verbose=True)
     for epoch in range(1, max_epoch_num + 1):
-            miou_tc, miou_ar = validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args)
+            miou_tc, miou_ar = validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, prompter, device, max_epoch_num, worker_args)
             print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}")
             if miou_tc > best_miou_tc:
                 best_miou_tc = miou_tc

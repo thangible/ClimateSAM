@@ -17,14 +17,14 @@ class BaseTransform(ABC):
     def end_init_hook(self, **kwargs):
         pass
 
-    def __call__(self, img: np.ndarray, mask: np.ndarray = None):
+    def __call__(self, img: np.ndarray, mask: np.ndarray = None, extra: np.ndarray = None):
         if random.random() < self.p:
-            return self.apply(img, mask)
+            return self.apply(img, mask, extra)
         else:
-            return img, mask
+            return img, mask, extra
 
     @abstractmethod
-    def apply(self, image: np.ndarray, mask: np.ndarray = None):
+    def apply(self, input: np.ndarray, mask: np.ndarray = None, extra: np.ndarray = None):
         raise NotImplementedError
 
 
@@ -34,47 +34,57 @@ class Compose:
             transforms = [transforms]
         self.transforms = transforms
 
-    def __call__(self, image: np.ndarray, mask: np.ndarray = None):
+    def __call__(self, input: np.ndarray, mask: np.ndarray = None, extra: np.ndarray = None):
         for t in self.transforms:
-            res = t(image, mask)
-            if not isinstance(res, Tuple):
-                image = res
+            res = t(input, mask, extra)
+            if not isinstance(res, tuple):
+                input = res
+            elif len(res) == 3:
+                input, mask, extra = res
             elif len(res) == 2:
-                image, mask = res
+                input, mask = res
             else:
-                raise RuntimeError
-        return dict(image=image, mask=mask)
+                raise RuntimeError("Transform returned tuple with unsupported size")
+        return dict(input=input, mask=mask, extra=extra)
 
 
-## Spatial Transforms Reworked for (F, H, W) Image
+## Spatial Transforms Reworked for (F, H, W) input
 
 class VerticalFlip(BaseTransform):
-    def apply(self, image: np.ndarray, mask: np.ndarray = None):
-        # Image (F, H, W): flip along H-axis (axis 1)
-        image = np.ascontiguousarray(image[:, ::-1, ...]) 
+    def apply(self, input: np.ndarray, mask: np.ndarray = None, extra: np.ndarray = None):
+        # input (F, H, W): flip along H-axis (axis 1)
+        input = np.ascontiguousarray(input[:, ::-1, ...]) 
         
         # Mask (H, W): flip along H-axis (axis 0)
         if mask is not None:
             mask = np.ascontiguousarray(mask[::-1, ...])
+        
+        # Extra: apply same as input if provided
+        if extra is not None:
+            extra = np.ascontiguousarray(extra[:, ::-1, ...])
             
-        return image, mask
+        return input, mask, extra
 
 
 class HorizontalFlip(BaseTransform):
-    def apply(self, image: np.ndarray, mask: np.ndarray = None):
-        # Image (F, H, W): flip along W-axis (axis 2)
-        image = np.ascontiguousarray(image[:, :, ::-1, ...])
+    def apply(self, input: np.ndarray, mask: np.ndarray = None, extra: np.ndarray = None):
+        # input (F, H, W): flip along W-axis (axis 2)
+        input = np.ascontiguousarray(input[:, :, ::-1, ...])
         
         # Mask (H, W): flip along W-axis (axis 1)
         if mask is not None:
             mask = np.ascontiguousarray(mask[:, ::-1, ...])
+        
+        # Extra: apply same as input if provided
+        if extra is not None:
+            extra = np.ascontiguousarray(extra[:, :, ::-1, ...])
             
-        return image, mask
+        return input, mask, extra
 
 
 class RandomHorizontalRoll(BaseTransform):
     """
-    Cyclically shifts the image content horizontally (Roll). 
+    Cyclically shifts the input content horizontally (Roll). 
     The content that shifts off one side wraps around to the other side.
     """
     def end_init_hook(self, shift_limit: Union[Tuple[float, float], float] = (-0.2, 0.2)):
@@ -92,12 +102,12 @@ class RandomHorizontalRoll(BaseTransform):
         assert self.shift_limit[0] < self.shift_limit[1]
         assert -1.0 <= self.shift_limit[0] and self.shift_limit[1] <= 1.0
 
-    def apply(self, image: np.ndarray, mask: np.ndarray = None):
+    def apply(self, input: np.ndarray, mask: np.ndarray = None, extra: np.ndarray = None):
         """
-        Performs the cyclic shift (roll) on the image and mask.
+        Performs the cyclic shift (roll) on the input and extra.
         """
-        # Get H, W from image. Image shape is (F, H, W)
-        _, height, width = image.shape[:3] 
+        # Get H, W from input. input shape is (F, H, W)
+        _, height, width = input.shape[:3] 
 
         # 1. Determine random shift ratio within limits
         shift_ratio = random.uniform(*self.shift_limit)
@@ -106,11 +116,15 @@ class RandomHorizontalRoll(BaseTransform):
         # k > 0 shifts content to the right
         k = int(shift_ratio * width)
 
-        # 3. Apply numpy.roll for cyclic shift along axis=2 (width) for image (F, H, W)
-        image = np.roll(image, k, axis=2) 
+        # 3. Apply numpy.roll for cyclic shift along axis=2 (width) for input (F, H, W)
+        input = np.roll(input, k, axis=2) 
 
         # 4. Apply numpy.roll for cyclic shift along axis=1 (width) for mask (H, W)
         if mask is not None:
             mask = np.roll(mask, k, axis=1)
+            
+        # 5. Extra: applied same as input if provided (roll along axis=2)
+        if extra is not None:
+            extra = np.roll(extra, k, axis=2)
 
-        return image, mask
+        return input, mask, extra

@@ -8,6 +8,7 @@ from torch.utils.data import Dataset
 import cv2
 from .transforms  import Compose, HorizontalFlip, VerticalFlip, RandomHorizontalRoll
 from .climatenet_util import extract_point_and_bbox_prompts_from_climatenet_mask
+from model.prompt.cgnet import CGNetPrompter
 
 class ClimateDataset(Dataset):
     def __init__(self, data_dir, train_flag=True, reset_flag=False, augmented=False, generate_prompt=False, **prompt_kwargs):
@@ -28,6 +29,7 @@ class ClimateDataset(Dataset):
 
         self.train_flag = train_flag
         self.augmented = augmented
+        self.cg_prompter = None
         self.generate_prompt = generate_prompt
         self.transforms = Compose([HorizontalFlip(p = 0.5), 
                                   VerticalFlip(p = 0.5), 
@@ -61,6 +63,14 @@ class ClimateDataset(Dataset):
         
         # self.mean_std_dict = self.calculate_stats() 
 
+    # def get_cg_prompter(self, worker_args, device):
+    #     cg_prompter = CGNetPrompter(weights_path='pretrained/weights_cgnet.pth', device=device, worker_args=worker_args)
+    #     self.cg_prompter = cg_prompter
+    #     print("CGNet prompter initialized.")
+        
+        
+        
+
     def __getitem__(self, index):
         # Use filename as the unique index name.
         file_path = self.files[index]
@@ -82,14 +92,14 @@ class ClimateDataset(Dataset):
         sam_input = self.minmax_per_channel_to_image(sam_input)
         mask = self.get_labels(dataset)  # see function below
         
-        # # Apply transforms (if any)
-        # if self.transforms:
-        #     mask_before_shape = mask.shape
-        #     data_before_shape = sam_input.shape 
-        #     transform_dict = self.transforms(sam_input, mask)
-        #     sam_input, mask = transform_dict['image'], transform_dict['mask']
-        #     assert sam_input.shape == data_before_shape, f"Data shape changed after transforms: {sam_input.shape} vs {data_before_shape}"
-        #     assert mask.shape == mask_before_shape, f"Mask shape changed after transforms: {mask.shape} vs {mask_before_shape}"
+        # Apply transforms (if any)
+        if self.transforms:
+            mask_before_shape = mask.shape
+            data_before_shape = sam_input.shape 
+            transform_dict = self.transforms(sam_input, mask)
+            sam_input, mask = transform_dict['image'], transform_dict['mask']
+            assert sam_input.shape == data_before_shape, f"Data shape changed after transforms: {sam_input.shape} vs {data_before_shape}"
+            assert mask.shape == mask_before_shape, f"Mask shape changed after transforms: {mask.shape} vs {mask_before_shape}"
 
         # rgb_image = self.to_image(dataset, var_1='TMQ', var_2='U850', var_3='V850')
         # Return a dictionary that matches the expected format.
@@ -98,6 +108,7 @@ class ClimateDataset(Dataset):
         if self.generate_prompt:
             prompt_type = random.choice(['bbox', 'point', 'mask']) if self.train_flag else random.choice(['point', 'bbox'])
             prompt_dict = extract_point_and_bbox_prompts_from_climatenet_mask(mask = mask, prompt_type = prompt_type)
+            
         else:
             prompt_dict = {
                 'ar_point_prompts': (None, None),
