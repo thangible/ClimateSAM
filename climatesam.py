@@ -81,7 +81,7 @@ class ClimateSAM(nn.Module):
         # Zero out all weights 
         # Define the channels where you want high weights
         with torch.no_grad():
-            self.input_adapter[0].weight.zero_()  
+            torch.nn.init.normal_(self.input_adapter[0].weight, mean=0.0, std=0.02)
             if input_weights is None:
                 # Default input_weights correspond to indices of specific climate variables:
                 # 'TMQ' (Total Precipitable Water Vapor), 'U850' (Zonal Wind at 850 hPa), 
@@ -106,26 +106,26 @@ class ClimateSAM(nn.Module):
         # Phase-specific training configurations
         if phase == 1:
             for n, c in self.named_children():
-                if n not in ['image_encoder', 'mask_decoder']:
+                if n not in ['image_encoder', 'mask_decoder', 'input_adapter']:
                     c.eval()
                 else:
                     c.train(mode=mode)
             if verbose:
                 print("Training image_encoder")
                 
-        elif phase == 2:
-            # Phase 3: Train only input_adapt
-            # self.enable_prompt_generator()
-            for n, c in self.named_children():
-                if n not in ['input_adapter']:
-                    c.eval()
-                else:
-                    c.train(mode = mode)
-                    if n == 'input_adapter':
-                        for param in c.parameters():
-                            param.requires_grad = True
-            if verbose:
-                print("Training input_adapter along with image_encoder and mask_decoder")
+        # elif phase == 2:
+        #     # Phase 3: Train only input_adapt
+        #     # self.enable_prompt_generator()
+        #     for n, c in self.named_children():
+        #         if n not in ['input_adapter']:
+        #             c.eval()
+        #         else:
+        #             c.train(mode = mode)
+        #             if n == 'input_adapter':
+        #                 for param in c.parameters():
+        #                     param.requires_grad = True
+        #     if verbose:
+        #         print("Training input_adapter along with image_encoder and mask_decoder")
 
         elif phase == 3:
             # Phase 3: Train only prompt_encoder

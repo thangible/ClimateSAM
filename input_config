@@ -4,7 +4,7 @@ exp_dir = ./exp
 data_dir = '../data/climatenet'
 pretrained_name = 'best_model.pth'
 project_name = climate-sam
-run_name = Concat_token_075_vitL
+run_name = Concat_token_075_vitL_with_input_adapter
 
 [BATCH CONFIG]
 ; num_workers = None
