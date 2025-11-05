@@ -23,12 +23,12 @@ def extract_point_and_bbox_prompts_from_pred_masks(preds: torch.Tensor, device=N
         
         ar_object_masks, ar_positive_points, ar_bboxes, ar_noisy_masks = get_prompts_from_binary_mask(ar_mask, connectivity, threshold, centroid_ratio, prompt_type, num_points=5)
         tc_object_masks, tc_positive_points, tc_bboxes, tc_noisy_masks = get_prompts_from_binary_mask(tc_mask, connectivity, threshold, centroid_ratio, prompt_type, num_points=5)
-        background_points = get_negative_point_prompts(background_mask, num_points=5)
+        # background_points = get_negative_point_prompts(background_mask, num_points=5)
         
        
         ar_point_count = ar_positive_points.shape[0] if ar_positive_points is not None else 0
         tc_point_count = tc_positive_points.shape[0] if tc_positive_points is not None else 0
-        background_point_count = background_points.shape[0] if background_points is not None else 0
+        # background_point_count = background_points.shape[0] if background_points is not None else 0
         
         ar_positive_point_labels = torch.ones(ar_point_count, dtype=torch.float32).unsqueeze(1) if ar_point_count > 0 else None
         # ar_negative_point_labels = torch.zeros(background_point_count + tc_point_count, dtype=torch.float32).unsqueeze(1) if background_point_count > 0 else None
@@ -129,13 +129,13 @@ def get_positive_point_prompts(object_mask, object_centroid, centroid_ratio, num
         return extra_points
         
         
-def get_negative_point_prompts(background_mask, num_points):
-    background_points = np.argwhere(background_mask)
-    if len(background_points) == 0:
-        return None
-    extra_points = np.random.choice(background_points, size=num_points, replace=False)
-    extra_points = [pt[::-1] for pt in extra_points]
-    return extra_points
+# def get_negative_point_prompts(background_mask, num_points):
+#     background_points = np.argwhere(background_mask)
+#     if len(background_points) == 0:
+#         return None
+#     extra_points = np.random.choice(background_points, size=num_points, replace=False)
+#     extra_points = [pt[::-1] for pt in extra_points]
+#     return extra_points
         
         
 def make_noisy_mask_on_objects(object_masks, scale_factor: int = 8, noisy_mask_threshold: float = 0.5, h=256, w=256):
