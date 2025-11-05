@@ -354,7 +354,7 @@ def main_worker(worker_id, worker_args):
     dataset_dir = worker_args.data_dir
     train_dataset = ClimateDataset(
         data_dir=dataset_dir, train_flag=True, shot_num=worker_args.shot_num,
-        augmented=True, generate_prompt=True
+        augmented=False, generate_prompt=True
     )
     val_dataset = ClimateDataset(data_dir=dataset_dir, train_flag=False, augmented=False, generate_prompt=False)
     
@@ -447,7 +447,7 @@ def main_worker(worker_id, worker_args):
     best_miou_total = 0
     ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
-    prompter = CGNetPrompter(weights_path='exp/cgnet_weight.pth', device=device, worker_args=worker_args)
+    prompter = CGNetPrompter(weights_path='pretrained/weights_cgnet.pth', device=device, worker_args=worker_args)
 
     # scaler = torch.amp.GradScaler('cuda')
     print(f"Validation will be performed every {worker_args.valid_per_epochs} epochs.")

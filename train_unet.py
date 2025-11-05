@@ -137,7 +137,7 @@ def main_worker(worker_id, worker_args):
         drop_last=False, collate_fn=val_collate_fn, worker_init_fn=partial(worker_init_fn, base_seed=3407)
     )
     
-    cgnetprompter = CGNetPrompter(weights_path='exp/cgnet_weight.pth', device=device, worker_args=worker_args)
+    cgnetprompter = CGNetPrompter(weights_path='pretrained/weights_cgnet.pth', device=device, worker_args=worker_args)
     cgnetprompter.train(dataloader=train_dataloader, epochs=100)
     
     # count = 0

@@ -426,7 +426,7 @@ def main_worker(worker_id, worker_args):
     # Load pretrained weights
     if worker_args.load_pretrained:
         if worker_args.phase == 1:
-            image_encoder_path = os.path.join(worker_args.exp_dir, f"phase_1_weights.pth")
+            image_encoder_path = os.path.join(worker_args.exp_dir,'best_weights', f"phase_2_weights_best.pth")
             phase_1_checkpoint = torch.load(image_encoder_path, map_location=device)
             print(f"Pretrained weights from phase 1 loaded from {image_encoder_path}")
             model.image_encoder.load_state_dict(phase_1_checkpoint['image_encoder'])
@@ -438,21 +438,21 @@ def main_worker(worker_id, worker_args):
     # Optimizer and scheduler
     optimizer, scheduler = setup_optimizer_and_scheduler(model, worker_args)
     
-    if worker_args.phase == 2 and worker_args.load_pretrained:
-        image_encoder_path = os.path.join(worker_args.exp_dir, f"phase_2_weights.pth")
-        phase_2_checkpoint = torch.load(image_encoder_path, map_location=device)
-        print(f"Pretrained weights from phase 2 loaded from {image_encoder_path}")
-        model.image_encoder.load_state_dict(phase_2_checkpoint['image_encoder'])
-        print(f"Image encoder weights loaded from {image_encoder_path}")
-        model.mask_decoder.load_state_dict(phase_2_checkpoint['mask_decoder'])
-        print(f"Mask decoder weights loaded from {image_encoder_path}")
-        model.input_adapter.load_state_dict(phase_2_checkpoint['input_adapter'])
-        print(f"Input adapter weights loaded from {image_encoder_path}")
-        # optimizer.add_param_group({'params': model.input_adapter.parameters()})
+    # if worker_args.phase == 2 and worker_args.load_pretrained:
+    #     image_encoder_path = os.path.join(worker_args.exp_dir, f"phase_2_weights.pth")
+    #     phase_2_checkpoint = torch.load(image_encoder_path, map_location=device)
+    #     print(f"Pretrained weights from phase 2 loaded from {image_encoder_path}")
+    #     model.image_encoder.load_state_dict(phase_2_checkpoint['image_encoder'])
+    #     print(f"Image encoder weights loaded from {image_encoder_path}")
+    #     model.mask_decoder.load_state_dict(phase_2_checkpoint['mask_decoder'])
+    #     print(f"Mask decoder weights loaded from {image_encoder_path}")
+    #     model.input_adapter.load_state_dict(phase_2_checkpoint['input_adapter'])
+    #     print(f"Input adapter weights loaded from {image_encoder_path}")
+    #     # optimizer.add_param_group({'params': model.input_adapter.parameters()})
 
-    if worker_args.phase == 3:
-        model.enable_prompt_generator()
-        optimizer.add_param_group({'params': model.prompt_generator.parameters()})
+    # if worker_args.phase == 3:
+    #     model.enable_prompt_generator()
+    #     optimizer.add_param_group({'params': model.prompt_generator.parameters()})
     best_miou_tc = 0
     best_miou_ar = 0
     best_miou_total = 0
@@ -463,8 +463,8 @@ def main_worker(worker_id, worker_args):
     print(f"Validation will be performed every {worker_args.valid_per_epochs} epochs.")
     model.train(mode = True, phase = worker_args.phase, verbose=True)
     for epoch in range(1, max_epoch_num + 1):
-        train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler)
-        if epoch % worker_args.valid_per_epochs == 0 or epoch == max_epoch_num:
+        
+        if epoch % worker_args.valid_per_epochs == 1 or epoch == max_epoch_num:
             miou_tc, miou_ar = validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args)
             print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}")
             if miou_tc > best_miou_tc:
@@ -498,6 +498,7 @@ def main_worker(worker_id, worker_args):
                         print(f"Image encoder saved to {save_path}")
                         wandb.save(save_path)
                         print(f"Image encoder saved to wandb: {save_path}")
+        train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler)
         
 if __name__ == '__main__':
     print("Starting training process...")
