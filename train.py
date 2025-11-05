@@ -348,7 +348,7 @@ def main_worker(worker_id, worker_args):
     dataset_dir = worker_args.data_dir
     train_dataset = ClimateDataset(
         data_dir=dataset_dir, train_flag=True, shot_num=worker_args.shot_num,
-        augmented=False, generate_prompt=True
+        augmented=True, generate_prompt=True
     )
     val_dataset = ClimateDataset(data_dir=dataset_dir, train_flag=False, augmented=False, generate_prompt=True)
 
@@ -438,7 +438,7 @@ def main_worker(worker_id, worker_args):
     # Optimizer and scheduler
     optimizer, scheduler = setup_optimizer_and_scheduler(model, worker_args)
     
-    if worker_args.phase == 2:
+    if worker_args.phase == 2 and worker_args.load_pretrained:
         image_encoder_path = os.path.join(worker_args.exp_dir, f"phase_2_weights.pth")
         phase_2_checkpoint = torch.load(image_encoder_path, map_location=device)
         print(f"Pretrained weights from phase 2 loaded from {image_encoder_path}")
