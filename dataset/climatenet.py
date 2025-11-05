@@ -97,7 +97,7 @@ class ClimateDataset(Dataset):
             mask_before_shape = mask.shape
             data_before_shape = sam_input.shape 
             transform_dict = self.transforms(sam_input, mask, cgnet_input)
-            sam_input, mask, cgnet_input = transform_dict['input'], transform_dict['mask'], transform_dict['cgnet_input']
+            sam_input, mask, cgnet_input = transform_dict['input'], transform_dict['mask'], transform_dict['extra']
             assert sam_input.shape == data_before_shape, f"Data shape changed after transforms: {sam_input.shape} vs {data_before_shape}"
             assert mask.shape == mask_before_shape, f"Mask shape changed after transforms: {mask.shape} vs {mask_before_shape}"
 
