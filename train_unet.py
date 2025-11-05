@@ -81,7 +81,7 @@ def main_worker(worker_id, worker_args):
     dataset_dir = worker_args.data_dir
     train_dataset = ClimateDataset(
         data_dir=dataset_dir, train_flag=True, shot_num=worker_args.shot_num,
-        augmented=False, generate_prompt=False
+        augmented=True, generate_prompt=False
     )
     val_dataset = ClimateDataset(data_dir=dataset_dir, train_flag=False, augmented=False)
     
@@ -129,7 +129,7 @@ def main_worker(worker_id, worker_args):
         
     train_dataloader = DataLoader(
         dataset=train_dataset, batch_size=32, shuffle=sampler is None, num_workers=train_workers,
-        sampler=sampler, drop_last=False, collate_fn=train_collate_fn, augmented=True,
+        sampler=sampler, drop_last=False, collate_fn=train_collate_fn, 
         worker_init_fn=partial(worker_init_fn, base_seed=3407)
     )
     val_dataloader = DataLoader(
