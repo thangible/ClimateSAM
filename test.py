@@ -431,8 +431,8 @@ def main_worker(worker_id, worker_args):
     
     # Optimizer and scheduler
     optimizer, scheduler = setup_optimizer_and_scheduler(model, worker_args)
-    
-    image_encoder_path = os.path.join(worker_args.exp_dir, f"phase_2_weights.pth")
+
+    image_encoder_path = os.path.join(worker_args.exp_dir, "best_weight", "phase_1_weights_0point5_mlp_vit_L.pth")
     phase_2_checkpoint = torch.load(image_encoder_path, map_location=device)
     print(f"Pretrained weights from phase 2 loaded from {image_encoder_path}")
     model.image_encoder.load_state_dict(phase_2_checkpoint['image_encoder'])

@@ -17,19 +17,29 @@ def extract_point_and_bbox_prompts_from_pred_masks(preds: torch.Tensor, device=N
         # Create binary masks for each class
         ar_mask = (mask_np == 2).astype(np.uint8)
         tc_mask = (mask_np == 1).astype(np.uint8)
+        background_mask = (mask_np == 0).astype(np.uint8)
         
         # Extract prompts for each class
         
-        ar_object_masks, ar_points, ar_bboxes, ar_noisy_masks = get_prompts_from_binary_mask(ar_mask, connectivity, threshold, centroid_ratio, prompt_type)
-        tc_object_masks, tc_points, tc_bboxes, tc_noisy_masks = get_prompts_from_binary_mask(tc_mask, connectivity, threshold, centroid_ratio, prompt_type)
+        ar_object_masks, ar_positive_points, ar_bboxes, ar_noisy_masks = get_prompts_from_binary_mask(ar_mask, connectivity, threshold, centroid_ratio, prompt_type, num_points=5)
+        tc_object_masks, tc_positive_points, tc_bboxes, tc_noisy_masks = get_prompts_from_binary_mask(tc_mask, connectivity, threshold, centroid_ratio, prompt_type, num_points=5)
+        background_points = get_negative_point_prompts(background_mask, num_points=5)
         
        
-        ar_point_count = ar_points.shape[0] if ar_points is not None else 0
-        tc_point_count = tc_points.shape[0] if tc_points is not None else 0
-        ar_point_labels = torch.ones(ar_point_count, dtype=torch.float32).unsqueeze(1) if ar_point_count > 0 else None
-        tc_point_labels = torch.ones(tc_point_count, dtype=torch.float32).unsqueeze(1) if tc_point_count > 0 else None
-        ar_point_prompts = (ar_points, ar_point_labels)
-        tc_point_prompts = (tc_points, tc_point_labels)
+        ar_point_count = ar_positive_points.shape[0] if ar_positive_points is not None else 0
+        tc_point_count = tc_positive_points.shape[0] if tc_positive_points is not None else 0
+        background_point_count = background_points.shape[0] if background_points is not None else 0
+        
+        ar_positive_point_labels = torch.ones(ar_point_count, dtype=torch.float32).unsqueeze(1) if ar_point_count > 0 else None
+        # ar_negative_point_labels = torch.zeros(background_point_count + tc_point_count, dtype=torch.float32).unsqueeze(1) if background_point_count > 0 else None
+        
+        tc_positive_point_labels = torch.ones(tc_point_count, dtype=torch.float32).unsqueeze(1) if tc_point_count > 0 else None
+        # tc_negative_point_labels = torch.zeros(background_point_count + ar_point_count, dtype=torch.float32).unsqueeze(1) if background_point_count > 0 else None
+        
+
+        
+        ar_point_prompts = (ar_positive_points, ar_positive_point_labels)
+        tc_point_prompts = (tc_positive_points, tc_positive_point_labels)
        
 
         prompt_dict = {
@@ -54,7 +64,7 @@ def extract_point_and_bbox_prompts_from_pred_masks(preds: torch.Tensor, device=N
     return prompt_dict
 
 
-def get_prompts_from_binary_mask(binary_mask, connectivity=8, threshold=50, centroid_ratio=0.1, prompt_type='point'):
+def get_prompts_from_binary_mask(binary_mask, connectivity=8, threshold=50, centroid_ratio=0.1, prompt_type='point', num_points=5):
     """
     Process a binary mask (H x W, np.array) using connected components.
     Returns object_masks, points/bboxes, and (if prompt_type=='mask') noisy masks.
@@ -86,16 +96,10 @@ def get_prompts_from_binary_mask(binary_mask, connectivity=8, threshold=50, cent
                 bboxes.append([bounding_box])
             
             if prompt_type == 'point':
-                object_points = np.argwhere(object_mask)
-                object_centroid = np.round(centroids[obj_index]).astype(int)[::-1]  # (x, y) format
-                
-                
-                random_idx = np.random.randint(len(object_points))
-                random_point = object_points[random_idx]  
-                # With probability based on centroid_ratio, select the centroid
-                chosen_point = random_point if np.random.rand() > centroid_ratio else object_centroid
-                chosen_point = chosen_point[::-1]
-                points.append([chosen_point])
+                object_centroid = centroids[obj_index]
+                object_points = get_positive_point_prompts(mode='new', object_mask=object_mask, object_centroid=object_centroid, centroid_ratio=centroid_ratio, num_points=5)
+                points.append(object_points)
+
         else:
             return None, None, None, None  # If any object is below threshold, return None
     
@@ -106,7 +110,34 @@ def get_prompts_from_binary_mask(binary_mask, connectivity=8, threshold=50, cent
 
     return object_masks, points, bboxes, noisy_masks
 
-
+def get_positive_point_prompts(object_mask, object_centroid, centroid_ratio, num_points, mode = 'old'):
+    if mode == 'old':
+        object_points = np.argwhere(object_mask)
+        object_centroid = object_centroid[::-1]  # (x, y)
+        random_idx = np.random.randint(len(object_points))
+        random_point = object_points[random_idx]  
+        # With probability based on centroid_ratio, select the centroid
+        chosen_point = random_point if np.random.rand() > centroid_ratio else object_centroid
+        chosen_point = chosen_point[::-1]
+        return [chosen_point]
+    
+    if mode == 'new':
+        object_points = np.argwhere(object_mask)
+        extra_points = np.random.choice(object_points, size=num_points, replace=False)
+        extra_points = [pt[::-1] for pt in extra_points]
+        extra_points.append(object_centroid)
+        return extra_points
+        
+        
+def get_negative_point_prompts(background_mask, num_points):
+    background_points = np.argwhere(background_mask)
+    if len(background_points) == 0:
+        return None
+    extra_points = np.random.choice(background_points, size=num_points, replace=False)
+    extra_points = [pt[::-1] for pt in extra_points]
+    return extra_points
+        
+        
 def make_noisy_mask_on_objects(object_masks, scale_factor: int = 8, noisy_mask_threshold: float = 0.5, h=256, w=256):
     """
     Add noise to the input object masks. Based on Mask Transfiner.
