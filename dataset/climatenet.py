@@ -85,7 +85,7 @@ class ClimateDataset(Dataset):
             var = cgnet_input.sel(variable=variable_name).values
             var -= stats['mean']
             var /= stats['std']
-        cgnet_input = cgnet_input.transpose('time', 'variable', 'lat', 'lon')
+        cgnet_input = cgnet_input.transpose('time', 'variable', 'lat', 'lon').values
         
         # SAM INPUT
         sam_input = dataset.to_array().sel(variable=self.variables).values.squeeze()
@@ -96,8 +96,8 @@ class ClimateDataset(Dataset):
         if self.transforms:
             mask_before_shape = mask.shape
             data_before_shape = sam_input.shape 
-            transform_dict = self.transforms(sam_input, mask)
-            sam_input, mask = transform_dict['input'], transform_dict['mask']
+            transform_dict = self.transforms(sam_input, mask, cgnet_input)
+            sam_input, mask, cgnet_input = transform_dict['input'], transform_dict['mask'], transform_dict['cgnet_input']
             assert sam_input.shape == data_before_shape, f"Data shape changed after transforms: {sam_input.shape} vs {data_before_shape}"
             assert mask.shape == mask_before_shape, f"Mask shape changed after transforms: {mask.shape} vs {mask_before_shape}"
 
@@ -107,7 +107,7 @@ class ClimateDataset(Dataset):
         
         if self.generate_prompt:
             prompt_type = random.choice(['bbox', 'point', 'mask']) if self.train_flag else random.choice(['point', 'bbox'])
-            prompt_dict = extract_point_and_bbox_prompts_from_climatenet_mask(mask = mask, prompt_type = prompt_type)
+            prompt_dict = extract_point_and_bbox_prompts_from_climatenet_mask(mask=mask, prompt_type=prompt_type)
             
         else:
             prompt_dict = {
@@ -389,7 +389,8 @@ class ClimateDataset(Dataset):
         # Convert inputs and masks to tensors
         batch_dict['input'] = torch.stack([torch.from_numpy(inp).float() for inp in batch_dict['input']])
         batch_dict['gt_mask'] = [torch.from_numpy(mask).long() for mask in batch_dict['gt_mask']]
-        batch_dict['cgnet_input'] =  torch.Tensor(xr.concat(batch_dict['cgnet_input'], dim='time').values)
+        batch_dict['cgnet_input'] = torch.cat([torch.from_numpy(cg_inp).float() for cg_inp in batch_dict['cgnet_input']], dim=0)
+        # batch_dict['cgnet_input'] =  torch.Tensor(xr.concat(batch_dict['cgnet_input'], dim='time').values)
     
         return batch_dict
 
