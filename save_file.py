@@ -218,22 +218,6 @@ def main_worker(worker_id, worker_args):
 
     train_collate_fn = train_dataset.collate_fn
     val_collate_fn = val_dataset.collate_fn
-
-    if hasattr(worker_args, 'debugging') and worker_args.debugging:
-        debug_size = getattr(worker_args, 'debug_size', 10)  # Default to 50 samples
-        indices = list(range(min(debug_size, len(train_dataset))))
-        train_dataset = torch.utils.data.Subset(train_dataset, indices)
-        print(f"Debug mode: Using only {len(train_dataset)} training samples")
-
-        debug_val_size = getattr(worker_args, 'debug_val_size', 5)  # Default to 10 samples
-        val_indices = list(range(min(debug_val_size, len(val_dataset))))
-        val_dataset = torch.utils.data.Subset(val_dataset, val_indices)
-        print(f"Debug mode: Using only {len(val_dataset)} validation samples")
-        
-        max_epoch_num = 2
-        worker_args.valid_per_epochs = 1
-        print(f"Debug mode: Setting max_epoch_num to {max_epoch_num} and valid_per_epochs to {worker_args.valid_per_epochs}")
-        
     
     # DataLoader
     train_bs = worker_args.train_bs if worker_args.train_bs else (1 if worker_args.shot_num == 1 else 4)
@@ -246,8 +230,6 @@ def main_worker(worker_id, worker_args):
         print(f"Warning: gradient_accumulation_steps ({gradient_accumulation_steps}) is larger than train_bs ({train_bs}). Setting actual batch size to 1.")
     
     effective_batch_size = actual_train_bs * gradient_accumulation_steps
-    if torch.distributed.is_initialized():
-        effective_batch_size *= torch.distributed.get_world_size()
     
     print(f"Effective batch size: {effective_batch_size} (actual_bs: {actual_train_bs}, accumulation: {gradient_accumulation_steps})")
     
@@ -266,6 +248,7 @@ def main_worker(worker_id, worker_args):
         sampler=sampler, drop_last=False, collate_fn=train_collate_fn,
         worker_init_fn=partial(worker_init_fn, base_seed=3407)
     )
+    
     val_dataloader = DataLoader(
         dataset=val_dataset, batch_size=val_bs, shuffle=False, num_workers=val_workers,
         drop_last=False, collate_fn=val_collate_fn, worker_init_fn=partial(worker_init_fn, base_seed=3407)
@@ -277,15 +260,7 @@ def main_worker(worker_id, worker_args):
         mlp_ratio=worker_args.image_encoder_mlp_ratio,
         enable_wandb_logging=getattr(worker_args, 'debugging', False)  # Only log if debugging=True
     ).to(device=device)
-    if torch.distributed.is_initialized():
-        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-        try:
-            model = torch.nn.parallel.DistributedDataParallel(
-                model, device_ids=[local_rank], output_device=local_rank, find_unused_parameters=False
-            )
-        except Exception as e:
-            print(f"Error initializing DistributedDataParallel: {e}")
-            model = model.to(device=device)
+    
     
     # Load pretrained weights
     if worker_args.load_pretrained:
@@ -299,23 +274,7 @@ def main_worker(worker_id, worker_args):
             print(f"Mask decoder weights loaded from {image_encoder_path}")
     
             
-    # Optimizer and scheduler
-    optimizer, scheduler = setup_optimizer_and_scheduler(model, worker_args)
-    
-
-    best_miou_tc = 0
-    best_miou_ar = 0
-    best_miou_total = 0
-    ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
-    tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
-    
-    scaler = torch.amp.GradScaler('cuda') 
-    print(f"Validation will be performed every {worker_args.valid_per_epochs} epochs.")
-    model.train(mode = True, phase = worker_args.phase, verbose=True)
-    for epoch in range(1, max_epoch_num + 1):
-        
-        if epoch % worker_args.valid_per_epochs == 1 or epoch == max_epoch_num:
-            miou_tc, miou_ar = validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args)
+    save_embeddings(model, train_dataloader, device, save_path='embeddings')
 
         
 if __name__ == '__main__':
