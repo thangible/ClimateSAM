@@ -260,3 +260,32 @@ def calculate_tversky_loss(inputs: torch.Tensor, targets: torch.Tensor, alpha: f
     tversky_loss = 1 - tversky_index
     
     return tversky_loss.mean()
+
+
+
+class GeneratorLoss:
+    
+    """Loss computation class for the generator in GAN setup"""
+    
+    def __init__(self, device: torch.device):
+        self.device = device
+
+    def compute_loss(
+        self,
+        ar_mask_pred: List[torch.Tensor],
+        tc_mask_pred: List[torch.Tensor],
+        gt_masks: List[torch.Tensor]
+    ):
+        ar_mask = gt_masks == 2
+        tc_mask = gt_masks == 1
+
+        # Compute losses
+        losses = {
+            'ar_loss': F.binary_cross_entropy_with_logits(ar_mask_pred, ar_mask.float()),
+            'tc_loss': F.binary_cross_entropy_with_logits(tc_mask_pred, tc_mask.float())
+        }
+
+        # Total loss
+        losses['total_loss'] = losses['ar_loss'] + losses['tc_loss']
+
+        return losses

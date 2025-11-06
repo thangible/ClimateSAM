@@ -65,159 +65,23 @@ def setup_device_and_distributed(worker_id, worker_args):
     torch.cuda.set_device(device)
     return device, local_rank
 
-    
-def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler):
-    model.train(mode = True, phase = worker_args.phase, verbose = False)
-    
-    # Get gradient accumulation steps
-    gradient_accumulation_steps = getattr(worker_args, 'gradient_accumulation_steps', 1)
-    
-    # Calculate effective number of optimizer steps
-    effective_steps = len(train_dataloader) // gradient_accumulation_steps
-    if len(train_dataloader) % gradient_accumulation_steps != 0:
-        effective_steps += 1
-    
-    # Create nested progress bars if you're the main process
-    if local_rank == 0:
-        # Outer progress bar for batches
-        batch_pbar = tqdm(total=len(train_dataloader), desc=f'Epoch {epoch}/{max_epoch_num} - Batches', position=0, leave=True)
-    #     # Inner progress bar for optimizer steps
-    #     step_pbar = tqdm(total=effective_steps, desc='Optimizer Steps', position=1, leave=True)
-    # else:
-    #     batch_pbar = None
-    #     step_pbar = None
-    
-    step_count = 0 
-    # Initialize accumulated loss for logging across the entire epoch
-    epoch_loss_dict = {}
-    epoch_loss_count = 0
-    
-    for train_step, batch in enumerate(train_dataloader):
+
+@torch.no_grad()
+def save_embeddings(model, dataloader, device, save_path):
+    model.eval()
+    for idx, batch in enumerate(dataloader):
         batch = batch_to_cuda(batch, device)
-        
-        with torch.amp.autocast('cuda'):
-            tc_mask, ar_mask, _ = model(batch['input'],
-                                    ar_point_prompts = batch['ar_point_prompts'],
-                                    tc_point_prompts = batch['tc_point_prompts'], 
-                                    ar_bbox_prompts = batch['ar_bbox_prompts'], 
-                                    tc_bbox_prompts= batch['tc_bbox_prompts'],
-                                    ar_mask_prompts = batch['ar_mask_prompts'],
-                                    tc_mask_prompts = batch['tc_mask_prompts']
-                                    )
-            
-            # prompt_debug(batch, 'Train Step {train_step}')
-            masks_ar_gt = batch['ar_object_masks']
-            masks_tc_gt = batch['tc_object_masks']
-            
-            # Compute loss using the new loss function
-            loss_dict = compute_climate_loss(
-                ar_masks=ar_mask,
-                tc_masks=tc_mask,
-                ar_masks_gt=masks_ar_gt,
-                tc_masks_gt=masks_tc_gt,
-                device=device,
-                worker_args=worker_args
-            )
-        
-        total_loss = loss_dict.pop('total_loss_for_backward')
-        
-        # Scale loss by gradient accumulation steps
-        total_loss = total_loss / gradient_accumulation_steps
-        
-        # Accumulate losses for epoch-level logging
-        for key, value in loss_dict.items():
-            if key not in epoch_loss_dict:
-                epoch_loss_dict[key] = 0
-            epoch_loss_dict[key] += value.item() / gradient_accumulation_steps
-
-        backward_context = nullcontext
-        if torch.distributed.is_initialized():
-            # Only sync gradients on the last accumulation step
-            if (train_step + 1) % gradient_accumulation_steps != 0:
-                backward_context = model.no_sync
-            else:
-                backward_context = nullcontext
-
-        with backward_context():
-            scaler.scale(total_loss).backward()
-        
-        # Update batch progress bar
-        if batch_pbar:
-            batch_pbar.update(1)
-            batch_pbar.set_postfix({
-                'epoch': f"{epoch}/{max_epoch_num}",
-                'batch': f"{train_step + 1}/{len(train_dataloader)}",
-                'loss': f"{total_loss.item():.4f}"
-            })
-        
-        # Only update optimizer every gradient_accumulation_steps
-        if (train_step + 1) % gradient_accumulation_steps == 0:
-            scaler.step(optimizer)
-            scaler.update()
-            optimizer.zero_grad()
-            
-            # Calculate effective step for logging
-            effective_step = (train_step + 1) // gradient_accumulation_steps
-            epoch_loss_count += 1
-            
-            # Distributed reduction of losses for current step
-            if torch.distributed.is_initialized():
-                step_loss_dict = {}
-                for key in loss_dict.keys():
-                    step_loss_dict[key] = epoch_loss_dict[key] / epoch_loss_count
-                    tensor_loss = torch.tensor(step_loss_dict[key], device=device)
-                    torch.distributed.reduce(tensor_loss, dst=0, op=torch.distributed.ReduceOp.SUM)
-                    step_loss_dict[key] = (tensor_loss / torch.distributed.get_world_size()).item()
-            else:
-                step_loss_dict = {key: epoch_loss_dict[key] / epoch_loss_count for key in epoch_loss_dict.keys()}
-            
-            # Update step progress bar with current average losses
-            # if step_pbar:
-            #     step_pbar.update(1)
-            #     step_pbar.set_postfix({
-            #         'step': f"{effective_step}/{effective_steps}",
-            #         'total_loss': f"{step_loss_dict.get('total_loss', 0):.4f}",
-            #         'focal': f"{step_loss_dict.get('focal_loss', 0):.4f}",
-            #         'tversky': f"{step_loss_dict.get('tversky_loss', 0):.4f}"
-            #     })
-                
-            step_count += 1
-
-    # Handle any remaining gradients if the last batch doesn't complete a full accumulation
-    if len(train_dataloader) % gradient_accumulation_steps != 0:
-        scaler.step(optimizer)
-        scaler.update()
-        optimizer.zero_grad()
-        step_count += 1
-        epoch_loss_count += 1
-        # if step_pbar:
-        #     step_pbar.update(1)
-    
-    # Calculate average losses for the entire epoch
-    if epoch_loss_count > 0:
-        avg_epoch_losses = {key: epoch_loss_dict[key] / epoch_loss_count for key in epoch_loss_dict.keys()}
-        
-        # Final distributed reduction for epoch averages
-        if torch.distributed.is_initialized():
-            for key in avg_epoch_losses.keys():
-                tensor_loss = torch.tensor(avg_epoch_losses[key], device=device)
-                torch.distributed.reduce(tensor_loss, dst=0, op=torch.distributed.ReduceOp.SUM)
-                avg_epoch_losses[key] = (tensor_loss / torch.distributed.get_world_size()).item()
-        
-        # Log to wandb once per epoch
-        if worker_args.wandb and local_rank == 0:
-            log_dict = {f"train/{key}": avg_epoch_losses[key] for key in avg_epoch_losses.keys()}
-            log_dict["epoch"] = epoch
-            log_dict["learning_rate"] = scheduler.get_last_lr()[0]
-            wandb.log(log_dict, step=epoch)
-            
-    # Close progress bars
-    if batch_pbar:
-        batch_pbar.close()
-    # if step_pbar:
-    #     step_pbar.close()
-            
-    scheduler.step()
+        imgs, img_features, interm_features = model.set_infer_img(batch['input'])
+        if not os.path.exists('embeddings'):
+            os.makedirs('embeddings')
+        save_path = os.path.join('embeddings', f"image_embeddings_batch_{idx}.pth")
+        torch.save({
+            'imgs': imgs.cpu(),
+            'img_features': img_features.cpu(),
+            'interm_features': [feat.cpu() for feat in interm_features],
+            'gt_mask': batch['gt_mask'],
+            'index_name': batch['index_name']
+        }, save_path)
 
 @torch.no_grad()
 def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args):
@@ -438,23 +302,7 @@ def main_worker(worker_id, worker_args):
     # Optimizer and scheduler
     optimizer, scheduler = setup_optimizer_and_scheduler(model, worker_args)
     
-    # if worker_args.phase == 2 and worker_args.load_pretrained:
-    #     image_encoder_path = os.path.join(worker_args.exp_dir, f"phase_2_weights.pth")
-    #     phase_2_checkpoint = torch.load(image_encoder_path, map_location=device)
-    #     print(f"Pretrained weights from phase 2 loaded from {image_encoder_path}")
-    #     model.image_encoder.load_state_dict(phase_2_checkpoint['image_encoder'])
-    #     print(f"Image encoder weights loaded from {image_encoder_path}")
-    #     model.mask_decoder.load_state_dict(phase_2_checkpoint['mask_decoder'])
-    #     print(f"Mask decoder weights loaded from {image_encoder_path}")
-    #     model.input_adapter.load_state_dict(phase_2_checkpoint['input_adapter'])
-    #     print(f"Input adapter weights loaded from {image_encoder_path}")
-    #     # optimizer.add_param_group({'params': model.input_adapter.parameters()})
 
-    # if worker_args.phase == 3:
-    #     model.enable_prompt_generator()
-    #     optimizer.add_param_group({'params': model.prompt_generator.parameters()})
-    
-    
     best_miou_tc = 0
     best_miou_ar = 0
     best_miou_total = 0
@@ -468,39 +316,7 @@ def main_worker(worker_id, worker_args):
         
         if epoch % worker_args.valid_per_epochs == 1 or epoch == max_epoch_num:
             miou_tc, miou_ar = validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args)
-            print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}")
-            if miou_tc > best_miou_tc:
-                best_miou_tc = miou_tc
-                print(f'Best mIoU TC has been updated to {best_miou_tc:.2%}!')
-            if miou_ar > best_miou_ar:
-                best_miou_ar = miou_ar
-                print(f'Best mIoU AR has been updated to {best_miou_ar:.2%}!')
-            if (miou_tc + miou_ar) / 2 > best_miou_total:
-                best_miou_total = (miou_tc + miou_ar) / 2
-                print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
-                if worker_args.save_model and epoch > 4:
-                    if worker_args.phase == 1:
-                        save_path = os.path.join(worker_args.exp_dir, f"phase_1_weights.pth")
-                        phase_1_weights = {
-                            'image_encoder': model.image_encoder.state_dict(),
-                            'mask_decoder': model.mask_decoder.state_dict(),
-                        }
-                        torch.save(phase_1_weights, save_path)
-                        print(f"Image encoder saved to {save_path}")
-                        wandb.save(save_path)
-                        print(f"Image encoder saved to wandb: {save_path}")
-                    if worker_args.phase == 2:
-                        save_path = os.path.join(worker_args.exp_dir, f"phase_2_weights.pth")
-                        phase_2_weights = {
-                            'image_encoder': model.image_encoder.state_dict(),
-                            'mask_decoder': model.mask_decoder.state_dict(),
-                            'input_adapter': model.input_adapter.state_dict(),
-                        }
-                        torch.save(phase_2_weights, save_path)
-                        print(f"Image encoder saved to {save_path}")
-                        wandb.save(save_path)
-                        print(f"Image encoder saved to wandb: {save_path}")
-        train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler)
+
         
 if __name__ == '__main__':
     print("Starting training process...")

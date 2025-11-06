@@ -344,6 +344,34 @@ class ClimateSAM(nn.Module):
         
         return tc_postprocess_masks_hq, ar_postprocess_masks_hq, image_input
     
+    @torch.no_grad()
+    def save_image_embeddings(self,
+            save_path: str,
+            input: Union[List[torch.Tensor], None],
+            gt_mask: Union[List[torch.Tensor], None]
+    ):
+        input = self.interpolate_input(input) # from 16x768x1152 to 16x1024x1024
+        
+        imgs = input[:, :3, :, :] # from 16x1024x1024 to 3x1024x1024
+        imgs = self.input_adapter(input) # from 16x1024x1024 to 3x1024x1024
+        imgs = self.preprocess_images(imgs) # normalize the input images
+        
+        # encode the images
+        image_input = imgs.clone().detach()
+        image_embeddings, interm_embeddings = self.image_encoder(imgs) # shape batch x [256, 64, 64] and 12 x torch.Size([batch, 64, 64, 768])
+        batch_size = len(image_embeddings)
+        
+        torch.save({
+            'batch_size': batch_size,
+            'input': input,
+            'image_embeddings': image_embeddings,
+            'interm_embeddings': interm_embeddings,
+            'image_input': image_input,
+            'gt_mask': gt_mask
+        }, save_path)
+        print(f"Image embeddings saved to {save_path}")
+
+
     def enable_prompt_generator(self):
         if not hasattr(self, 'prompt_generator'):
             self.prompt_generator = PromptGenerator(
