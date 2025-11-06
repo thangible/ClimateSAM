@@ -560,3 +560,37 @@ def main_worker(worker_args):
     print(f"Best AR mIoU: {best_miou_ar:.4f}")
     print(f"Best TC mIoU: {best_miou_tc:.4f}")
     print(f"Best Combined mIoU: {best_miou_combined:.4f}")
+
+if __name__ == '__main__':
+    print("Starting prompt generator training process...")
+    args = parse()
+    
+    # Set default values for prompt generator training
+    if not hasattr(args, 'max_epoch_num'):
+        args.max_epoch_num = 100
+    if not hasattr(args, 'lr'):
+        args.lr = 1e-4
+    if not hasattr(args, 'weight_decay'):
+        args.weight_decay = 1e-4
+    if not hasattr(args, 'verbose'):
+        args.verbose = True
+    
+    # Initialize wandb if enabled
+    if hasattr(args, 'wandb') and args.wandb:
+        project_name = getattr(args, 'project_name', "climate-sam-prompt-generator")
+        run_name = getattr(args, 'run_name', None)
+        wandb.init(project=project_name, name=run_name, config=vars(args))
+
+    # Setup GPU
+    if torch.cuda.is_available():
+        if 'CUDA_VISIBLE_DEVICES' in os.environ.keys():
+            used_gpu = os.environ['CUDA_VISIBLE_DEVICES'].split(',')[0]
+        else:
+            used_gpu = get_idle_gpu(gpu_num=1)[0]
+            os.environ['CUDA_VISIBLE_DEVICES'] = str(used_gpu)
+        print(f"Using GPU: {used_gpu}")
+    else:
+        print("Using CPU")
+
+    # Launch training
+    main_worker(worker_args=args)
