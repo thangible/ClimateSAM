@@ -276,13 +276,21 @@ class GeneratorLoss:
         tc_mask_pred: List[torch.Tensor],
         gt_masks: List[torch.Tensor]
     ):
-        ar_mask = gt_masks == 2
-        tc_mask = gt_masks == 1
+        ar_mask = [(gt_masks == 2).to(torch.uint8) for gt_masks in gt_masks]
+        tc_mask = [(gt_masks == 1).to(torch.uint8) for gt_masks in gt_masks]
+        ar_mask = torch.stack(ar_mask, dim=0).float().to(self.device)
+        tc_mask = torch.stack(tc_mask, dim=0).float().to(self.device)
+        
+        
+        
+        # print(ar_mask[0].shape, len(ar_mask))
+        # print(f"ar_mask_pred shape: {ar_mask_pred.shape}, ar_mask shape: {ar_mask.shape}")
+        # print(f"tc_mask_pred shape: {tc_mask_pred.shape}, tc_mask shape: {tc_mask.shape}")
 
         # Compute losses
         losses = {
-            'ar_loss': F.binary_cross_entropy_with_logits(ar_mask_pred, ar_mask.float()),
-            'tc_loss': F.binary_cross_entropy_with_logits(tc_mask_pred, tc_mask.float())
+            'ar_loss': F.binary_cross_entropy_with_logits(ar_mask_pred, ar_mask),
+            'tc_loss': F.binary_cross_entropy_with_logits(tc_mask_pred, tc_mask)
         }
 
         # Total loss

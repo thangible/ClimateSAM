@@ -69,15 +69,16 @@ def train_one_epoch(epoch, embeddings_file_path, model, optimizer, scheduler, de
         pbar = embeddings_file_path
     
     for embedding_file in pbar:
-        embeddings = torch.load(embedding_file, map_location=device)
+        embeddings = torch.load(embedding_file, map_location='cpu')
         imgs, img_features, interm_embeddings, gt_masks, index = (
             embeddings['imgs'], 
             embeddings['img_features'], 
-            embeddings['interm_embeddings'], 
-            embeddings['gt_masks'], 
-            embeddings['index']
+            embeddings['interm_features'], 
+            embeddings['gt_mask'], 
+            embeddings['index_name']
         )
-        
+
+        interm_embeddings = [e.to(device) for e in interm_embeddings]
         # Forward pass through prompt generator
         tc_masks, ar_masks = model(interm_embeddings)
 
@@ -120,6 +121,9 @@ def train_one_epoch(epoch, embeddings_file_path, model, optimizer, scheduler, de
             log_dict["epoch"] = epoch
             log_dict["learning_rate"] = scheduler.get_last_lr()[0]
             wandb.log(log_dict, step=epoch)
+            
+    del embeddings, imgs, img_features, interm_embeddings, gt_masks, index
+    
     
     scheduler.step()
 
@@ -133,11 +137,11 @@ def main_worker(worker_args):
     print(f"Training initialized on device {device}.")
     
     # Setup embeddings paths
-    embedding_dir_path = os.path.join("embeddings")
+    embedding_dir_path = './embeddings'
     embeddings_file_path = [
         os.path.join(embedding_dir_path, f) 
         for f in os.listdir(embedding_dir_path) 
-        if f.endswith('.pt')
+        if f.endswith('.pth')
     ]
     
     if not embeddings_file_path:
@@ -151,7 +155,7 @@ def main_worker(worker_args):
         'vit_l': 24,
         'vit_h': 32
     }
-    feature_per_block = {
+    features_per_block = {
         'vit_b': 3,
         'vit_l': 6,
         'vit_h': 9
@@ -162,8 +166,10 @@ def main_worker(worker_args):
     
     # Initialize prompt generator
     prompt_generator = PromptGenerator(
+        in_channels=1024,
+        fused_channels=64,
         num_features=num_features_map[model_type],
-        feature_per_block=feature_per_block[model_type]
+        features_per_block=features_per_block[model_type]
     ).to(device)
     
     # Setup optimizer and scheduler
@@ -194,6 +200,8 @@ def main_worker(worker_args):
             
             if hasattr(worker_args, 'wandb') and worker_args.wandb:
                 wandb.save(save_path)
+                
+
 
 if __name__ == '__main__':
     print("Starting prompt generator training process...")

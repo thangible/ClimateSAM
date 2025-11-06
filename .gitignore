@@ -10,3 +10,6 @@ __pycache__
 .vscode/settings.json
 exp
 .python-version
+embeddings/*.pth
+*/*.pth
+*/*.pt

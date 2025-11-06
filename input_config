@@ -9,7 +9,7 @@ run_name = concat_token_05_vitL_with_pretrained
 [BATCH CONFIG]
 ; num_workers = None
 gradient_accumulation_steps = 4
-train_bs = 32
+train_bs = 16
 
 val_bs = 4
 ; weight_decay = 1e-4
