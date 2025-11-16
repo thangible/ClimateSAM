@@ -447,7 +447,8 @@ def main_worker(worker_id, worker_args):
     best_miou_total = 0
     ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
-    prompter = CGNetPrompter(weights_path='pretrained/weights_cgnet.pth', device=device, worker_args=worker_args)
+    save_path = os.path.join('exp', f"cgnet_weight.pth")
+    prompter = CGNetPrompter(weights_path=save_path, device=device, worker_args=worker_args)
 
     # scaler = torch.amp.GradScaler('cuda')
     print(f"Validation will be performed every {worker_args.valid_per_epochs} epochs.")
