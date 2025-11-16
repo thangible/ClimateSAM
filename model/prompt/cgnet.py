@@ -6,7 +6,7 @@ from tqdm import tqdm
 import os
 import torch.nn.functional as F
 from .create_prompt_from_mask import extract_point_and_bbox_prompts_from_pred_masks
-
+from .prompt_maker import PromptMaker
 
 class CGNetPrompter:
     def __init__(self, weights_path, device, worker_args):
@@ -16,6 +16,7 @@ class CGNetPrompter:
         self.exp_dir = worker_args.exp_dir
         self.device = device
         self.optimizer = torch.optim.Adam(self.cgnet_model.parameters(), lr=1e-4)
+        self.prompt_maker = PromptMaker(prompt_type=worker_args.prompt_type, positive_point_num=worker_args.positive_point_num, negative_point_num=worker_args.negative_point_num)
 
     def train(self, dataloader, epochs):
         self.cgnet_model.train()
@@ -92,10 +93,10 @@ class CGNetPrompter:
         Given an input image, return the prompts from CGNet.
         '''
         pred_masks = self.get_aux_mask(batch_input)
-        # prompt_type = random.choice(['point', 'bbox']) 
-        prompt_dict = extract_point_and_bbox_prompts_from_pred_masks(preds=pred_masks, device=self.device, prompt_type=prompt_type, threshold=20)
-
+        prompt_dict = self.prompt_maker.make_prompts(pred_masks)
         return prompt_dict
+
+
 
     
     

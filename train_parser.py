@@ -163,6 +163,26 @@ def parse():
         '--bce_weight', default=1.0, type=float,
         help="Weight for the BCE loss. Default is 1.0."
     )
+    
+    parser.add_argument(
+        '--augmented', action='store_true',
+        help="Flag to enable data augmentation. Default is False."
+    )
+    
+    parser.add_argument(
+        '--positive_point_num', default=5, type=int,
+        help="Number of positive points for prompt generation. Default is 5."
+    )
+
+    parser.add_argument(
+        '--negative_point_num', default=5, type=int,
+        help="Number of negative points for prompt generation. Default is 5."
+    )
+
+    parser.add_argument(
+        '--prompt_type', default='point', type=str,
+        help="Type of prompt to generate. Default is 'point'."
+    )
 
     args = parser.parse_args()
 

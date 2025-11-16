@@ -10,13 +10,16 @@ run_name = concat_token_05_vitL_with_pretrained
 ; num_workers = None
 gradient_accumulation_steps = 4
 train_bs = 16
-
 val_bs = 4
 ; weight_decay = 1e-4
 lr = 1e-3
 
 [PHASE]
 phase = 1
+augmented = False
+positive_point_num = 5
+negative_point_num = 5
+prompt_type = point
 
 [MODEL CONFIG]
 ; sam_type = vit_l
