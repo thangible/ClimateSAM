@@ -254,4 +254,27 @@ def make_noisy_mask_on_objects(binary_mask, connectivity, threshold, scale_facto
     inc_masks = get_incoherent_mask(o_m_resized, h, w)
     o_m_noisy = ((o_m_resized + mask_noise * inc_masks) > noisy_mask_threshold).float()
     
+    import matplotlib.pyplot as plt
+
+    o_m_noisy_np = o_m_noisy.detach().cpu().numpy()
+    o_m_resized_np = o_m_resized.detach().cpu().numpy()
+    num_objs = o_m_noisy_np.shape[0]
+
+    if num_objs > 0:
+        cols = 2
+        rows = num_objs
+        fig, axes = plt.subplots(rows, cols, figsize=(cols * 3, max(3, rows) * 3))
+        axes = np.atleast_2d(axes)
+        for i in range(num_objs):
+            axes[i, 0].imshow(o_m_resized_np[i, 0], cmap='gray', vmin=0, vmax=1)
+            axes[i, 0].set_title(f'Original #{i}')
+            axes[i, 0].axis('off')
+
+            axes[i, 1].imshow(o_m_noisy_np[i, 0], cmap='gray', vmin=0, vmax=1)
+            axes[i, 1].set_title(f'Noisy #{i}')
+            axes[i, 1].axis('off')
+
+        plt.tight_layout()
+        plt.show()
+    
     return o_m_noisy, object_masks
