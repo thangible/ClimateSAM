@@ -85,6 +85,9 @@ def make_bbox_prompts(binary_mask, connectivity, threshold=50):
             bottom = top + height - 1
             bounding_box = [left, top, right, bottom]
             bboxes.append([bounding_box])
+            
+    if not object_masks_list:
+        return None, None
     bboxes_prompts = torch.from_numpy(np.stack(bboxes, axis=0)).to(torch.float32)
     object_masks = torch.from_numpy(np.stack(object_masks_list, axis=0)).to(torch.float32).unsqueeze(1)
     return bboxes_prompts, object_masks
@@ -107,6 +110,9 @@ def make_point_prompts(binary_mask, connectivity, threshold=50, num_positive_poi
             #NEGATIVE POINTS
             negative_points = make_negative_point_prompts(object_mask=object_mask, object_centroid=object_centroid, num_points=num_negative_points)
             negative_points_list.append(negative_points)
+            
+    if not object_masks_list:
+        return None, None
             
     object_masks = torch.from_numpy(np.stack(object_masks_list, axis=0)).to(torch.float32).unsqueeze(1)
     
