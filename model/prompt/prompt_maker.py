@@ -141,7 +141,7 @@ def make_point_prompts(binary_mask, connectivity, threshold=20, num_positive_poi
     #     plt.show()
         
     if len(positive_points_list) == 0 or len(negative_points_list) == 0 or len(object_masks_list) == 0:
-        return None, None
+        return (None, None), None
         
     positive_point_coords = torch.from_numpy(np.stack(positive_points_list, axis=0)).to(torch.float32)
     negative_point_coords = torch.from_numpy(np.stack(negative_points_list, axis=0)).to(torch.float32)
@@ -172,22 +172,22 @@ def make_negative_point_prompts(object_mask, object_centroid, num_points=5, dila
     negative_points = [pt[::-1] for pt in negative_points]
     import matplotlib.pyplot as plt
 
-    # visualize object mask, dilated mask and negative region side-by-side
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    axes[0].imshow(object_mask, cmap='gray')
-    axes[0].set_title('Object Mask')
-    axes[0].axis('off')
+    # # visualize object mask, dilated mask and negative region side-by-side
+    # fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    # axes[0].imshow(object_mask, cmap='gray')
+    # axes[0].set_title('Object Mask')
+    # axes[0].axis('off')
 
-    axes[1].imshow(dilated_mask_big, cmap='gray')
-    axes[1].set_title(f'Dilated Mask, dilated_size: {dilate_size}')
-    axes[1].axis('off')
+    # axes[1].imshow(dilated_mask_big, cmap='gray')
+    # axes[1].set_title(f'Dilated Mask, dilated_size: {dilate_size}')
+    # axes[1].axis('off')
 
-    axes[2].imshow(negative_region, cmap='gray')
-    axes[2].set_title('Negative Region')
-    axes[2].axis('off')
+    # axes[2].imshow(negative_region, cmap='gray')
+    # axes[2].set_title('Negative Region')
+    # axes[2].axis('off')
 
-    plt.tight_layout()
-    plt.show()
+    # plt.tight_layout()
+    # plt.show()
     return negative_points
     
     
@@ -200,19 +200,19 @@ def make_positive_point_prompts(object_mask, object_centroid, num_points=5, erod
     positive_points.append(object_centroid)
     
     
-    import matplotlib.pyplot as plt
+    # import matplotlib.pyplot as plt
 
-    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-    axes[0].imshow(object_mask, cmap='gray')
-    axes[0].set_title('Object Mask')
-    axes[0].axis('off')
+    # fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+    # axes[0].imshow(object_mask, cmap='gray')
+    # axes[0].set_title('Object Mask')
+    # axes[0].axis('off')
 
-    axes[1].imshow(eroded_mask, cmap='gray')
-    axes[1].set_title(f'Eroded Mask (erode_size={erode_size})')
-    axes[1].axis('off')
+    # axes[1].imshow(eroded_mask, cmap='gray')
+    # axes[1].set_title(f'Eroded Mask (erode_size={erode_size})')
+    # axes[1].axis('off')
 
-    plt.tight_layout()
-    plt.show()
+    # plt.tight_layout()
+    # plt.show()
     return positive_points
 
 def make_noisy_mask_on_objects(object_masks, scale_factor: int = 8, noisy_mask_threshold: float = 0.5, h=256, w=256):
@@ -227,7 +227,7 @@ def make_noisy_mask_on_objects(object_masks, scale_factor: int = 8, noisy_mask_t
         mask_residue = (mask_residue >= 0.01).float()
         return mask_residue
 
-    if object_masks.ndim() == 3:
+    if object_masks.dim() == 3:
         object_masks = object_masks.unsqueeze(1)
 
     o_m_resized = F.interpolate(object_masks.float(), (h, w), mode='bilinear', align_corners=False)
