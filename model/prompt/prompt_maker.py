@@ -69,7 +69,7 @@ class PromptMaker:
         prompt_dict = {key: [d[key] if d[key] is not None else None for d in prompt_list] for key in prompt_list[0]}
         return prompt_dict
                 
-def make_bbox_prompts(binary_mask, connectivity, threshold=50):
+def make_bbox_prompts(binary_mask, connectivity, threshold=20):
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_mask.astype(np.uint8), connectivity=connectivity)
     object_masks_list = []
     bboxes = []
@@ -85,14 +85,12 @@ def make_bbox_prompts(binary_mask, connectivity, threshold=50):
             bottom = top + height - 1
             bounding_box = [left, top, right, bottom]
             bboxes.append([bounding_box])
-            
-    if not object_masks_list:
-        return None, None
+
     bboxes_prompts = torch.from_numpy(np.stack(bboxes, axis=0)).to(torch.float32)
-    object_masks = torch.from_numpy(np.stack(object_masks_list, axis=0)).to(torch.float32).unsqueeze(1)
+    object_masks = torch.from_numpy(np.stack(object_masks_list, axis=0)).to(torch.float32).unsqueeze(1) if object_masks_list else None
     return bboxes_prompts, object_masks
 
-def make_point_prompts(binary_mask, connectivity, threshold=50, num_positive_points=5, num_negative_points=5):
+def make_point_prompts(binary_mask, connectivity, threshold=20, num_positive_points=5, num_negative_points=5):
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_mask.astype(np.uint8), connectivity=connectivity)
     object_masks_list = []
     positive_points_list = []
@@ -111,19 +109,17 @@ def make_point_prompts(binary_mask, connectivity, threshold=50, num_positive_poi
             negative_points = make_negative_point_prompts(object_mask=object_mask, object_centroid=object_centroid, num_points=num_negative_points)
             negative_points_list.append(negative_points)
             
-    if not object_masks_list:
-        return None, None
             
-    object_masks = torch.from_numpy(np.stack(object_masks_list, axis=0)).to(torch.float32).unsqueeze(1)
+    object_masks = torch.from_numpy(np.stack(object_masks_list, axis=0)).to(torch.float32).unsqueeze(1) if object_masks_list else None
     
     
     # point_list = np.stack([positive_points_list, negative_points_list], axis=1)
-    positive_point_coords = torch.from_numpy(np.stack(positive_points_list, axis=0)).to(torch.float32)
-    negative_point_coords = torch.from_numpy(np.stack(negative_points_list, axis=0)).to(torch.float32)
+    positive_point_coords = torch.from_numpy(np.stack(positive_points_list, axis=0)).to(torch.float32) if positive_points_list else torch.empty((0,0,2), dtype=torch.float32)
+    negative_point_coords = torch.from_numpy(np.stack(negative_points_list, axis=0)).to(torch.float32) if negative_points_list else torch.empty((0,0,2), dtype=torch.float32)
     
     point_coords = torch.cat([positive_point_coords, negative_point_coords], dim=1)
-    positive_point_labels = torch.ones(positive_point_coords.shape[:-1], dtype=torch.float32)
-    negative_point_labels = torch.zeros(negative_point_coords.shape[:-1], dtype=torch.float32)
+    positive_point_labels = torch.ones(positive_point_coords.shape[:-1], dtype=torch.float32) if positive_point_coords.numel() > 0 else torch.empty((0,0), dtype=torch.float32)
+    negative_point_labels = torch.zeros(negative_point_coords.shape[:-1], dtype=torch.float32) if negative_point_coords.numel() > 0 else torch.empty((0,0), dtype=torch.float32)
     
     point_labels = torch.cat([positive_point_labels, negative_point_labels], dim=1)
     point_prompts = (point_coords, point_labels)
