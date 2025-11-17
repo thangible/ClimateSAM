@@ -2,7 +2,7 @@ import random
 import numpy as np
 import torch
 import cv2
-import torchvision.transforms.functional as F
+import torch.nn.functional as F
 
 
 class PromptMaker:
@@ -50,15 +50,15 @@ class PromptMaker:
             elif prompt_type == 'bbox':
                 ar_bbox_prompts, ar_object_masks = make_bbox_prompts(ar_mask, self.connectivity, self.threshold)
                 tc_bbox_prompts, tc_object_masks = make_bbox_prompts(tc_mask, self.connectivity, self.threshold)
-                ar_point_prompts = None
-                tc_point_prompts = None
+                ar_point_prompts = (None, None)
+                tc_point_prompts = (None, None)
                 ar_noisy_masks = None
                 tc_noisy_masks = None
             elif prompt_type == 'mask':
-                ar_noisy_masks =  make_noisy_mask_on_objects(ar_mask)
-                tc_noisy_masks =  make_noisy_mask_on_objects(tc_mask)
-                ar_point_prompts = None
-                tc_point_prompts = None
+                ar_noisy_masks, ar_object_masks =  make_noisy_mask_on_objects(ar_mask, self.connectivity, self.threshold)
+                tc_noisy_masks, tc_object_masks =  make_noisy_mask_on_objects(tc_mask, self.connectivity, self.threshold)
+                ar_point_prompts = (None, None)
+                tc_point_prompts = (None, None)
                 ar_bbox_prompts = None
                 tc_bbox_prompts = None
             prompt_dict = {
@@ -92,8 +92,12 @@ def make_bbox_prompts(binary_mask, connectivity, threshold=20):
             bounding_box = [left, top, right, bottom]
             bboxes.append([bounding_box])
 
+    if len(object_masks_list) == 0:
+        return None, None
+    
     bboxes_prompts = torch.from_numpy(np.stack(bboxes, axis=0)).to(torch.float32)
-    object_masks = torch.from_numpy(np.stack(object_masks_list, axis=0)).to(torch.float32).unsqueeze(1) if object_masks_list else None
+    object_masks = torch.from_numpy(np.stack(object_masks_list, axis=0)).to(torch.float32).unsqueeze(1) 
+    
     return bboxes_prompts, object_masks
 
 def make_point_prompts(binary_mask, connectivity, threshold=20, num_positive_points=5, num_negative_points=5, erode_size=1, dilate_size=15):
@@ -108,14 +112,14 @@ def make_point_prompts(binary_mask, connectivity, threshold=20, num_positive_poi
             # print(area_in_pixels)
             erode_size = max(1, int(np.sqrt(area_in_pixels) * 0.2))
             dilate_size = max(15, int(np.sqrt(area_in_pixels) * 0.1))
-            object_mask = (labels == obj_index).astype(np.uint8)
-            object_masks_list.append(object_mask)
+            object_masks = (labels == obj_index).astype(np.uint8)
+            object_masks_list.append(object_masks)
             object_centroid = centroids[obj_index]
             #POSITIVE POINTS
-            positive_points = make_positive_point_prompts(object_mask=object_mask, object_centroid=object_centroid, num_points=num_positive_points, erode_size=erode_size)
+            positive_points = make_positive_point_prompts(object_mask=object_masks, object_centroid=object_centroid, num_points=num_positive_points, erode_size=erode_size)
             positive_points_list.append(positive_points)
             #NEGATIVE POINTS
-            negative_points = make_negative_point_prompts(object_mask=object_mask, object_centroid=object_centroid, num_points=num_negative_points, dilate_size=dilate_size)
+            negative_points = make_negative_point_prompts(object_mask=object_masks, object_centroid=object_centroid, num_points=num_negative_points, dilate_size=dilate_size)
             negative_points_list.append(negative_points)
             
             
@@ -154,7 +158,7 @@ def make_point_prompts(binary_mask, connectivity, threshold=20, num_positive_poi
     point_prompts = (point_coords, point_labels)
     
     
-    return point_prompts, object_mask
+    return point_prompts, object_masks
 
             
     
@@ -215,10 +219,25 @@ def make_positive_point_prompts(object_mask, object_centroid, num_points=5, erod
     # plt.show()
     return positive_points
 
-def make_noisy_mask_on_objects(object_masks, scale_factor: int = 8, noisy_mask_threshold: float = 0.5, h=256, w=256):
+def make_noisy_mask_on_objects(binary_mask, connectivity, threshold, scale_factor: int = 8, noisy_mask_threshold: float = 0.5, h=256, w=256):
     """
     Add noise to the input object masks. Based on Mask Transfiner.
     """
+    
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_mask.astype(np.uint8), connectivity=connectivity)
+    object_masks_list = []
+    for obj_index in range(1, num_labels):
+        stat = stats[obj_index]
+        area_in_pixels = stat[4]
+        if area_in_pixels >= threshold:
+            object_mask = (labels == obj_index).astype(np.uint8)
+            object_masks_list.append(object_mask)
+    
+    if len(object_masks_list) == 0:
+        return None, None        
+    
+    object_masks = torch.from_numpy(np.stack(object_masks_list, axis = 0)).to(torch.float32).unsqueeze(1)
+
     def get_incoherent_mask(input_masks, h, w):
         mask = input_masks.float()
         mask_small = F.interpolate(mask, (h // scale_factor, w // scale_factor), mode='bilinear', align_corners=False)
@@ -235,4 +254,4 @@ def make_noisy_mask_on_objects(object_masks, scale_factor: int = 8, noisy_mask_t
     inc_masks = get_incoherent_mask(o_m_resized, h, w)
     o_m_noisy = ((o_m_resized + mask_noise * inc_masks) > noisy_mask_threshold).float()
     
-    return o_m_noisy
+    return o_m_noisy, object_masks
