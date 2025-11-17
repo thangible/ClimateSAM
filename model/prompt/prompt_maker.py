@@ -6,7 +6,7 @@ import torchvision.transforms.functional as F
 
 
 class PromptMaker:
-    def __init__(self, device=None, connectivity=8, threshold=50, prompt_type='point', centroid_ratio=0.1, positive_point_num =5, negative_point_num=5):
+    def __init__(self, device=None, connectivity=8, threshold=20, prompt_type='point', centroid_ratio=0.1, positive_point_num =5, negative_point_num=5):
         """
         """
 
@@ -22,6 +22,7 @@ class PromptMaker:
         batch_size = len(masks)
         prompt_list = []
         
+        
         #if prompt_type is a list, randomly choose one for each sample
         if isinstance(self.prompt_type, (list, tuple)):
             if len(self.prompt_type) == 0:
@@ -34,9 +35,14 @@ class PromptMaker:
             mask_np = masks[i].squeeze(0).cpu().numpy() 
             ar_mask = (mask_np == 2).astype(np.uint8)
             tc_mask = (mask_np == 1).astype(np.uint8)   
+            # if sum(tc_mask.flatten()) == 0:
+            #     import matplotlib.pyplot as plt
+            #     fig, ax = plt.subplots(figsize=(6, 6))
+            #     ax.imshow(mask_np, cmap='gray', vmin=0, vmax=2)
+            #     ax.set_title('Mask with No TC Objects Found')
             if prompt_type == 'point':
-                ar_point_prompts, ar_object_masks = make_point_prompts(ar_mask, self.connectivity, self.threshold, num_positive_points=self.positive_point_num, num_negative_points=self.negative_point_num)
-                tc_point_prompts, tc_object_masks = make_point_prompts(tc_mask, self.connectivity, self.threshold, num_positive_points=self.positive_point_num, num_negative_points=self.negative_point_num)
+                ar_point_prompts, ar_object_masks = make_point_prompts(ar_mask, connectivity=self.connectivity, threshold=self.threshold, num_positive_points=self.positive_point_num, num_negative_points=self.negative_point_num, erode_size= 5)
+                tc_point_prompts, tc_object_masks = make_point_prompts(tc_mask, connectivity= self.connectivity, threshold=self.threshold, num_positive_points=min(1, self.positive_point_num//3), num_negative_points=min(1, self.negative_point_num//3), erode_size=1)
                 ar_bbox_prompts = None
                 tc_bbox_prompts = None
                 ar_noisy_masks = None
@@ -90,7 +96,7 @@ def make_bbox_prompts(binary_mask, connectivity, threshold=20):
     object_masks = torch.from_numpy(np.stack(object_masks_list, axis=0)).to(torch.float32).unsqueeze(1) if object_masks_list else None
     return bboxes_prompts, object_masks
 
-def make_point_prompts(binary_mask, connectivity, threshold=20, num_positive_points=5, num_negative_points=5):
+def make_point_prompts(binary_mask, connectivity, threshold=20, num_positive_points=5, num_negative_points=5, erode_size=1, dilate_size=15):
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_mask.astype(np.uint8), connectivity=connectivity)
     object_masks_list = []
     positive_points_list = []
@@ -99,71 +105,114 @@ def make_point_prompts(binary_mask, connectivity, threshold=20, num_positive_poi
         stat = stats[obj_index]
         area_in_pixels = stat[4]
         if area_in_pixels >= threshold:
+            # print(area_in_pixels)
+            erode_size = max(1, int(np.sqrt(area_in_pixels) * 0.2))
+            dilate_size = max(15, int(np.sqrt(area_in_pixels) * 0.1))
             object_mask = (labels == obj_index).astype(np.uint8)
             object_masks_list.append(object_mask)
             object_centroid = centroids[obj_index]
             #POSITIVE POINTS
-            positive_points = make_positive_point_prompts(object_mask=object_mask, object_centroid=object_centroid, num_points=num_positive_points)
+            positive_points = make_positive_point_prompts(object_mask=object_mask, object_centroid=object_centroid, num_points=num_positive_points, erode_size=erode_size)
             positive_points_list.append(positive_points)
             #NEGATIVE POINTS
-            negative_points = make_negative_point_prompts(object_mask=object_mask, object_centroid=object_centroid, num_points=num_negative_points)
+            negative_points = make_negative_point_prompts(object_mask=object_mask, object_centroid=object_centroid, num_points=num_negative_points, dilate_size=dilate_size)
             negative_points_list.append(negative_points)
             
             
     object_masks = torch.from_numpy(np.stack(object_masks_list, axis=0)).to(torch.float32).unsqueeze(1) if object_masks_list else None
     
     
-    # point_list = np.stack([positive_points_list, negative_points_list], axis=1)
-    positive_point_coords = torch.from_numpy(np.stack(positive_points_list, axis=0)).to(torch.float32) if positive_points_list else torch.empty((0,0,2), dtype=torch.float32)
-    negative_point_coords = torch.from_numpy(np.stack(negative_points_list, axis=0)).to(torch.float32) if negative_points_list else torch.empty((0,0,2), dtype=torch.float32)
+    # if len(positive_points_list) == 0:
+    #     import matplotlib.pyplot as plt
+    #     fig, ax = plt.subplots(figsize=(6, 6))
+    #     ax.imshow(binary_mask, cmap='gray', vmin=0, vmax=1)
+    #     ax.set_title('Binary Mask with No Objects Found')
+    #     ax.axis('off')
+    #     plt.tight_layout()
+    #     plt.show()
+    
+    # if len(negative_points_list) == 0:
+    #     import matplotlib.pyplot as plt
+    #     fig, ax = plt.subplots(figsize=(6, 6))
+    #     ax.imshow(binary_mask, cmap='gray', vmin=0, vmax=1)
+    #     ax.set_title('Binary Mask with No Objects Found for Negative Points')
+    #     ax.axis('off')
+    #     plt.tight_layout()
+    #     plt.show()
+        
+    if len(positive_points_list) == 0 or len(negative_points_list) == 0 or len(object_masks_list) == 0:
+        return None, None
+        
+    positive_point_coords = torch.from_numpy(np.stack(positive_points_list, axis=0)).to(torch.float32)
+    negative_point_coords = torch.from_numpy(np.stack(negative_points_list, axis=0)).to(torch.float32)
     
     point_coords = torch.cat([positive_point_coords, negative_point_coords], dim=1)
-    positive_point_labels = torch.ones(positive_point_coords.shape[:-1], dtype=torch.float32) if positive_point_coords.numel() > 0 else torch.empty((0,0), dtype=torch.float32)
-    negative_point_labels = torch.zeros(negative_point_coords.shape[:-1], dtype=torch.float32) if negative_point_coords.numel() > 0 else torch.empty((0,0), dtype=torch.float32)
+    positive_point_labels = torch.ones(positive_point_coords.shape[:-1], dtype=torch.float32)
+    negative_point_labels = torch.zeros(negative_point_coords.shape[:-1], dtype=torch.float32)
     
     point_labels = torch.cat([positive_point_labels, negative_point_labels], dim=1)
     point_prompts = (point_coords, point_labels)
     
-    return point_prompts, object_masks
+    
+    return point_prompts, object_mask
+
+            
+    
             
             
-def make_negative_point_prompts(object_mask, object_centroid, num_points=5):
+def make_negative_point_prompts(object_mask, object_centroid, num_points=5, dilate_size=15):
     #dilate it
     
-    dilated_mask_small = cv2.dilate(object_mask.astype(np.uint8), kernel=np.ones((10,10), np.uint8), iterations=3)
-    dilated_mask_big = cv2.dilate(object_mask.astype(np.uint8), kernel=np.ones((25,25), np.uint8), iterations=3)
+    dilated_mask_small = cv2.dilate(object_mask.astype(np.uint8), kernel=np.ones((dilate_size, dilate_size), np.uint8), iterations=1)
+    dilated_mask_big = cv2.dilate(object_mask.astype(np.uint8), kernel=np.ones((int(dilate_size*1.5), int(dilate_size*1.5)), np.uint8), iterations=1)
     negative_region = dilated_mask_big - dilated_mask_small
     region_points = np.argwhere(negative_region)
     selected_indices = np.random.choice(len(region_points), size=num_points, replace=False)
     negative_points = region_points[selected_indices]
     negative_points = [pt[::-1] for pt in negative_points]
-    # import matplotlib.pyplot as plt
+    import matplotlib.pyplot as plt
 
-    # # visualize object mask, dilated mask and negative region side-by-side
-    # fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    # axes[0].imshow(object_mask, cmap='gray')
-    # axes[0].set_title('Object Mask')
-    # axes[0].axis('off')
+    # visualize object mask, dilated mask and negative region side-by-side
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    axes[0].imshow(object_mask, cmap='gray')
+    axes[0].set_title('Object Mask')
+    axes[0].axis('off')
 
-    # axes[1].imshow(dilated_mask_big, cmap='gray')
-    # axes[1].set_title('Dilated Mask')
-    # axes[1].axis('off')
+    axes[1].imshow(dilated_mask_big, cmap='gray')
+    axes[1].set_title(f'Dilated Mask, dilated_size: {dilate_size}')
+    axes[1].axis('off')
 
-    # axes[2].imshow(negative_region, cmap='gray')
-    # axes[2].set_title('Negative Region')
-    # axes[2].axis('off')
+    axes[2].imshow(negative_region, cmap='gray')
+    axes[2].set_title('Negative Region')
+    axes[2].axis('off')
 
-    # plt.tight_layout()
-    # plt.show()
+    plt.tight_layout()
+    plt.show()
     return negative_points
     
     
-def make_positive_point_prompts(object_mask, object_centroid, num_points=5):
-    object_points = np.argwhere(object_mask)
+def make_positive_point_prompts(object_mask, object_centroid, num_points=5, erode_size=1):
+    eroded_mask = cv2.erode(object_mask.astype(np.uint8), kernel=np.ones((erode_size,erode_size), np.uint8), iterations=1)
+    object_points = np.argwhere(eroded_mask)
     selected_indices = np.random.choice(len(object_points), size=num_points, replace=False)
     positive_points = object_points[selected_indices]
     positive_points = [pt[::-1] for pt in positive_points]
     positive_points.append(object_centroid)
+    
+    
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+    axes[0].imshow(object_mask, cmap='gray')
+    axes[0].set_title('Object Mask')
+    axes[0].axis('off')
+
+    axes[1].imshow(eroded_mask, cmap='gray')
+    axes[1].set_title(f'Eroded Mask (erode_size={erode_size})')
+    axes[1].axis('off')
+
+    plt.tight_layout()
+    plt.show()
     return positive_points
 
 def make_noisy_mask_on_objects(object_masks, scale_factor: int = 8, noisy_mask_threshold: float = 0.5, h=256, w=256):
@@ -178,7 +227,7 @@ def make_noisy_mask_on_objects(object_masks, scale_factor: int = 8, noisy_mask_t
         mask_residue = (mask_residue >= 0.01).float()
         return mask_residue
 
-    if object_masks.dim() == 3:
+    if object_masks.ndim() == 3:
         object_masks = object_masks.unsqueeze(1)
 
     o_m_resized = F.interpolate(object_masks.float(), (h, w), mode='bilinear', align_corners=False)

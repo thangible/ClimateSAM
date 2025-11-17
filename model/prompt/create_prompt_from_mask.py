@@ -150,7 +150,7 @@ def make_noisy_mask_on_objects(object_masks, scale_factor: int = 8, noisy_mask_t
         mask_residue = (mask_residue >= 0.01).float()
         return mask_residue
 
-    if object_masks.dim() == 3:
+    if object_masks.ndim() == 3:
         object_masks = object_masks.unsqueeze(1)
 
     o_m_resized = F.interpolate(object_masks.float(), (h, w), mode='bilinear', align_corners=False)
