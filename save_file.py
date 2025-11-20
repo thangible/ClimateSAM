@@ -19,14 +19,14 @@ import wandb
 
 
 @torch.no_grad()
-def save_embeddings(model, dataloader, device, save_path):
+def save_embeddings(model, dataloader, device, dir_path):
     model.eval()
     for idx, batch in enumerate(dataloader):
         batch = batch_to_cuda(batch, device)
         imgs, img_features, interm_features = model.set_infer_img(batch['input'])
-        if not os.path.exists('embeddings'):
-            os.makedirs('embeddings')
-        save_path = os.path.join('embeddings', f"image_embeddings_batch_{idx}.pth")
+        if not os.path.exists(dir_path):
+            os.makedirs(dir_path)
+        save_path = os.path.join(dir_path, f"image_embeddings_batch_{idx}.pth")
         torch.save({
             'imgs': imgs.cpu(),
             'img_features': img_features.cpu(),
