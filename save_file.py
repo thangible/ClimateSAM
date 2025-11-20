@@ -19,21 +19,21 @@ import wandb
 
 
 @torch.no_grad()
-def save_embeddings(model, dataloader, device, dir_path):
+def save_embeddings(model, dataloader, device, save_path):
     model.eval()
     for idx, batch in enumerate(dataloader):
         batch = batch_to_cuda(batch, device)
         imgs, img_features, interm_features = model.set_infer_img(batch['input'])
-        if not os.path.exists(dir_path):
-            os.makedirs(dir_path)
-        save_path = os.path.join(dir_path, f"image_embeddings_batch_{idx}.pth")
+        if not os.path.exists(save_path):
+            os.makedirs(save_path)
+        file_path = os.path.join(save_path, f"image_embeddings_batch_{idx}.pth")
         torch.save({
             'imgs': imgs.cpu(),
             'img_features': img_features.cpu(),
             'interm_features': [feat.cpu() for feat in interm_features],
             'gt_mask': batch['gt_mask'],
             'index_name': batch['index_name']
-        }, save_path)
+        }, file_path)
 
 @torch.no_grad()
 def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args):
