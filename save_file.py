@@ -226,7 +226,8 @@ def main_worker(worker_id, worker_args):
             print(f"Mask decoder weights loaded from {image_encoder_path}")
     
             
-    save_embeddings(model, train_dataloader, device, save_path='embeddings')
+    # save_embeddings(model, train_dataloader, device, save_path='embeddings')
+    save_embeddings(model, val_dataloader, device, save_path='embeddings/valid')
 
         
 if __name__ == '__main__':

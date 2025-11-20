@@ -410,26 +410,29 @@ def main_worker(worker_args):
     
     # Setup embeddings paths
     embedding_dir_path = './embeddings'
+    embedding_valid_dir_path = './embeddings/valid'
     embeddings_file_path = [
         os.path.join(embedding_dir_path, f) 
         for f in os.listdir(embedding_dir_path) 
         if f.endswith('.pth')
     ]
     
+    embeddings_valid_file_path = [
+        os.path.join(embedding_valid_dir_path, f) 
+        for f in os.listdir(embedding_valid_dir_path) 
+        if f.endswith('.pth')
+    ]
+    
+    
+    
     if not embeddings_file_path:
         raise ValueError(f"No embedding files found in {embedding_dir_path}")
     
     print(f"Found {len(embeddings_file_path)} embedding files.")
     
-    # Split embeddings into train/val if needed
-    if hasattr(worker_args, 'val_split') and worker_args.val_split > 0:
-        split_idx = int(len(embeddings_file_path) * (1 - worker_args.val_split))
-        train_embeddings = embeddings_file_path[:split_idx]
-        val_embeddings = embeddings_file_path[split_idx:]
-        print(f"Split: {len(train_embeddings)} train, {len(val_embeddings)} validation files")
-    else:
-        train_embeddings = embeddings_file_path
-        val_embeddings = embeddings_file_path  # Use all for validation if no split
+
+    train_embeddings = embeddings_file_path
+    val_embeddings = embeddings_valid_file_path  # Use all for validation if no split
     
     # Model configuration
     num_features_map = {
