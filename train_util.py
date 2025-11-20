@@ -6,6 +6,7 @@ import torch
 import os
 import random
 from typing import List, Tuple, Union, Optional
+import torch.distributed as dist
 
 import numpy as np
 import torch
@@ -525,3 +526,52 @@ def set_randomness():
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     torch.set_float32_matmul_precision('medium')
+
+def worker_init_fn(worker_id: int, base_seed: int, same_worker_seed: bool = True):
+    """
+    Set random seed for each worker in DataLoader to ensure the reproducibility.
+    """
+    seed = base_seed if same_worker_seed else base_seed + worker_id
+
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+
+def setup_optimizer_and_scheduler(model, worker_args):
+    """
+    Sets up optimizer and scheduler for the prompt generator.
+    """
+    lr = getattr(worker_args, 'lr', 1e-4)
+    weight_decay = getattr(worker_args, 'weight_decay', 1e-4)
+
+    all_trainable_params = list(p for p in model.parameters() if p.requires_grad)
+
+    optimizer = torch.optim.AdamW(
+        params=all_trainable_params, lr=lr, weight_decay=weight_decay
+    )
+
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer=optimizer, T_max=worker_args.max_epoch_num, eta_min=1e-5
+    )
+    return optimizer, scheduler
+
+def setup_device():
+    """
+    Setup device for training (single GPU only).
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return device
+
+def setup_device_and_distributed(worker_id, worker_args):
+    gpu_num = len(worker_args.used_gpu)
+    world_size = os.environ['WORLD_SIZE'] if 'WORLD_SIZE' in os.environ.keys() else gpu_num
+    base_rank = os.environ['RANK'] if 'RANK' in os.environ.keys() else 0
+    local_rank = (base_rank * gpu_num) + worker_id
+    if gpu_num > 1:
+        dist.init_process_group(backend='nccl', init_method=worker_args.dist_url,
+                                world_size=world_size, rank=local_rank)
+    device = torch.device(f"cuda:{worker_id}")
+    torch.cuda.set_device(device)
+    return device, local_rank

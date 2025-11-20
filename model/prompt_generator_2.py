@@ -3,11 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from .layer_module import LayerNorm2d
 
-class PromptGenerator(nn.Module):
+class MSPGenerator(nn.Module):
     def __init__(self, pool_size: tuple = (2, 2),
                  fused_channels: int = 128,
                  in_channels: int = 768,
-                 out_channels: int = 3,
+                 out_channels: int = 2,
                  num_features: int = 12,
                  features_per_block: int = 3):
         super(PromptGenerator, self).__init__()  
@@ -25,13 +25,6 @@ class PromptGenerator(nn.Module):
         self.block_feature_upsamplers = nn.ModuleList()
         self.block_fuse_convs = nn.ModuleList()
         self.block_out_trans = nn.ModuleList()
-        
-        # Output convolutions for multi-level supervision
-        self.multilevel_mask_convs = nn.ModuleList()
-        for _ in range(self.num_blocks):
-            self.multilevel_mask_convs.append(
-                nn.Conv2d(fused_channels, out_channels, kernel_size=3, padding=1)
-            )
         
         for block_idx in range(self.num_blocks):
             self.input_reduction.append(
@@ -80,12 +73,20 @@ class PromptGenerator(nn.Module):
             nn.ReLU()
         )
         
-        self.multiclass_mask_conv = nn.Sequential(
-            nn.Conv2d(fused_channels, fused_channels, kernel_size=3, padding=1),
+        self.mask1_conv = nn.Sequential(
+            nn.Conv2d(fused_channels, fused_channels, kernel_size=3, padding=1),  # maintain spatial size
             nn.ReLU(),
-            # Output channels set to 3 for classes 0, 1, and 2
-            # Sigmoid is removed to output logits for CrossEntropyLoss
-            nn.Conv2d(fused_channels, out_channels, kernel_size=3, padding=1), # Use out_channels=3
+            # nn.ConvTranspose2d(fused_channels, fused_channels, kernel_size=2, stride=2),  # 2x upsampling
+            nn.Conv2d(fused_channels, 1, kernel_size=3, padding=1),  # 1x1024x1024
+            nn.Sigmoid()
+        )
+        
+        self.mask2_conv = nn.Sequential(
+            nn.Conv2d(fused_channels, fused_channels, kernel_size=3, padding=1),  # maintain spatial size
+            nn.ReLU(),
+            # nn.ConvTranspose2d(fused_channels, fused_channels, kernel_size=2, stride=2),  # 2x upsampling
+            nn.Conv2d(fused_channels, 1, kernel_size=3, padding=1),  # 1x1024x1024
+            nn.Sigmoid()
         )
         
         # self.mask1_conv =  nn.Sequential(
@@ -108,7 +109,6 @@ class PromptGenerator(nn.Module):
         # Reverse the feature list and process in groups.
         # Permute feature maps from (B, 64, 64, 768) to (B, 768, 64, 64)
         feat_list = [f.permute(0, 3, 1, 2) for f in feat_list]
-        intermediate_masks = []
         reversed_feats = feat_list[::-1]
         # box_queries_list = []
         prev_up = None
@@ -126,13 +126,8 @@ class PromptGenerator(nn.Module):
             group_concat = torch.cat(upsampled_group, dim=1)  # shape: (B, 3*256, H, W)
             # Fuse the concatenated features.
             fused = self.block_fuse_convs[block_idx](group_concat)  # shape: (B, 256, H', W')
-            # ----------------------------------------------------
-            # 1. Compute intermediate mask (logits)
-            # Use the fused feature for the output convolution for this level
-            intermediate_logit = self.multilevel_mask_convs[block_idx](fused)
-            # No interpolation here; it will be done on the loss side
-            intermediate_masks.append(intermediate_logit)
-
+            # Save the fused feature for later pooling.
+            # box_queries_list.append(fused)
             # For blocks after the first, concatenate with the previous block’s upsampled output.
             if prev_up is not None:
                 fused = torch.cat([prev_up, fused], dim=1)  # shape: (B, 512, H', W')
@@ -147,18 +142,12 @@ class PromptGenerator(nn.Module):
         
         # The final fused feature is the output from the last block.
         neck_out = self.neck(prev_up)
-        # Compute the multi-class mask (logits)
-        multiclass_mask = self.multiclass_mask_conv(neck_out)
-
-        # Interpolate the mask (B, 3, H, W)
-        multiclass_mask = F.interpolate(multiclass_mask, size=(768, 1152), mode='bilinear', align_corners=False)
+        tc_mask = self.mask1_conv(neck_out)
+        ar_mask = self.mask2_conv(neck_out)
         
-        # tc_mask = self.mask1_conv(neck_out)
-        # ar_mask = self.mask2_conv(neck_out)
+        tc_mask = F.interpolate(tc_mask, size=(768, 1152), mode='bilinear', align_corners=False)
+        ar_mask = F.interpolate(ar_mask, size=(768, 1152), mode='bilinear', align_corners=False)
         
-        # tc_mask = F.interpolate(tc_mask, size=(768, 1152), mode='bilinear', align_corners=False)
-        # ar_mask = F.interpolate(ar_mask, size=(768, 1152), mode='bilinear', align_corners=False)
-        
-        return multiclass_mask, intermediate_masks
+        return tc_mask.squeeze(), ar_mask.squeeze()
 
         

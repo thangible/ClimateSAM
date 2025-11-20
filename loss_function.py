@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 from typing import List, Dict, Optional
-
+import torch.nn as nn
 
 class ClimateLoss:
     """Loss computation class for Climate SAM model"""
@@ -263,37 +263,103 @@ def calculate_tversky_loss(inputs: torch.Tensor, targets: torch.Tensor, alpha: f
 
 
 
-class GeneratorLoss:
+# class GeneratorLoss:
     
-    """Loss computation class for the generator in GAN setup"""
+#     """Loss computation class for the generator in GAN setup"""
     
-    def __init__(self, device: torch.device):
+#     def __init__(self, device: torch.device):
+#         self.device = device
+
+#     def compute_loss(
+#         self,
+#         ar_mask_pred: List[torch.Tensor],
+#         tc_mask_pred: List[torch.Tensor],
+#         gt_masks: List[torch.Tensor]
+#     ):
+#         ar_mask = [(gt_masks == 2).to(torch.uint8) for gt_masks in gt_masks]
+#         tc_mask = [(gt_masks == 1).to(torch.uint8) for gt_masks in gt_masks]
+#         ar_mask = torch.stack(ar_mask, dim=0).float().to(self.device)
+#         tc_mask = torch.stack(tc_mask, dim=0).float().to(self.device)
+        
+        
+        
+#         # print(ar_mask[0].shape, len(ar_mask))
+#         # print(f"ar_mask_pred shape: {ar_mask_pred.shape}, ar_mask shape: {ar_mask.shape}")
+#         # print(f"tc_mask_pred shape: {tc_mask_pred.shape}, tc_mask shape: {tc_mask.shape}")
+
+#         # Compute losses
+#         losses = {
+#             'ar_loss': F.binary_cross_entropy_with_logits(ar_mask_pred, ar_mask),
+#             'tc_loss': F.binary_cross_entropy_with_logits(tc_mask_pred, tc_mask)
+#         }
+
+#         # Total loss
+#         losses['total_loss'] = losses['ar_loss'] + losses['tc_loss']
+
+#         return losses
+
+class GeneratorLoss(nn.Module):
+    """
+    Computes the total loss including the final segmentation loss and weighted
+    intermediate segmentation losses for multi-level supervision.
+    """
+    def __init__(self, device, lambda_factors: list = [0.4, 0.3, 0.2, 0.1], num_blocks: int = 4):
+        super().__init__()
         self.device = device
-
-    def compute_loss(
-        self,
-        ar_mask_pred: List[torch.Tensor],
-        tc_mask_pred: List[torch.Tensor],
-        gt_masks: List[torch.Tensor]
-    ):
-        ar_mask = [(gt_masks == 2).to(torch.uint8) for gt_masks in gt_masks]
-        tc_mask = [(gt_masks == 1).to(torch.uint8) for gt_masks in gt_masks]
-        ar_mask = torch.stack(ar_mask, dim=0).float().to(self.device)
-        tc_mask = torch.stack(tc_mask, dim=0).float().to(self.device)
+        self.criterion = nn.CrossEntropyLoss()
+        # Default weights, e.g., [0.4, 0.3, 0.2, 0.1] for 4 blocks, decaying for coarser levels
+        if lambda_factors is None:
+            self.lambda_factors = [0.4 / (i + 1) for i in range(num_blocks)]
+        else:
+            self.lambda_factors = lambda_factors
         
+    def compute_loss(self, final_logit: torch.Tensor, intermediate_logits: list, gt_mask: torch.Tensor):
+        """
+        Calculates the total weighted loss.
+
+        Args:
+            final_logit: Logits from the highest resolution output (B, C, H, W).
+            intermediate_logits: List of logits from intermediate blocks (B, C, H', W').
+            gt_mask: Ground truth mask (B, H_gt, W_gt) of type long.
+        """
+        gt_mask = gt_mask.to(self.device).long()
         
+        # 1. Final Loss (Full Resolution)
+        # Assuming final_logit is already interpolated to match gt_mask's H, W
+        loss_final = self.criterion(final_logit, gt_mask)
+        total_loss = loss_final
         
-        # print(ar_mask[0].shape, len(ar_mask))
-        # print(f"ar_mask_pred shape: {ar_mask_pred.shape}, ar_mask shape: {ar_mask.shape}")
-        # print(f"tc_mask_pred shape: {tc_mask_pred.shape}, tc_mask shape: {tc_mask.shape}")
+        # 2. Intermediate Losses (Multi-Level Supervision)
+        num_levels = len(intermediate_logits)
+        loss_intermediate_sum = 0.0
 
-        # Compute losses
-        losses = {
-            'ar_loss': F.binary_cross_entropy_with_logits(ar_mask_pred, ar_mask),
-            'tc_loss': F.binary_cross_entropy_with_logits(tc_mask_pred, tc_mask)
-        }
+        # We assume intermediate_logits are ordered from the lowest resolution (first block)
+        for i, logit in enumerate(intermediate_logits):
+            # i=0 is the coarsest level, i=num_levels-1 is the finest intermediate level
+            
+            # Determine target size for downsampling GT
+            target_size = logit.shape[-2:]
+            
+            # Downsample the ground truth mask to match logit's spatial size
+            # IMPORTANT: Use 'nearest' for ground truth to maintain discrete class labels
+            downsampled_gt = F.interpolate(
+                gt_mask.unsqueeze(1).float(), # B, 1, H_gt, W_gt
+                size=target_size, 
+                mode='nearest'
+            ).squeeze(1).long() # B, H', W'
 
-        # Total loss
-        losses['total_loss'] = losses['ar_loss'] + losses['tc_loss']
+            # Calculate loss for this level
+            loss_level = self.criterion(logit, downsampled_gt)
+            
+            # Apply weighting factor
+            lambda_i = self.lambda_factors[i] if i < len(self.lambda_factors) else 0.1
+            weighted_loss_level = lambda_i * loss_level
+            
+            loss_intermediate_sum += weighted_loss_level
+            total_loss += weighted_loss_level
 
-        return losses
+        return {
+            'total_loss': total_loss,
+            'final_loss': loss_final.item(),
+            'intermediate_loss_sum': loss_intermediate_sum.item()}
+            # Optionally log individual intermediate losses:

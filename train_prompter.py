@@ -5,7 +5,7 @@ import os
 import torch.nn.functional as F
 from functools import partial
 from torch.utils.data import DataLoader
-from train_util import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug
+from train_util import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug, worker_init_fn, setup_optimizer_and_scheduler, setup_device
 from loss_function import ClimateLoss, compute_climate_loss, GeneratorLoss
 from tqdm import tqdm
 from contextlib import nullcontext
@@ -16,91 +16,68 @@ from dataset.climatenet import ClimateDataset
 from evaluator import StreamSegMetrics
 import copy
 import wandb
+import matplotlib.pyplot as plt
 
-def worker_init_fn(worker_id: int, base_seed: int, same_worker_seed: bool = True):
-    """
-    Set random seed for each worker in DataLoader to ensure the reproducibility.
-    """
-    seed = base_seed if same_worker_seed else base_seed + worker_id
 
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)
-
-def setup_optimizer_and_scheduler(model, worker_args):
-    """
-    Sets up optimizer and scheduler for the prompt generator.
-    """
-    lr = getattr(worker_args, 'lr', 1e-4)
-    weight_decay = getattr(worker_args, 'weight_decay', 1e-4)
-
-    all_trainable_params = list(p for p in model.parameters() if p.requires_grad)
-
-    optimizer = torch.optim.AdamW(
-        params=all_trainable_params, lr=lr, weight_decay=weight_decay
-    )
-
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer=optimizer, T_max=worker_args.max_epoch_num, eta_min=1e-5
-    )
-    return optimizer, scheduler
-
-def setup_device():
-    """
-    Setup device for training (single GPU only).
-    """
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    return device
 
 def train_one_epoch(epoch, embeddings_file_path, model, optimizer, scheduler, device, worker_args, max_epoch_num, scaler):
     """
-    Train the prompt generator for one epoch using precomputed embeddings.
+    Train the prompt generator for one epoch using precomputed embeddings with 
+    multi-level segmentation loss.
     """
     model.train()
     
     epoch_loss_dict = {}
     epoch_loss_count = 0
     
+    # Use a dummy pbar if tqdm is not available or verbose is false
     if hasattr(worker_args, 'verbose') and worker_args.verbose:
-        pbar = tqdm(embeddings_file_path, desc=f'Epoch {epoch}/{max_epoch_num}')
+        try:
+            pbar = tqdm(embeddings_file_path, desc=f'Epoch {epoch}/{max_epoch_num}')
+        except NameError:
+            pbar = embeddings_file_path
     else:
         pbar = embeddings_file_path
     
+    # Initialize loss module (adjusting num_blocks based on model config)
+    num_blocks = model.num_blocks if hasattr(model, 'num_blocks') else 4
+    gen_loss = GeneratorLoss(device, num_blocks=num_blocks)
+
     for embedding_file in pbar:
+        # Load precomputed embeddings data
         embeddings = torch.load(embedding_file, map_location='cpu')
-        imgs, img_features, interm_embeddings, gt_masks, index = (
-            embeddings['imgs'], 
-            embeddings['img_features'], 
-            embeddings['interm_features'], 
-            embeddings['gt_mask'], 
-            embeddings['index_name']
-        )
+        # We only need the features and the mask
+        interm_embeddings = embeddings['interm_features'] 
+        gt_masks = embeddings['gt_mask'] 
 
+        # Prepare data for device
         interm_embeddings = [e.to(device) for e in interm_embeddings]
-        # Forward pass through prompt generator
-        tc_masks, ar_masks = model(interm_embeddings)
+        gt_masks = torch.stack(gt_masks, dim=0).to(device) 
 
-        # Compute losses
-        gen_loss = GeneratorLoss(device)
-        losses = gen_loss.compute_loss(ar_masks, tc_masks, gt_masks)
+        optimizer.zero_grad()
+        
+        # Forward pass through prompt generator
+        # Model now returns the final multi-class logit mask and a list of intermediate logits
+        final_logit, intermediate_logits = model(interm_embeddings)
+
+        # Compute losses using the new loss function structure
+        losses = gen_loss.compute_loss(final_logit, intermediate_logits, gt_masks)
         total_loss = losses['total_loss']
         
         # Accumulate losses for logging
         for key, value in losses.items():
             if key not in epoch_loss_dict:
                 epoch_loss_dict[key] = 0
-            epoch_loss_dict[key] += value.item() if torch.is_tensor(value) else value
+            # Values from losses dict are already native Python numbers
+            epoch_loss_dict[key] += value
 
-        # Backward pass
-        backward_context = nullcontext
+        # Backward pass with AMP context
+        backward_context = nullcontext 
         with backward_context():
             scaler.scale(total_loss).backward()
         
         scaler.step(optimizer)
         scaler.update()
-        optimizer.zero_grad()
         
         epoch_loss_count += 1
         
@@ -108,6 +85,8 @@ def train_one_epoch(epoch, embeddings_file_path, model, optimizer, scheduler, de
         if hasattr(pbar, 'set_postfix'):
             pbar.set_postfix({
                 'loss': f"{total_loss.item():.4f}",
+                'final': f"{losses['final_loss']:.4f}",
+                'interm': f"{losses['intermediate_loss_sum']:.4f}",
                 'lr': f"{scheduler.get_last_lr()[0]:.2e}"
             })
     
@@ -119,18 +98,21 @@ def train_one_epoch(epoch, embeddings_file_path, model, optimizer, scheduler, de
         if hasattr(worker_args, 'wandb') and worker_args.wandb:
             log_dict = {f"train/{key}": avg_epoch_losses[key] for key in avg_epoch_losses.keys()}
             log_dict["epoch"] = epoch
-            log_dict["learning_rate"] = scheduler.get_last_lr()[0]
+            # Ensure scheduler has get_last_lr method
+            log_dict["learning_rate"] = scheduler.get_last_lr()[0] 
             wandb.log(log_dict, step=epoch)
             
-    del embeddings, imgs, img_features, interm_embeddings, gt_masks, index
-    
+    # Clean up (Note: deletion is often unnecessary in Python but kept for user's style)
+    del embeddings, interm_embeddings, gt_masks
     
     scheduler.step()
-
+    
+    
 @torch.no_grad()
 def log_prompter_predictions(epoch, embeddings_file_path, prompt_generator, device, worker_args, sample_limit=5):
     """
     Log AR and TC predictions from prompt generator every 5 epochs.
+    Adapted to use the single multi-class output (Class 1=TC, Class 2=AR).
     
     Args:
         epoch: Current epoch number
@@ -165,19 +147,27 @@ def log_prompter_predictions(epoch, embeddings_file_path, prompt_generator, devi
             # Move to device
             interm_embeddings = [e.to(device) for e in interm_embeddings]
             
-            # Generate predictions
-            tc_masks, ar_masks = prompt_generator(interm_embeddings)
+            # Generate predictions (final_logit is BxCxHxW)
+            final_logit, _ = prompt_generator(interm_embeddings)
             
-            # Convert predictions to numpy for visualization
-            tc_pred = torch.sigmoid(tc_masks).cpu().numpy()
-            ar_pred = torch.sigmoid(ar_masks).cpu().numpy()
+            # Use Softmax to get probability maps for visualization
+            probs = F.softmax(final_logit, dim=1) # B, C=3, H, W
+            
+            # Extract AR (Class 2) and TC (Class 1) probabilities
+            # Assuming B=1 for visualization simplicity
+            tc_pred = probs[0, 1, :, :].cpu().numpy() # Class 1 (TC) probability map
+            ar_pred = probs[0, 2, :, :].cpu().numpy() # Class 2 (AR) probability map
+
+            # Convert GT mask to numpy for visualization
+            gt_masks = torch.stack(gt_masks, dim=0).to(device) # B, H, W
             gt_mask = gt_masks.cpu().numpy() if torch.is_tensor(gt_masks) else gt_masks
+            if len(gt_mask.shape) == 3:
+                 gt_mask = gt_mask[0] # Take first batch item (H, W)
             
             # Create visualization
-            import matplotlib.pyplot as plt
             fig, axes = plt.subplots(2, 3, figsize=(15, 10))
             
-            # Original image (if available in embeddings)
+            # Original image 
             if imgs is not None:
                 img = imgs.cpu().numpy() if torch.is_tensor(imgs) else imgs
                 if len(img.shape) == 4:
@@ -191,44 +181,29 @@ def log_prompter_predictions(epoch, embeddings_file_path, prompt_generator, devi
                 axes[0, 0].set_title('Input Image')
             
             # Ground truth masks
-            if len(gt_mask.shape) == 4:
-                gt_mask = gt_mask[0, 0]  # Take first batch and channel
-            elif len(gt_mask.shape) == 3:
-                gt_mask = gt_mask[0]
-                
             # GT AR mask (class 2)
             gt_ar = (gt_mask == 2).astype(float)
             axes[0, 1].imshow(gt_ar, cmap='Reds', alpha=0.7)
-            axes[0, 1].set_title('GT AR Mask')
+            axes[0, 1].set_title('GT AR Mask (Class 2)')
             
             # GT TC mask (class 1)  
             gt_tc = (gt_mask == 1).astype(float)
             axes[0, 2].imshow(gt_tc, cmap='Blues', alpha=0.7)
-            axes[0, 2].set_title('GT TC Mask')
+            axes[0, 2].set_title('GT TC Mask (Class 1)')
             
-            # Predicted masks
-            if len(ar_pred.shape) == 4:
-                ar_pred = ar_pred[0, 0]  # Take first batch and channel
-            elif len(ar_pred.shape) == 3:
-                ar_pred = ar_pred[0]
-                
-            if len(tc_pred.shape) == 4:
-                tc_pred = tc_pred[0, 0]
-            elif len(tc_pred.shape) == 3:
-                tc_pred = tc_pred[0]
-            
+            # Predicted masks (using probability maps)
             axes[1, 0].imshow(ar_pred, cmap='Reds', alpha=0.7, vmin=0, vmax=1)
-            axes[1, 0].set_title(f'Pred AR Mask (max: {ar_pred.max():.3f})')
+            axes[1, 0].set_title(f'Pred AR Prob (max: {ar_pred.max():.3f})')
             
             axes[1, 1].imshow(tc_pred, cmap='Blues', alpha=0.7, vmin=0, vmax=1)
-            axes[1, 1].set_title(f'Pred TC Mask (max: {tc_pred.max():.3f})')
+            axes[1, 1].set_title(f'Pred TC Prob (max: {tc_pred.max():.3f})')
             
             # Combined overlay
             combined = np.zeros((*ar_pred.shape, 3))
             combined[..., 0] = ar_pred  # Red channel for AR
             combined[..., 2] = tc_pred  # Blue channel for TC
             axes[1, 2].imshow(combined, alpha=0.7)
-            axes[1, 2].set_title('Combined Prediction')
+            axes[1, 2].set_title('Combined Prediction Prob')
             
             # Remove axes
             for ax in axes.flat:
@@ -263,9 +238,8 @@ def log_prompter_predictions(epoch, embeddings_file_path, prompt_generator, devi
     
     # Log all images to wandb at once
     if wandb_images and hasattr(worker_args, 'wandb') and worker_args.wandb:
-        wandb_images["epoch"] = epoch
         wandb.log(wandb_images, step=epoch)
-        print(f"Epoch {epoch} - Logged {len(wandb_images)-1} prompter prediction samples to W&B")
+        print(f"Epoch {epoch} - Logged {len(wandb_images)} prompter prediction samples to W&B")
     
     prompt_generator.train()
 
@@ -273,6 +247,7 @@ def log_prompter_predictions(epoch, embeddings_file_path, prompt_generator, devi
 def validate_prompter(epoch, embeddings_file_path, prompt_generator, device, worker_args, sample_limit=None):
     """
     Validate prompt generator using mIoU metrics every 5 epochs.
+    Adapted to use the single multi-class output (Class 1=TC, Class 2=AR).
     
     Args:
         epoch: Current epoch number
@@ -287,7 +262,9 @@ def validate_prompter(epoch, embeddings_file_path, prompt_generator, device, wor
         
     prompt_generator.eval()
     
-    # Initialize metrics
+    # Initialize metrics for binary segmentation (Foreground vs Background)
+    # The assumption is that Class 1 (TC) is Foreground for TC_metrics, and Class 2 (AR) 
+    # is Foreground for AR_metrics.
     ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     
@@ -295,7 +272,10 @@ def validate_prompter(epoch, embeddings_file_path, prompt_generator, device, wor
     validation_files = embeddings_file_path if sample_limit is None else embeddings_file_path[:sample_limit]
     
     if hasattr(worker_args, 'verbose') and worker_args.verbose:
-        pbar = tqdm(validation_files, desc=f'Validation Epoch {epoch}')
+        try:
+            pbar = tqdm(validation_files, desc=f'Validation Epoch {epoch}')
+        except NameError:
+            pbar = validation_files
     else:
         pbar = validation_files
     
@@ -315,35 +295,38 @@ def validate_prompter(epoch, embeddings_file_path, prompt_generator, device, wor
             
             # Move to device
             interm_embeddings = [e.to(device) for e in interm_embeddings]
+            gt_masks = gt_masks.to(device)
             
             # Generate predictions
-            tc_masks, ar_masks = prompt_generator(interm_embeddings)
+            final_logit, _ = prompt_generator(interm_embeddings)
             
-            # Apply sigmoid and threshold predictions
-            tc_pred = torch.sigmoid(tc_masks) > 0.5
-            ar_pred = torch.sigmoid(ar_masks) > 0.5
+            # Convert logits to hard multi-class prediction (B, H, W)
+            pred_mask = torch.argmax(final_logit, dim=1)
             
-            # Convert to proper format for metrics
-            # Ground truth masks
-            if torch.is_tensor(gt_masks):
-                gt_mask = gt_masks
-            else:
-                gt_mask = torch.tensor(gt_masks)
+            # -----------------------------------------------
+            # 1. Prepare AR masks (Class 2)
+            # -----------------------------------------------
+            # Predicted AR: 1 where argmax == 2, else 0
+            ar_pred = (pred_mask == 2).long() 
+            # Ground Truth AR: 1 where GT == 2, else 0
+            ar_gt = (gt_masks == 2).long()
             
-            # Create binary masks for AR (class 2) and TC (class 1)
-            ar_gt = (gt_mask == 2).float()
-            tc_gt = (gt_mask == 1).float()
+            # -----------------------------------------------
+            # 2. Prepare TC masks (Class 1)
+            # -----------------------------------------------
+            # Predicted TC: 1 where argmax == 1, else 0
+            tc_pred = (pred_mask == 1).long()
+            # Ground Truth TC: 1 where GT == 1, else 0
+            tc_gt = (gt_masks == 1).long()
             
             # Ensure proper dimensions for metrics
             def prepare_mask_for_metrics(mask):
-                """Prepare mask for StreamSegMetrics"""
+                """Prepare mask (B, H, W) for StreamSegMetrics (numpy uint8)."""
+                # Metric expects values 0 (BG) or 1 (FG)
                 if len(mask.shape) == 4:
-                    mask = mask.squeeze(1)  # Remove channel dimension if present
-                if len(mask.shape) == 3:
-                    # Keep batch dimension, metrics expects [B, H, W]
-                    pass
-                elif len(mask.shape) == 2:
-                    mask = mask.unsqueeze(0)  # Add batch dimension
+                    mask = mask.squeeze(1) 
+                
+                # Convert to numpy and ensure type is uint8
                 return mask.cpu().numpy().astype(np.uint8)
             
             # Prepare masks for metrics computation
@@ -460,12 +443,17 @@ def main_worker(worker_args):
         'vit_h': 9
     }
     
+    in_channels = {
+        'vit_b': 512,
+        'vit_l': 1024,
+        'vit_h': 1280
+    }
     # Get model type from args or default to vit_l
     model_type = getattr(worker_args, 'sam_type', 'vit_l')
     
     # Initialize prompt generator
     prompt_generator = PromptGenerator(
-        in_channels=1024,
+        in_channels=in_channels[model_type],
         fused_channels=64,
         num_features=num_features_map[model_type],
         features_per_block=features_per_block[model_type]
