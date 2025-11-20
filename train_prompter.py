@@ -409,7 +409,7 @@ def main_worker(worker_args):
     print(f"Training initialized on device {device}.")
     
     # Setup embeddings paths
-    embedding_dir_path = './embeddings'
+    embedding_dir_path = './embeddings/train'
     embedding_valid_dir_path = './embeddings/valid'
     embeddings_file_path = [
         os.path.join(embedding_dir_path, f) 
