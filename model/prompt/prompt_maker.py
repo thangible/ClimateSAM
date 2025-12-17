@@ -33,6 +33,7 @@ class PromptMaker:
             
         for i in range(batch_size):
             mask_np = masks[i].squeeze(0).cpu().numpy() 
+            mask_np = distance_transform(mask_np, threshold=0.5)
             ar_mask = (mask_np == 2).astype(np.uint8)
             tc_mask = (mask_np == 1).astype(np.uint8)   
             # if sum(tc_mask.flatten()) == 0:
@@ -278,3 +279,16 @@ def make_noisy_mask_on_objects(binary_mask, connectivity, threshold, scale_facto
     #     plt.show()
     
     return o_m_noisy, object_masks
+
+
+
+
+def distance_transform(mask: np.ndarray, threshold: float = 0.5):
+    """
+    Compute the distance transform of a binary mask.
+    """
+    mask_np = (mask > threshold).astype(np.uint8)
+    dist_transform = cv2.distanceTransform(mask_np, cv2.DIST_L2, 5)
+    dist_output = cv2.normalize(dist_transform, None, 0, 1.0, cv2.NORM_MINMAX)
+    
+    return dist_output
