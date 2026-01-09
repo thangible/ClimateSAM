@@ -8,6 +8,7 @@ from model.prompt_generator import PromptGenerator
 from model.segment_anything_ext.build_sam import sam_model_registry
 from typing import Union, List, Tuple, Optional
 import torch.nn.functional as F
+# from climatesam_util import extract_point_and_bbox_prompts_from_climatenet_mask
 import numpy as np
 import torch.utils.checkpoint as checkpoint
 import wandb
@@ -112,6 +113,20 @@ class ClimateSAM(nn.Module):
             if verbose:
                 print("Training image_encoder")
                 
+        # elif phase == 2:
+        #     # Phase 3: Train only input_adapt
+        #     # self.enable_prompt_generator()
+        #     for n, c in self.named_children():
+        #         if n not in ['input_adapter']:
+        #             c.eval()
+        #         else:
+        #             c.train(mode = mode)
+        #             if n == 'input_adapter':
+        #                 for param in c.parameters():
+        #                     param.requires_grad = True
+        #     if verbose:
+        #         print("Training input_adapter along with image_encoder and mask_decoder")
+
         elif phase == 3:
             # Phase 3: Train only prompt_encoder
             self.enable_prompt_generator()
@@ -125,7 +140,9 @@ class ClimateSAM(nn.Module):
                             param.requires_grad = True
             if verbose:
                 print("Training prompt_encoder and prompt_generator")
-
+            
+            
+        
             
         if verbose:
                   
@@ -139,39 +156,51 @@ class ClimateSAM(nn.Module):
             print(f"Phase {phase}: Trainable params = {trainable_params}/{total_params} "
                 f"({100*trainable_params/total_params:.2f}%)")
 
-    
-        
-    def encode_images(self, input: Union[List[torch.Tensor], None]):
-        """
-        Separate image encoding step that processes input and returns image embeddings and intermediate features.
-        
-        Args:
-            input: Input tensor batch
-            
-        Returns:
-            tuple: (image_embeddings, interm_embeddings, preprocessed_input, original_image_sizes)
-        """
-        ori_img_size = [(input[i].shape[-2], input[i].shape[-1]) for i in range(len(input))]
-        
-        # Preprocess input
-        input = self.interpolate_input(input)  # from 16x768x1152 to 16x1024x1024
-        imgs = input[:, :3, :, :] # from 16x1024x1024 to 3x1024x1024
-        imgs = self.input_adapter(input)  # from 16x1024x1024 to 3x1024x1024
-        imgs = self.preprocess_images(imgs)  # normalize the input images
-        
-        # Encode the images
-        image_input = imgs.clone().detach()
-        image_embeddings, interm_embeddings = self.image_encoder(imgs)
-        # shape batch x [256, 64, 64] and 12 x torch.Size([batch, 64, 64, 768])
-        return image_embeddings, interm_embeddings, image_input, ori_img_size
+    def log_masks(self, masks, prefix="", log_images=False, max_images=2, binary=False):
+        """Log mask shapes and optionally visualizations
 
+        Args:
+            masks: list of torch.Tensor masks
+            prefix: prefix for wandb logging keys
+            log_images: whether to log mask images
+            max_images: max number of images to log
+            binary: if True, visualize mask as binary (0/1), else use colormap
+        """
+        if not self.enable_wandb_logging or not wandb.run:
+            return
+
+        mask_info = {}
+
+        for i, mask in enumerate(masks):
+            mask_info[f"{prefix}_mask_{i}_shape"] = list(mask.shape)
+            mask_info[f"{prefix}_mask_{i}_min"] = mask.min().item()
+            mask_info[f"{prefix}_mask_{i}_max"] = mask.max().item()
+            mask_info[f"{prefix}_mask_{i}_mean"] = mask.mean().item()
+
+            if log_images and i < max_images:
+                mask_np = mask.detach().cpu().numpy()
+                if len(mask_np.shape) == 4:
+                    mask_np = mask_np[0, 0]
+                elif len(mask_np.shape) == 3:
+                    mask_np = mask_np[0]
+
+                fig, ax = plt.subplots(1, 1, figsize=(6, 6))
+                if binary:
+                    im = ax.imshow(mask_np, cmap='gray', vmin=0, vmax=1)
+                else:
+                    im = ax.imshow(mask_np, cmap='viridis')
+                    plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+                ax.set_title(f'{prefix} Mask {i}')
+                ax.axis('off')
+
+                mask_info[f"{prefix}_mask_{i}_image"] = wandb.Image(fig)
+                plt.close(fig)
+
+        wandb.log(mask_info)
 
     def  forward(
             self,
-            image_input,
-            image_embeddings: torch.Tensor,
-            interm_embeddings: List[torch.Tensor],
-            ori_img_size: List[Tuple],
+            input: Union[List[torch.Tensor], None],
             hq_token_weight_ar: torch.Tensor = None,
             hq_token_weight_tc: torch.Tensor = None,
             return_all_hq_masks: bool = False,
@@ -182,9 +211,35 @@ class ClimateSAM(nn.Module):
             ar_mask_prompts: List[Union[torch.Tensor, None]] = None,
             tc_mask_prompts: List[Union[torch.Tensor, None]] = None
     ):
-
-
+        ori_img_size = [(input[i].shape[-2], input[i].shape[-1]) for i in range(len(input))]
+        
+        
+        input = self.interpolate_input(input) # from 16x768x1152 to 16x1024x1024
+        
+        # Log interpolated input info only if debugging
+        # if self.enable_wandb_logging and wandb.run:
+        #     wandb.log({
+        #         "forward/interpolated_input_shape": list(input.shape),
+        #         "forward/sam_img_size": list(self.sam_img_size)
+        #     })
+        
+        imgs = input[:, :3, :, :] # from 16x1024x1024 to 3x1024x1024
+        imgs = self.input_adapter(input) # from 16x1024x1024 to 3x1024x1024
+        imgs = self.preprocess_images(imgs) # normalize the input images
+        
+        # encode the images
+        image_input = imgs.clone().detach()
+        image_embeddings, interm_embeddings = self.image_encoder(imgs) # shape batch x [256, 64, 64] and 12 x torch.Size([batch, 64, 64, 768])
         batch_size = len(image_embeddings)
+        
+        # Log image embeddings info only if debugging
+        # if self.enable_wandb_logging and wandb.run:
+        #     wandb.log({
+        #         "forward/image_embeddings_batch_size": batch_size,
+        #         "forward/image_embeddings_shape": [list(emb.shape) for emb in image_embeddings],
+        #         "forward/interm_embeddings_count": len(interm_embeddings),
+        #         "forward/interm_embeddings_shapes": [list(emb.shape) for emb in interm_embeddings] if interm_embeddings else []
+        #     })
 
         ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = self.preprocess_prompts(
             ar_point_prompts=ar_point_prompts,
@@ -566,48 +621,6 @@ class ClimateSAM(nn.Module):
             self.log_masks(ar_postprocess_masks, "infer/ar_postprocessed", log_images=True, max_images=2, binary=True)
 
         return tc_postprocess_masks, ar_postprocess_masks
-    
-    def log_masks(self, masks, prefix="", log_images=False, max_images=2, binary=False):
-        """Log mask shapes and optionally visualizations
-
-        Args:
-            masks: list of torch.Tensor masks
-            prefix: prefix for wandb logging keys
-            log_images: whether to log mask images
-            max_images: max number of images to log
-            binary: if True, visualize mask as binary (0/1), else use colormap
-        """
-        if not self.enable_wandb_logging or not wandb.run:
-            return
-
-        mask_info = {}
-
-        for i, mask in enumerate(masks):
-            mask_info[f"{prefix}_mask_{i}_shape"] = list(mask.shape)
-            mask_info[f"{prefix}_mask_{i}_min"] = mask.min().item()
-            mask_info[f"{prefix}_mask_{i}_max"] = mask.max().item()
-            mask_info[f"{prefix}_mask_{i}_mean"] = mask.mean().item()
-
-            if log_images and i < max_images:
-                mask_np = mask.detach().cpu().numpy()
-                if len(mask_np.shape) == 4:
-                    mask_np = mask_np[0, 0]
-                elif len(mask_np.shape) == 3:
-                    mask_np = mask_np[0]
-
-                fig, ax = plt.subplots(1, 1, figsize=(6, 6))
-                if binary:
-                    im = ax.imshow(mask_np, cmap='gray', vmin=0, vmax=1)
-                else:
-                    im = ax.imshow(mask_np, cmap='viridis')
-                    plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-                ax.set_title(f'{prefix} Mask {i}')
-                ax.axis('off')
-
-                mask_info[f"{prefix}_mask_{i}_image"] = wandb.Image(fig)
-                plt.close(fig)
-
-        wandb.log(mask_info)
 
 
 

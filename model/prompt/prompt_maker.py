@@ -18,6 +18,7 @@ class PromptMaker:
         self.positive_point_num = positive_point_num
         self.negative_point_num = negative_point_num
 
+    @torch.no_grad()
     def make_prompts(self, masks: torch.Tensor):
         batch_size = len(masks)
         prompt_list = []

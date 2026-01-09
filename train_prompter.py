@@ -52,7 +52,7 @@ def train_one_epoch(epoch, embeddings_file_path, model, optimizer, scheduler, de
 
         # Prepare data for device
         interm_embeddings = [e.to(device) for e in interm_embeddings]
-        gt_masks = torch.stack(gt_masks, dim=0).to(device) 
+         
 
         optimizer.zero_grad()
         
