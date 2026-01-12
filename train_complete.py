@@ -272,6 +272,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
             final_logit, interm_masks = prompter(interm_features)
             
             # Use Softmax to get probability maps for prompt generation
+            interm_masks = [F.softmax(mask, dim=1) for mask in interm_masks] if interm_masks is not None else None
             multiclass_mask = F.softmax(final_logit, dim=1)
             
             # Step 3: Create prompts from generated masks
@@ -307,8 +308,8 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
         if interm_masks is not None:
             for i in range(len(interm_masks)):
                 # Assuming interm_masks are in format [batch_size, 2, H, W] where 2 = [AR, TC]
-                interm_ar_mask = interm_masks[i][:, 0:1]  # AR channel
-                interm_tc_mask = interm_masks[i][:, 1:2]  # TC channel
+                interm_ar_mask = interm_masks[i][0, 2, :, :]  # AR channel 
+                interm_tc_mask = interm_masks[i][0, 1, :, :]  # TC channel
                 interm_ar_masks.append(interm_ar_mask)
                 interm_tc_masks.append(interm_tc_mask)
         
@@ -414,10 +415,10 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
         tc_metrics.update(tc_masks, masks_tc_gts, batch['index_name'])
         ar_metrics.update(ar_masks, masks_ar_gts, batch['index_name'])
         
-        # Update metrics - Intermediate predictions
-        if interm_ar_masks and interm_tc_masks:
-            interm_ar_metrics.update(interm_ar_masks, masks_ar_gts, batch['index_name'])
-            interm_tc_metrics.update(interm_tc_masks, masks_tc_gts, batch['index_name'])
+        # # Update metrics - Intermediate predictions
+        # if interm_ar_masks and interm_tc_masks:
+        #     interm_ar_metrics.update(interm_ar_masks, masks_ar_gts, batch['index_name'])
+        #     interm_tc_metrics.update(interm_tc_masks, masks_tc_gts, batch['index_name'])
         
         # Update metrics - Final logit (multiclass)
         final_logit_metrics.update(final_logit_pred_list, gt_masks_list, batch['index_name'])
@@ -433,9 +434,9 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
     ar_metrict_dict, _ = ar_metrics.compute()
     tc_metric_dict, _ = tc_metrics.compute()
     
-    # Compute metrics - Intermediate predictions
-    interm_ar_dict, _ = interm_ar_metrics.compute()
-    interm_tc_dict, _ = interm_tc_metrics.compute()
+    # # Compute metrics - Intermediate predictions
+    # interm_ar_dict, _ = interm_ar_metrics.compute()
+    # interm_tc_dict, _ = interm_tc_metrics.compute()
     
     # Compute metrics - Final logit
     final_logit_dict, _ = final_logit_metrics.compute()
@@ -453,14 +454,14 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
     freqw_acc_tc = tc_metric_dict['FreqW Acc']
     miout_including_bg_tc = tc_metric_dict['Mean IoU']
     
-    # Extract intermediate prediction metrics
-    interm_miou_ar = interm_ar_dict['Mean Foreground IoU']
-    interm_mean_acc_ar = interm_ar_dict['Mean Acc']
-    interm_overall_acc_ar = interm_ar_dict['Overall Acc']
+    # # Extract intermediate prediction metrics
+    # interm_miou_ar = interm_ar_dict['Mean Foreground IoU']
+    # interm_mean_acc_ar = interm_ar_dict['Mean Acc']
+    # interm_overall_acc_ar = interm_ar_dict['Overall Acc']
     
-    interm_miou_tc = interm_tc_dict['Mean Foreground IoU']
-    interm_mean_acc_tc = interm_tc_dict['Mean Acc']
-    interm_overall_acc_tc = interm_tc_dict['Overall Acc']
+    # interm_miou_tc = interm_tc_dict['Mean Foreground IoU']
+    # interm_mean_acc_tc = interm_tc_dict['Mean Acc']
+    # interm_overall_acc_tc = interm_tc_dict['Overall Acc']
     
     # Extract final logit metrics
     logit_mean_iou = final_logit_dict['Mean IoU']
@@ -489,13 +490,13 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
             "valid/miout_including_bg_ar": miout_including_bg_ar,
             "valid/miout_including_bg_tc": miout_including_bg_tc,
             
-            # Intermediate predictions
-            "valid/interm_miou_ar": interm_miou_ar,
-            "valid/interm_miou_tc": interm_miou_tc,
-            "valid/interm_mean_acc_ar": interm_mean_acc_ar,
-            "valid/interm_mean_acc_tc": interm_mean_acc_tc,
-            "valid/interm_overall_acc_ar": interm_overall_acc_ar,
-            "valid/interm_overall_acc_tc": interm_overall_acc_tc,
+            # # Intermediate predictions
+            # "valid/interm_miou_ar": interm_miou_ar,
+            # "valid/interm_miou_tc": interm_miou_tc,
+            # "valid/interm_mean_acc_ar": interm_mean_acc_ar,
+            # "valid/interm_mean_acc_tc": interm_mean_acc_tc,
+            # "valid/interm_overall_acc_ar": interm_overall_acc_ar,
+            # "valid/interm_overall_acc_tc": interm_overall_acc_tc,
             
             # Final logit (multiclass)
             "valid/logit_mean_iou": logit_mean_iou,
@@ -660,7 +661,7 @@ def main_worker(worker_id, worker_args):
     for epoch in range(1, max_epoch_num + 1):
         
         # Validation
-        if epoch % worker_args.valid_per_epochs == 1 or epoch == max_epoch_num:
+        if epoch % worker_args.valid_per_epochs == 0 or epoch == max_epoch_num:
             miou_tc, miou_ar = validate_one_epoch(
                 epoch, val_dataloader, ar_metrics, tc_metrics, 
                 climatesam, prompt_generator, prompt_maker, device, 

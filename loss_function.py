@@ -366,7 +366,7 @@ class GeneratorLoss(nn.Module):
             
             
 def compute_generator_loss(multiclass_mask, interm_masks, gt_masks, device, worker_args, 
-                          lambda_factors: list = None, num_blocks: int = 4):
+                          lambda_factors: list = None, num_blocks: int = 4) -> Dict[str, torch.Tensor]:
     """
     Compute loss for generator (auxiliary predictions) with multi-level supervision.
     
@@ -395,10 +395,10 @@ def compute_generator_loss(multiclass_mask, interm_masks, gt_masks, device, work
     # 1. Final Loss (Full Resolution)
     # Assuming multiclass_mask is already interpolated to match gt_masks' H, W
     loss_final = criterion(multiclass_mask, gt_masks)
-    total_loss = loss_final
+    total_loss = loss_final.clone()
     
     # 2. Intermediate Losses (Multi-Level Supervision)
-    loss_intermediate_sum = 0.0
+    loss_intermediate_sum = torch.tensor(0.0, device=device)
     
     if interm_masks is not None and len(interm_masks) > 0:
         # We assume interm_masks are ordered from the lowest resolution (first block)
@@ -423,28 +423,13 @@ def compute_generator_loss(multiclass_mask, interm_masks, gt_masks, device, work
             lambda_i = lambda_factors[i] if i < len(lambda_factors) else 0.1
             weighted_loss_level = lambda_i * loss_level
             
-            loss_intermediate_sum += weighted_loss_level
-            total_loss += weighted_loss_level
+            loss_intermediate_sum = loss_intermediate_sum + weighted_loss_level
+            total_loss = total_loss + weighted_loss_level
     
-    # # Convert individual class predictions for additional metrics (optional)
-    # with torch.no_grad():
-    #     # Convert multiclass mask to individual class masks for logging
-    #     tc_gen_mask = (multiclass_mask.argmax(dim=1) == 1).float()
-    #     ar_gen_mask = (multiclass_mask.argmax(dim=1) == 2).float()
-        
-    #     # Convert ground truth
-    #     tc_gt_mask = (gt_masks == 1).float()
-    #     ar_gt_mask = (gt_masks == 2).float()
-        
-    #     # Compute individual class BCE losses for monitoring (detached)
-    #     tc_focal_loss = F.binary_cross_entropy(tc_gen_mask, tc_gt_mask, reduction='mean')
-    #     ar_focal_loss = F.binary_cross_entropy(ar_gen_mask, ar_gt_mask, reduction='mean')
-
+    # Ensure returned scalar summaries are tensors (detached to avoid interfering with backprop)
     return {
-        'total_loss_for_backward': total_loss,
-        'total_loss': total_loss.item(),
-        'final_loss': loss_final.item(),
-        'intermediate_loss_sum': loss_intermediate_sum.item() if isinstance(loss_intermediate_sum, torch.Tensor) else loss_intermediate_sum,
-        # 'tc_focal_loss': tc_focal_loss.item(),
-        # 'ar_focal_loss': ar_focal_loss.item()
+        'total_loss_for_backward': total_loss,                         # tensor with grad for backprop
+        'total_loss': total_loss.detach(),                            # detached tensor for logging
+        'final_loss': loss_final.detach(),                            # detached tensor for logging
+        'intermediate_loss_sum': loss_intermediate_sum.detach()       # detached tensor for logging
     }
