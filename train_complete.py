@@ -17,13 +17,22 @@ from evaluator import StreamSegMetrics
 
 
 from train_util import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug, setup_device_and_distributed, setup_optimizer_and_scheduler, worker_init_fn
-from loss_function import ClimateLoss, compute_climate_loss
+from loss_function import ClimateLoss, compute_climate_loss, compute_generator_loss
 from train_parser import parse
 from climatesam import ClimateSAM
 from dataset.climatenet import ClimateDataset
 from model.prompt_generator import PromptGenerator
 from model.prompt.prompt_maker import PromptMaker
 
+
+
+
+
+
+
+# ------------------------------------------------------------
+# TRAINING 
+# ------------------------------------------------------------
 
     
 def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler, gradient_accumulation_steps):
@@ -35,9 +44,9 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
     if len(train_dataloader) % gradient_accumulation_steps != 0:
         effective_steps += 1
     
-    # Create nested progress bars if you're the main process
+    # Create progress bar if you're the main process
+    batch_pbar = None
     if local_rank == 0:
-        # Outer progress bar for batches
         batch_pbar = tqdm(total=len(train_dataloader), desc=f'Epoch {epoch}/{max_epoch_num} - Batches', position=0, leave=True)
         
     step_count = 0 
@@ -47,28 +56,68 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
     
     for train_step, batch in enumerate(train_dataloader):
         batch = batch_to_cuda(batch, device)
-        _, _, interm_features = climatesam.set_infer_img(batch['input'])
-        gt_masks = batch['gt_mask']
         
         with torch.amp.autocast('cuda'):
-            final_logit, intermediate_logits = prompter(interm_features)
+            # Step 1: Encode images to get intermediate features
+            image_embeddings, interm_features, image_input, ori_img_size = climatesam.encode_images(batch['input'])
+            
+            # Step 2: Generate masks and auxiliary predictions from intermediate features
+            final_logit, interm_masks = prompter(interm_features)
             
             # Use Softmax to get probability maps for visualization
-            probs = F.softmax(final_logit, dim=1)
+            multiclass_mask = F.softmax(final_logit, dim=1)
             
-           
-
-            # Convert GT mask to numpy for visualization
-            gt_masks = torch.stack(gt_masks, dim=0).to(device) # B, H, W
-            gt_mask = gt_masks.cpu().numpy() if torch.is_tensor(gt_masks) else gt_masks
-
-            # prompt_debug(batch, 'Train Step {train_step}')
-            masks_ar_gt = batch['ar_object_masks']
-            masks_tc_gt = batch['tc_object_masks']
+            # Step 3: Create prompts from generated masks
+            prompt_dict = prompt_maker.make_prompts(multiclass_mask)
             
+            # Step 4: Forward through the rest of the model with generated prompts
+            tc_pred_masks, ar_pred_masks, _ = climatesam.forward(
+                image_input=image_input,
+                image_embeddings=image_embeddings,
+                interm_embeddings=interm_features,
+                ori_img_size=ori_img_size,
+                ar_point_prompts=prompt_dict['ar_point_prompts'],
+                tc_point_prompts=prompt_dict['tc_point_prompts'],
+                ar_bbox_prompts=prompt_dict['ar_bbox_prompts'],
+                tc_bbox_prompts=prompt_dict['tc_bbox_prompts'],
+                ar_mask_prompts=prompt_dict['ar_mask_prompts'],
+                tc_mask_prompts=prompt_dict['tc_mask_prompts']
+            )
             
-        
-        total_loss = loss_dict.pop('total_loss_for_backward')
+            # Ground truth masks
+            gt_masks = torch.stack(batch['gt_mask'], dim=0).to(device)  # B, H, W
+            masks_ar_gt = prompt_dict['ar_object_masks']
+            masks_tc_gt = prompt_dict['tc_object_masks']
+            
+            # Compute generator loss (auxiliary predictions)
+            loss_gen = compute_generator_loss(
+                multiclass_mask=multiclass_mask,
+                interm_masks=interm_masks,
+                gt_masks=gt_masks,
+                device=device,
+                worker_args=worker_args
+            )
+            
+            # Compute model loss (final predictions)
+            loss_model = compute_climate_loss(
+                ar_masks=ar_pred_masks,
+                tc_masks=tc_pred_masks,
+                ar_masks_gt=masks_ar_gt,
+                tc_masks_gt=masks_tc_gt,
+                device=device,
+                worker_args=worker_args
+            )
+            
+            # Combine losses
+            loss_dict = {}
+            loss_dict.update({f"gen_{k}": v for k, v in loss_gen.items()})
+            loss_dict.update({f"model_{k}": v for k, v in loss_model.items()})
+            
+            # Total loss for backward
+            total_loss_gen = loss_gen.pop('total_loss_for_backward')
+            total_loss_model = loss_model.pop('total_loss_for_backward')
+            total_loss = total_loss_gen + total_loss_model
+            loss_dict['total_loss_for_backward'] = total_loss
         
         # Scale loss by gradient accumulation steps
         total_loss = total_loss / gradient_accumulation_steps
@@ -79,15 +128,8 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
                 epoch_loss_dict[key] = 0
             epoch_loss_dict[key] += value.item() / gradient_accumulation_steps
 
-        backward_context = nullcontext
-        if torch.distributed.is_initialized():
-            # Only sync gradients on the last accumulation step
-            if (train_step + 1) % gradient_accumulation_steps != 0:
-                backward_context = model.no_sync
-            else:
-                backward_context = nullcontext
-
-        with backward_context():
+        # Backward pass
+        with nullcontext():
             scaler.scale(total_loss).backward()
         
         # Update batch progress bar
@@ -105,32 +147,53 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
             scaler.update()
             optimizer.zero_grad()
             
-            # Calculate effective step for logging
-            effective_step = (train_step + 1) // gradient_accumulation_steps
+            step_count += 1
             epoch_loss_count += 1
             
-            # Distributed reduction of losses for current step
-            if torch.distributed.is_initialized():
-                step_loss_dict = {}
-                for key in loss_dict.keys():
-                    step_loss_dict[key] = epoch_loss_dict[key] / epoch_loss_count
-                    tensor_loss = torch.tensor(step_loss_dict[key], device=device)
-                    torch.distributed.reduce(tensor_loss, dst=0, op=torch.distributed.ReduceOp.SUM)
-                    step_loss_dict[key] = (tensor_loss / torch.distributed.get_world_size()).item()
-            else:
-                step_loss_dict = {key: epoch_loss_dict[key] / epoch_loss_count for key in epoch_loss_dict.keys()}
-            
-            # Update step progress bar with current average losses
-            # if step_pbar:
-            #     step_pbar.update(1)
-            #     step_pbar.set_postfix({
-            #         'step': f"{effective_step}/{effective_steps}",
-            #         'total_loss': f"{step_loss_dict.get('total_loss', 0):.4f}",
-            #         'focal': f"{step_loss_dict.get('focal_loss', 0):.4f}",
-            #         'tversky': f"{step_loss_dict.get('tversky_loss', 0):.4f}"
-            #     })
+            # Log step-level metrics to wandb (optional, for detailed monitoring)
+            if hasattr(worker_args, 'wandb') and worker_args.wandb and local_rank == 0:
+                step_losses = {key: epoch_loss_dict[key] / epoch_loss_count for key in epoch_loss_dict.keys() if key != 'total_loss_for_backward'}
                 
-            step_count += 1
+                # Distributed reduction of losses for current step
+                if torch.distributed.is_initialized():
+                    for key in step_losses.keys():
+                        tensor_loss = torch.tensor(step_losses[key], device=device)
+                        torch.distributed.reduce(tensor_loss, dst=0, op=torch.distributed.ReduceOp.SUM)
+                        step_losses[key] = (tensor_loss / torch.distributed.get_world_size()).item()
+                
+                # Log step metrics (optional - comment out if too frequent)
+                step_log_dict = {f"train_step/{key}": step_losses[key] for key in step_losses.keys()}
+                step_log_dict["train_step/learning_rate"] = scheduler.get_last_lr()[0]
+                step_log_dict["global_step"] = epoch * len(train_dataloader) + train_step
+                wandb.log(step_log_dict)
+                
+    # Handle any remaining gradients if the last batch doesn't complete a full accumulation
+    if len(train_dataloader) % gradient_accumulation_steps != 0:
+        scaler.step(optimizer)
+        scaler.update()
+        optimizer.zero_grad()
+        step_count += 1
+        epoch_loss_count += 1
+    
+    # Calculate average losses for the entire epoch 
+    if epoch_loss_count > 0:
+        avg_epoch_losses = {key: epoch_loss_dict[key] / epoch_loss_count for key in epoch_loss_dict.keys() if key != 'total_loss_for_backward'}
+        
+
+        
+        # Log to wandb once per epoch
+        if worker_args.wandb and local_rank == 0:
+            log_dict = {f"train/{key}": avg_epoch_losses[key] for key in avg_epoch_losses.keys()}
+            log_dict["epoch"] = epoch
+            log_dict["learning_rate"] = scheduler.get_last_lr()[0]
+            wandb.log(log_dict, step=epoch)
+            
+    # Close progress bars
+    if local_rank == 0 and batch_pbar:
+        batch_pbar.close()
+            
+    scheduler.step()
+
 
     # Handle any remaining gradients if the last batch doesn't complete a full accumulation
     if len(train_dataloader) % gradient_accumulation_steps != 0:
@@ -160,78 +223,178 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
             log_dict["learning_rate"] = scheduler.get_last_lr()[0]
             wandb.log(log_dict, step=epoch)
             
-    # Close progress bars
+    # Close progress bar
     if batch_pbar:
         batch_pbar.close()
-    # if step_pbar:
-    #     step_pbar.close()
             
     scheduler.step()
 
-@torch.no_grad()
-def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args):
 
-    # Example usage inside validation loop:
-    # plot_mask_with_points(batch['gt_mask'][0], batch['tc_point_prompts'])
-    model.eval()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ------------------------------------------------------------
+# EVAL 
+# ------------------------------------------------------------
+@torch.no_grad()
+def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam, prompter, prompt_maker, device, max_epoch_num, worker_args):
+    climatesam.eval()
+    prompter.eval()
+    
+    # Add metrics for intermediate predictions
+    interm_ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+    interm_tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+    final_logit_metrics = StreamSegMetrics(class_names=['Background', 'TC', 'AR'])  # 3-class for multiclass
+    
     valid_pbar = tqdm(total=len(val_dataloader), desc='valid', leave=False)
     
     for val_step, batch in enumerate(val_dataloader):
         batch = batch_to_cuda(batch, device)
         
-        # Set inference images once
-        images = model.set_infer_img(batch['input'])
-
-        ar_point_prompts_copy = copy.deepcopy(batch['ar_point_prompts'])
-        tc_point_prompts_copy = copy.deepcopy(batch['tc_point_prompts'])
-        ar_bbox_prompts_copy = copy.deepcopy(batch['ar_bbox_prompts'])
-        tc_bbox_prompts_copy = copy.deepcopy(batch['tc_bbox_prompts'])
-
-        # prompt_debug(batch, text=f"Validation Step {val_step}")
+        with torch.amp.autocast('cuda'):
+            # Step 1: Encode images to get intermediate features (same as training)
+            image_embeddings, interm_features, image_input, ori_img_size = climatesam.encode_images(batch['input'])
+            
+            # Step 2: Generate masks and auxiliary predictions from intermediate features
+            final_logit, interm_masks = prompter(interm_features)
+            
+            # Use Softmax to get probability maps for prompt generation
+            multiclass_mask = F.softmax(final_logit, dim=1)
+            
+            # Step 3: Create prompts from generated masks
+            prompt_dict = prompt_maker.make_prompts(multiclass_mask)
+            
+            # Step 4: Forward through the rest of the model with generated prompts
+            tc_pred_masks, ar_pred_masks, _ = climatesam.forward(
+                image_input=image_input,
+                image_embeddings=image_embeddings,
+                interm_embeddings=interm_features,
+                ori_img_size=ori_img_size,
+                ar_point_prompts=prompt_dict['ar_point_prompts'],
+                tc_point_prompts=prompt_dict['tc_point_prompts'],
+                ar_bbox_prompts=prompt_dict['ar_bbox_prompts'],
+                tc_bbox_prompts=prompt_dict['tc_bbox_prompts'],
+                ar_mask_prompts=prompt_dict['ar_mask_prompts'],
+                tc_mask_prompts=prompt_dict['tc_mask_prompts']
+            )
         
-        # Perform inference with prompts
-        tc_masks, ar_masks = model.infer(
-            ar_point_prompts=batch['ar_point_prompts'],
-            tc_point_prompts=batch['tc_point_prompts'],
-            ar_bbox_prompts=batch['ar_bbox_prompts'],
-            tc_bbox_prompts=batch['tc_bbox_prompts']
-        )
-        
+        # Ground truth masks
         masks_gt = batch['gt_mask']
+        gt_masks_tensor = torch.stack(masks_gt, dim=0).to(device)  # B, H, W for multiclass evaluation
         masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt]
         masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt]
         
-        # some processing to make sure the masks are in the right shape
-        for masks in [masks_ar_gts, masks_tc_gts, ar_masks, tc_masks]:
-                for i in range(len(masks)):
-                    if len(masks[i].shape) == 2:
-                        masks[i] = masks[i][None, None, :]
-                    if len(masks[i].shape) == 3:
-                        masks[i] = masks[i][:, None, :]
-                    if len(masks[i].shape) != 4:
-                        raise RuntimeError
-        # LOG
+        # Convert predicted masks to list format for consistency
+        ar_masks = [mask for mask in ar_pred_masks]
+        tc_masks = [mask for mask in tc_pred_masks]
+        
+        # Process intermediate masks for evaluation
+        interm_ar_masks = []
+        interm_tc_masks = []
+        if interm_masks is not None:
+            for i in range(len(interm_masks)):
+                # Assuming interm_masks are in format [batch_size, 2, H, W] where 2 = [AR, TC]
+                interm_ar_mask = interm_masks[i][:, 0:1]  # AR channel
+                interm_tc_mask = interm_masks[i][:, 1:2]  # TC channel
+                interm_ar_masks.append(interm_ar_mask)
+                interm_tc_masks.append(interm_tc_mask)
+        
+        # Process final logit for evaluation (multiclass)
+        final_logit_pred = torch.argmax(final_logit, dim=1)  # B, H, W
+        final_logit_pred_list = [final_logit_pred[i:i+1].unsqueeze(0) for i in range(final_logit_pred.shape[0])]
+        gt_masks_list = [gt_masks_tensor[i:i+1].unsqueeze(0) for i in range(gt_masks_tensor.shape[0])]
+        
+        # Ensure masks are in the right shape
+        all_mask_lists = [masks_ar_gts, masks_tc_gts, ar_masks, tc_masks]
+        if interm_ar_masks:
+            all_mask_lists.extend([interm_ar_masks, interm_tc_masks])
+        
+        for masks in all_mask_lists:
+            for i in range(len(masks)):
+                if len(masks[i].shape) == 2:
+                    masks[i] = masks[i][None, None, :]
+                if len(masks[i].shape) == 3:
+                    masks[i] = masks[i][:, None, :]
+                if len(masks[i].shape) != 4:
+                    raise RuntimeError(f"Unexpected mask shape: {masks[i].shape}")
+        
+        # LOG - Visualization for first validation step
         if val_step == 0:
-            # Collect all images for this epoch
             wandb_images = {}
             masks_gt_copy = copy.deepcopy(masks_gt)
             tc_masks_copy = copy.deepcopy(tc_masks)
             ar_masks_copy = copy.deepcopy(ar_masks)
+            
+            # Copy intermediate predictions for visualization
+            interm_ar_masks_copy = copy.deepcopy(interm_ar_masks) if interm_ar_masks else None
+            interm_tc_masks_copy = copy.deepcopy(interm_tc_masks) if interm_tc_masks else None
+            final_logit_copy = copy.deepcopy(final_logit_pred_list)
+            
+            # Use generated prompts for visualization
+            ar_point_prompts_copy = copy.deepcopy(prompt_dict['ar_point_prompts'])
+            tc_point_prompts_copy = copy.deepcopy(prompt_dict['tc_point_prompts'])
+            ar_bbox_prompts_copy = copy.deepcopy(prompt_dict['ar_bbox_prompts'])
+            tc_bbox_prompts_copy = copy.deepcopy(prompt_dict['tc_bbox_prompts'])
+            
             for i in range(len(masks_gt)):
                 mask = masks_gt_copy[i]
-                ar_points = ar_point_prompts_copy[i]
-                tc_points = tc_point_prompts_copy[i]
-                ar_bbox = ar_bbox_prompts_copy[i]
-                tc_bbox = tc_bbox_prompts_copy[i]
+                ar_points = ar_point_prompts_copy[i] if i < len(ar_point_prompts_copy) else None
+                tc_points = tc_point_prompts_copy[i] if i < len(tc_point_prompts_copy) else None
+                ar_bbox = ar_bbox_prompts_copy[i] if i < len(ar_bbox_prompts_copy) else None
+                tc_bbox = tc_bbox_prompts_copy[i] if i < len(tc_bbox_prompts_copy) else None
                 tc_pred_mask = tc_masks_copy[i]
                 ar_pred_mask = ar_masks_copy[i]
-                save_path = os.path.join(worker_args.exp_dir, worker_args.run_name, 'images', f"epoch_{epoch}_step_{val_step}_image_{i}.png")
-                fig = plot_mask_with_points_and_bbox(mask, ar_points, tc_points, ar_bbox, tc_bbox, tc_pred_mask, ar_pred_mask, radius=8, save_path=save_path, axis=True)
                 
-                # Collect images for batch logging
+                # Main prediction visualization
+                save_path = os.path.join(worker_args.exp_dir, worker_args.run_name, 'images', f"epoch_{epoch}_step_{val_step}_image_{i}.png")
+                fig = plot_mask_with_points_and_bbox(
+                    mask, ar_points, tc_points, ar_bbox, tc_bbox, 
+                    tc_pred_mask, ar_pred_mask, radius=8, save_path=save_path, axis=True
+                )
+                
                 if worker_args.wandb:
-                    wandb_images[f"valid/val_step_{val_step}_image_{i}"] = wandb.Image(fig, caption=f"Validation Step {val_step} Image {i}")
-                    print(f"Epoch {epoch} - Image {i} prepared for logging.")
+                    wandb_images[f"valid/final_pred_image_{i}"] = wandb.Image(fig, caption=f"Final Predictions - Image {i}")
+                
+                # Intermediate masks visualization
+                if interm_ar_masks_copy and interm_tc_masks_copy and i < len(interm_ar_masks_copy):
+                    interm_ar_pred = interm_ar_masks_copy[i]
+                    interm_tc_pred = interm_tc_masks_copy[i]
+                    
+                    interm_save_path = os.path.join(worker_args.exp_dir, worker_args.run_name, 'images', f"epoch_{epoch}_step_{val_step}_interm_{i}.png")
+                    interm_fig = plot_mask_with_points_and_bbox(
+                        mask, ar_points, tc_points, ar_bbox, tc_bbox,
+                        interm_tc_pred, interm_ar_pred, radius=8, save_path=interm_save_path, axis=True
+                    )
+                    
+                    if worker_args.wandb:
+                        wandb_images[f"valid/interm_pred_image_{i}"] = wandb.Image(interm_fig, caption=f"Intermediate Predictions - Image {i}")
+                
+                # Final logit visualization (multiclass)
+                if final_logit_copy and i < len(final_logit_copy):
+                    final_logit_pred_mask = final_logit_copy[i]
+                    
+                    logit_save_path = os.path.join(worker_args.exp_dir, worker_args.run_name, 'images', f"epoch_{epoch}_step_{val_step}_logit_{i}.png")
+                    # For multiclass, we can visualize it as a single mask with different values
+                    logit_fig = plot_mask_with_points_and_bbox(
+                        mask, ar_points, tc_points, ar_bbox, tc_bbox,
+                        final_logit_pred_mask, final_logit_pred_mask, radius=8, save_path=logit_save_path, axis=True
+                    )
+                    
+                    if worker_args.wandb:
+                        wandb_images[f"valid/logit_pred_image_{i}"] = wandb.Image(logit_fig, caption=f"Final Logit Predictions - Image {i}")
             
             # Log all images at once for the same epoch
             if worker_args.wandb and wandb_images:
@@ -239,35 +402,82 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
                 wandb.log(wandb_images, step=epoch)
                 print(f"Epoch {epoch} - All {len(wandb_images)-1} images logged to W&B together.")
 
-            del ar_point_prompts_copy, tc_point_prompts_copy, ar_bbox_prompts_copy, tc_bbox_prompts_copy, masks_gt_copy, tc_masks_copy, ar_masks_copy
+            # Clean up copies
+            del ar_point_prompts_copy, tc_point_prompts_copy, ar_bbox_prompts_copy, tc_bbox_prompts_copy
+            del masks_gt_copy, tc_masks_copy, ar_masks_copy
+            if interm_ar_masks_copy:
+                del interm_ar_masks_copy, interm_tc_masks_copy
+            del final_logit_copy
             torch.cuda.empty_cache()
             
-        tc_metrics.update(tc_masks, masks_tc_gts,  batch['index_name'])
-        ar_metrics.update(ar_masks, masks_ar_gts,  batch['index_name'])
+        # Update metrics - Final predictions
+        tc_metrics.update(tc_masks, masks_tc_gts, batch['index_name'])
+        ar_metrics.update(ar_masks, masks_ar_gts, batch['index_name'])
+        
+        # Update metrics - Intermediate predictions
+        if interm_ar_masks and interm_tc_masks:
+            interm_ar_metrics.update(interm_ar_masks, masks_ar_gts, batch['index_name'])
+            interm_tc_metrics.update(interm_tc_masks, masks_tc_gts, batch['index_name'])
+        
+        # Update metrics - Final logit (multiclass)
+        final_logit_metrics.update(final_logit_pred_list, gt_masks_list, batch['index_name'])
+        
+        # Update progress bar
         valid_pbar.update(1)
         str_step_info = "Epoch: {epoch}/{epochs:4}.".format(
             epoch=epoch, epochs=max_epoch_num
         )
         valid_pbar.set_postfix_str(str_step_info)
-        
+    
+    # Compute metrics - Final predictions
     ar_metrict_dict, _ = ar_metrics.compute()
     tc_metric_dict, _ = tc_metrics.compute()
     
+    # Compute metrics - Intermediate predictions
+    interm_ar_dict, _ = interm_ar_metrics.compute()
+    interm_tc_dict, _ = interm_tc_metrics.compute()
+    
+    # Compute metrics - Final logit
+    final_logit_dict, _ = final_logit_metrics.compute()
+    
+    # Extract final prediction metrics
     miou_ar = ar_metrict_dict['Mean Foreground IoU']
     mean_acc_ar = ar_metrict_dict['Mean Acc']
     overall_acc_ar = ar_metrict_dict['Overall Acc']
     freqw_acc_ar = ar_metrict_dict['FreqW Acc']
     miout_including_bg_ar = ar_metrict_dict['Mean IoU']
+    
     miou_tc = tc_metric_dict['Mean Foreground IoU']
     mean_acc_tc = tc_metric_dict['Mean Acc']
     overall_acc_tc = tc_metric_dict['Overall Acc']
     freqw_acc_tc = tc_metric_dict['FreqW Acc']
     miout_including_bg_tc = tc_metric_dict['Mean IoU']
+    
+    # Extract intermediate prediction metrics
+    interm_miou_ar = interm_ar_dict['Mean Foreground IoU']
+    interm_mean_acc_ar = interm_ar_dict['Mean Acc']
+    interm_overall_acc_ar = interm_ar_dict['Overall Acc']
+    
+    interm_miou_tc = interm_tc_dict['Mean Foreground IoU']
+    interm_mean_acc_tc = interm_tc_dict['Mean Acc']
+    interm_overall_acc_tc = interm_tc_dict['Overall Acc']
+    
+    # Extract final logit metrics
+    logit_mean_iou = final_logit_dict['Mean IoU']
+    logit_mean_acc = final_logit_dict['Mean Acc']
+    logit_overall_acc = final_logit_dict['Overall Acc']
+    
+    # Reset metrics for next epoch
     ar_metrics.reset()
     tc_metrics.reset()
+    interm_ar_metrics.reset()
+    interm_tc_metrics.reset()
+    final_logit_metrics.reset()
     
+    # Log metrics to wandb
     if worker_args.wandb:
         wandb.log({
+            # Final predictions
             "valid/miou_ar": miou_ar,
             "valid/miou_tc": miou_tc,
             "valid/mean_acc_ar": mean_acc_ar,
@@ -278,11 +488,27 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
             "valid/freqw_acc_tc": freqw_acc_tc,
             "valid/miout_including_bg_ar": miout_including_bg_ar,
             "valid/miout_including_bg_tc": miout_including_bg_tc,
+            
+            # Intermediate predictions
+            "valid/interm_miou_ar": interm_miou_ar,
+            "valid/interm_miou_tc": interm_miou_tc,
+            "valid/interm_mean_acc_ar": interm_mean_acc_ar,
+            "valid/interm_mean_acc_tc": interm_mean_acc_tc,
+            "valid/interm_overall_acc_ar": interm_overall_acc_ar,
+            "valid/interm_overall_acc_tc": interm_overall_acc_tc,
+            
+            # Final logit (multiclass)
+            "valid/logit_mean_iou": logit_mean_iou,
+            "valid/logit_mean_acc": logit_mean_acc,
+            "valid/logit_overall_acc": logit_overall_acc,
+            
             "epoch": epoch,
-        },
-            step = epoch)
-        
+        }, step=epoch)
+    
+    valid_pbar.close()
     return miou_tc, miou_ar
+
+
 
 #-----------------------------------------------------------
 # DATA
@@ -342,6 +568,7 @@ def set_up_dataset(worker_args):
     )
     
     return train_dataloader, val_dataloader
+
     
 #-----------------------------------------------------------
 # MODELS
@@ -378,16 +605,16 @@ def set_up_model(worker_args, device):
     }
     
     in_channels = {
-        'vit_b': 512,
+        'vit_b': 768,
         'vit_l': 1024,
         'vit_h': 1280
     }
     
     prompt_generator = PromptGenerator(
-        in_channels=in_channels[worker_args.model_type],
+        in_channels=in_channels[worker_args.sam_type],
         fused_channels=128,
-        num_features=num_features_map[worker_args.model_type],
-        features_per_block=features_per_block[worker_args.model_type]
+        num_features=num_features_map[worker_args.sam_type],
+        features_per_block=features_per_block[worker_args.sam_type]
     ).to(device)
     
     for params in climatesam.image_encoder.parameters():
@@ -400,7 +627,7 @@ def set_up_model(worker_args, device):
 
 
 #-----------------------------------------------------------
-# MAIN WORKERR
+# MAIN WORKER
 #-----------------------------------------------------------
 def main_worker(worker_id, worker_args):
     set_randomness()
@@ -413,7 +640,7 @@ def main_worker(worker_id, worker_args):
     print(f"Worker {worker_id} initialized on device {device} with local_rank {local_rank}.")
 
     climatesam, prompt_generator = set_up_model(worker_args, device)
-    optimizer, scheduler = setup_optimizer_and_scheduler(climatesam, worker_args)
+    optimizer, scheduler = setup_optimizer_and_scheduler(prompt_generator, worker_args)  # Changed to prompt_generator
     
     prompt_maker = PromptMaker(prompt_type='point', positive_point_num=worker_args.positive_point_num, negative_point_num=worker_args.negative_point_num)
     
@@ -426,44 +653,73 @@ def main_worker(worker_id, worker_args):
     scaler = torch.amp.GradScaler('cuda') 
     print(f"Validation will be performed every {worker_args.valid_per_epochs} epochs.")
     
-    # model.train(mode=True, phase=worker_args.phase, verbose=True)
-    # for epoch in range(1, max_epoch_num + 1):
+    # Set gradient accumulation steps
+    gradient_accumulation_steps = getattr(worker_args, 'gradient_accumulation_steps', 1)
+    
+    # Training loop
+    for epoch in range(1, max_epoch_num + 1):
         
-    #     if epoch % worker_args.valid_per_epochs == 1 or epoch == max_epoch_num:
-    #         miou_tc, miou_ar = validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args)
-    #         print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}")
-    #         if miou_tc > best_miou_tc:
-    #             best_miou_tc = miou_tc
-    #             print(f'Best mIoU TC has been updated to {best_miou_tc:.2%}!')
-    #         if miou_ar > best_miou_ar:
-    #             best_miou_ar = miou_ar
-    #             print(f'Best mIoU AR has been updated to {best_miou_ar:.2%}!')
-    #         if (miou_tc + miou_ar) / 2 > best_miou_total:
-    #             best_miou_total = (miou_tc + miou_ar) / 2
-    #             print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
-    #             if worker_args.save_model and epoch > 4:
-    #                 if worker_args.phase == 1:
-    #                     save_path = os.path.join(worker_args.exp_dir, f"phase_1_weights.pth")
-    #                     phase_1_weights = {
-    #                         'image_encoder': model.image_encoder.state_dict(),
-    #                         'mask_decoder': model.mask_decoder.state_dict(),
-    #                     }
-    #                     torch.save(phase_1_weights, save_path)
-    #                     print(f"Image encoder saved to {save_path}")
-    #                     wandb.save(save_path)
-    #                     print(f"Image encoder saved to wandb: {save_path}")
-    #                 if worker_args.phase == 2:
-    #                     save_path = os.path.join(worker_args.exp_dir, f"phase_2_weights.pth")
-    #                     phase_2_weights = {
-    #                         'image_encoder': model.image_encoder.state_dict(),
-    #                         'mask_decoder': model.mask_decoder.state_dict(),
-    #                         'input_adapter': model.input_adapter.state_dict(),
-    #                     }
-    #                     torch.save(phase_2_weights, save_path)
-    #                     print(f"Image encoder saved to {save_path}")
-    #                     wandb.save(save_path)
-    #                     print(f"Image encoder saved to wandb: {save_path}")
-    #     train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler)
+        # Validation
+        if epoch % worker_args.valid_per_epochs == 1 or epoch == max_epoch_num:
+            miou_tc, miou_ar = validate_one_epoch(
+                epoch, val_dataloader, ar_metrics, tc_metrics, 
+                climatesam, prompt_generator, prompt_maker, device, 
+                max_epoch_num, worker_args
+            )
+            print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}")
+            
+            if miou_tc > best_miou_tc:
+                best_miou_tc = miou_tc
+                print(f'Best mIoU TC has been updated to {best_miou_tc:.2%}!')
+                
+            if miou_ar > best_miou_ar:
+                best_miou_ar = miou_ar
+                print(f'Best mIoU AR has been updated to {best_miou_ar:.2%}!')
+                
+            if (miou_tc + miou_ar) / 2 > best_miou_total:
+                best_miou_total = (miou_tc + miou_ar) / 2
+                print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
+                
+                # Save best model (including all components)
+                if worker_args.save_model and epoch > 4:
+                    # Create best_weights directory if it doesn't exist
+                    best_weights_dir = os.path.join(worker_args.exp_dir, 'best_weights')
+                    os.makedirs(best_weights_dir, exist_ok=True)
+                    
+                    save_path = os.path.join(best_weights_dir, f"complete_model_best.pth")
+                    complete_model_weights = {
+                        'image_encoder': climatesam.image_encoder.state_dict(),
+                        'mask_decoder': climatesam.mask_decoder.state_dict(),
+                        'prompt_generator': prompt_generator.state_dict(),
+                        'epoch': epoch,
+                        'best_miou_tc': best_miou_tc,
+                        'best_miou_ar': best_miou_ar,
+                        'best_miou_total': best_miou_total,
+                    }
+                    
+                    # Add input adapter if it exists
+                    if hasattr(climatesam, 'input_adapter'):
+                        complete_model_weights['input_adapter'] = climatesam.input_adapter.state_dict()
+                        
+                    torch.save(complete_model_weights, save_path)
+                    print(f"Complete model weights saved to {save_path}")
+                    
+                    if worker_args.wandb:
+                        wandb.save(save_path)
+                        print(f"Complete model weights saved to wandb: {save_path}")
+        
+        # Training
+        train_one_epoch(
+            epoch, train_dataloader, climatesam, prompt_generator, prompt_maker,
+            optimizer, scheduler, device, local_rank, worker_args, 
+            max_epoch_num, scaler, gradient_accumulation_steps
+        )
+    
+    print(f"Training completed!")
+    print(f"Best mIoU TC: {best_miou_tc:.2%}")
+    print(f"Best mIoU AR: {best_miou_ar:.2%}")
+    print(f"Best mIoU Total: {best_miou_total:.2%}")
+
         
 if __name__ == '__main__':
     print("Starting training process...")

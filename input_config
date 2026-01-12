@@ -25,6 +25,7 @@ prompt_type = point
 ; sam_type = vit_l
 sam_type = vit_l
 ; cat_type = cat-a
+fuse_channels = 1
 
 [TRAINING LOOP]
 ; shot_num = 1

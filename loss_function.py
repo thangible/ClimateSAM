@@ -363,3 +363,88 @@ class GeneratorLoss(nn.Module):
             'final_loss': loss_final.item(),
             'intermediate_loss_sum': loss_intermediate_sum.item()}
             # Optionally log individual intermediate losses:
+            
+            
+def compute_generator_loss(multiclass_mask, interm_masks, gt_masks, device, worker_args, 
+                          lambda_factors: list = None, num_blocks: int = 4):
+    """
+    Compute loss for generator (auxiliary predictions) with multi-level supervision.
+    
+    Args:
+        multiclass_mask: Final multiclass logits (B, C, H, W)
+        interm_masks: List of intermediate multiclass logits from different resolution levels
+        gt_masks: Ground truth masks (B, H_gt, W_gt) of type long
+        device: Device to compute on
+        worker_args: Training arguments (currently unused but kept for compatibility)
+        lambda_factors: Weights for intermediate losses, if None will use default decaying weights
+        num_blocks: Number of blocks for default lambda calculation
+    
+    Returns:
+        Dictionary containing loss components
+    """
+    # Handle lambda factors like in GeneratorLoss class
+    if lambda_factors is None:
+        lambda_factors = [0.4 / (i + 1) for i in range(num_blocks)]
+    
+    # Move ground truth to device and ensure correct type
+    gt_masks = gt_masks.to(device).long()
+    
+    # Initialize CrossEntropy criterion
+    criterion = nn.CrossEntropyLoss()
+    
+    # 1. Final Loss (Full Resolution)
+    # Assuming multiclass_mask is already interpolated to match gt_masks' H, W
+    loss_final = criterion(multiclass_mask, gt_masks)
+    total_loss = loss_final
+    
+    # 2. Intermediate Losses (Multi-Level Supervision)
+    loss_intermediate_sum = 0.0
+    
+    if interm_masks is not None and len(interm_masks) > 0:
+        # We assume interm_masks are ordered from the lowest resolution (first block)
+        for i, logit in enumerate(interm_masks):
+            # i=0 is the coarsest level, i=len(interm_masks)-1 is the finest intermediate level
+            
+            # Determine target size for downsampling GT
+            target_size = logit.shape[-2:]
+            
+            # Downsample the ground truth mask to match logit's spatial size
+            # IMPORTANT: Use 'nearest' for ground truth to maintain discrete class labels
+            downsampled_gt = F.interpolate(
+                gt_masks.unsqueeze(1).float(),  # B, 1, H_gt, W_gt
+                size=target_size, 
+                mode='nearest'
+            ).squeeze(1).long()  # B, H', W'
+
+            # Calculate loss for this level
+            loss_level = criterion(logit, downsampled_gt)
+            
+            # Apply weighting factor
+            lambda_i = lambda_factors[i] if i < len(lambda_factors) else 0.1
+            weighted_loss_level = lambda_i * loss_level
+            
+            loss_intermediate_sum += weighted_loss_level
+            total_loss += weighted_loss_level
+    
+    # # Convert individual class predictions for additional metrics (optional)
+    # with torch.no_grad():
+    #     # Convert multiclass mask to individual class masks for logging
+    #     tc_gen_mask = (multiclass_mask.argmax(dim=1) == 1).float()
+    #     ar_gen_mask = (multiclass_mask.argmax(dim=1) == 2).float()
+        
+    #     # Convert ground truth
+    #     tc_gt_mask = (gt_masks == 1).float()
+    #     ar_gt_mask = (gt_masks == 2).float()
+        
+    #     # Compute individual class BCE losses for monitoring (detached)
+    #     tc_focal_loss = F.binary_cross_entropy(tc_gen_mask, tc_gt_mask, reduction='mean')
+    #     ar_focal_loss = F.binary_cross_entropy(ar_gen_mask, ar_gt_mask, reduction='mean')
+
+    return {
+        'total_loss_for_backward': total_loss,
+        'total_loss': total_loss.item(),
+        'final_loss': loss_final.item(),
+        'intermediate_loss_sum': loss_intermediate_sum.item() if isinstance(loss_intermediate_sum, torch.Tensor) else loss_intermediate_sum,
+        # 'tc_focal_loss': tc_focal_loss.item(),
+        # 'ar_focal_loss': ar_focal_loss.item()
+    }

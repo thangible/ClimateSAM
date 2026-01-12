@@ -147,7 +147,7 @@ def make_point_prompts(binary_mask, connectivity, threshold=20, num_positive_poi
     #     plt.show()
         
     if len(positive_points_list) == 0 or len(negative_points_list) == 0 or len(object_masks_list) == 0:
-        return (None, None), None
+        return None, None
         
     positive_point_coords = torch.from_numpy(np.stack(positive_points_list, axis=0)).to(torch.float32)
     negative_point_coords = torch.from_numpy(np.stack(negative_points_list, axis=0)).to(torch.float32)

@@ -198,9 +198,9 @@ class ClimateSAM(nn.Module):
         # if self.enable_wandb_logging:
         #     self.log_prompt_shapes(ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts, "forward_preprocessed")
         
-        if self.use_prompt_generator:
-            tc_masks, ar_masks = self.prompt_generator(interm_embeddings) # shape: batch x 2 x 256 x 256
-            ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = None, None, None, None
+        # if self.use_prompt_generator:
+        #     tc_masks, ar_masks = self.prompt_generator(interm_embeddings) # shape: batch x 2 x 256 x 256
+        #     ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = None, None, None, None
             
 
             
@@ -276,8 +276,7 @@ class ClimateSAM(nn.Module):
             tc_postprocess_masks_hq = self.assemble_raw_masks(tc_postprocess_masks_hq) 
             ar_postprocess_masks_hq = self.assemble_raw_masks(ar_postprocess_masks_hq)
         
-        # Clear unnecessary variables early
-        del imgs  # Delete after use
+
         torch.cuda.empty_cache()
         
         # Process embeddings in chunks if needed

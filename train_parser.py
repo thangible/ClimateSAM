@@ -183,6 +183,11 @@ def parse():
         '--prompt_type', default='point', type=str,
         help="Type of prompt to generate. Default is 'point'."
     )
+    
+    parser.add_argument(
+        '--fuse_channels', default=128, type=int,
+        help="Number of channels to fuse in the prompt generator. Default is 128."
+    )
 
     args = parser.parse_args()
 
