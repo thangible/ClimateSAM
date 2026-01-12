@@ -167,13 +167,6 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
                 step_log_dict["global_step"] = epoch * len(train_dataloader) + train_step
                 wandb.log(step_log_dict)
                 
-    # Handle any remaining gradients if the last batch doesn't complete a full accumulation
-    if len(train_dataloader) % gradient_accumulation_steps != 0:
-        scaler.step(optimizer)
-        scaler.update()
-        optimizer.zero_grad()
-        step_count += 1
-        epoch_loss_count += 1
     
     # Calculate average losses for the entire epoch 
     if epoch_loss_count > 0:
@@ -619,9 +612,12 @@ def set_up_model(worker_args, device):
     ).to(device)
     
     for params in climatesam.image_encoder.parameters():
-        params.requires_grad = False
+        params.requires_grad = True
     for params in climatesam.mask_decoder.parameters():
-        params.requires_grad = False
+        params.requires_grad = True
+        
+    for params in prompt_generator.parameters():
+        params.requires_grad = True
         
 
     return climatesam, prompt_generator
@@ -641,7 +637,7 @@ def main_worker(worker_id, worker_args):
     print(f"Worker {worker_id} initialized on device {device} with local_rank {local_rank}.")
 
     climatesam, prompt_generator = set_up_model(worker_args, device)
-    optimizer, scheduler = setup_optimizer_and_scheduler(prompt_generator, worker_args)  # Changed to prompt_generator
+    optimizer, scheduler = setup_optimizer_and_scheduler(climatesam, prompt_generator, worker_args)  
     
     prompt_maker = PromptMaker(prompt_type='point', positive_point_num=worker_args.positive_point_num, negative_point_num=worker_args.negative_point_num)
     

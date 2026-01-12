@@ -539,14 +539,14 @@ def worker_init_fn(worker_id: int, base_seed: int, same_worker_seed: bool = True
     torch.cuda.manual_seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
 
-def setup_optimizer_and_scheduler(model, worker_args):
+def setup_optimizer_and_scheduler(model, prompter, worker_args):
     """
     Sets up optimizer and scheduler for the prompt generator.
     """
     lr = getattr(worker_args, 'lr', 1e-4)
     weight_decay = getattr(worker_args, 'weight_decay', 1e-4)
 
-    all_trainable_params = list(p for p in model.parameters() if p.requires_grad)
+    all_trainable_params = list(p for p in model.parameters() if p.requires_grad) + list(p for p in prompter.parameters() if p.requires_grad)
 
     optimizer = torch.optim.AdamW(
         params=all_trainable_params, lr=lr, weight_decay=weight_decay
