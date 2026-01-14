@@ -597,6 +597,7 @@ def main_worker(worker_id, worker_args):
     best_miou_tc = 0
     best_miou_ar = 0
     best_miou_total = 0
+    best_logit_miou = 0
     ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     
@@ -611,13 +612,13 @@ def main_worker(worker_id, worker_args):
         
         # Validation
         if epoch % worker_args.valid_per_epochs == 0 or epoch == max_epoch_num:
-            miou_tc, miou_ar = validate_one_epoch(
+            miou_tc, miou_ar, logit_mean_iou = validate_one_epoch(
                 epoch, val_dataloader, ar_metrics, tc_metrics, 
                 climatesam, prompt_generator, prompt_maker, device, 
                 max_epoch_num, worker_args
             )
-            print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}")
-            
+            print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}, Logit mIoU: {logit_mean_iou:.2%}")
+
             if miou_tc > best_miou_tc:
                 best_miou_tc = miou_tc
                 print(f'Best mIoU TC has been updated to {best_miou_tc:.2%}!')
@@ -626,37 +627,70 @@ def main_worker(worker_id, worker_args):
                 best_miou_ar = miou_ar
                 print(f'Best mIoU AR has been updated to {best_miou_ar:.2%}!')
                 
-            if (miou_tc + miou_ar) / 2 > best_miou_total:
-                best_miou_total = (miou_tc + miou_ar) / 2
-                print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
-                
+            if logit_mean_iou > best_logit_miou:
+                best_logit_miou = logit_mean_iou
+                print(f'Best Logit mIoU has been updated to {best_logit_miou:.2%}!')
                 # Save best model (including all components)
                 if worker_args.save_model and epoch > 4:
                     # Create best_weights directory if it doesn't exist
                     best_weights_dir = os.path.join(worker_args.exp_dir, 'best_weights')
                     os.makedirs(best_weights_dir, exist_ok=True)
-                    
-                    save_path = os.path.join(best_weights_dir, f"complete_model_best.pth")
+
+                    save_path = os.path.join(best_weights_dir, f"best_generator_fuse_channels_{worker_args.fuse_channels}_sam_type_{worker_args.sam_type}.pth")
                     complete_model_weights = {
-                        'image_encoder': climatesam.image_encoder.state_dict(),
-                        'mask_decoder': climatesam.mask_decoder.state_dict(),
+                        # 'image_encoder': climatesam.image_encoder.state_dict(),
+                        # 'mask_decoder': climatesam.mask_decoder.state_dict(),
                         'prompt_generator': prompt_generator.state_dict(),
                         'epoch': epoch,
-                        'best_miou_tc': best_miou_tc,
-                        'best_miou_ar': best_miou_ar,
-                        'best_miou_total': best_miou_total,
+                        # 'best_miou_tc': best_miou_tc,
+                        # 'best_miou_ar': best_miou_ar,
+                        # 'best_miou_total': best_miou_total,
+                        'best_logit_miou': best_logit_miou,
                     }
                     
-                    # Add input adapter if it exists
-                    if hasattr(climatesam, 'input_adapter'):
-                        complete_model_weights['input_adapter'] = climatesam.input_adapter.state_dict()
-                        
+                    
+                            
                     torch.save(complete_model_weights, save_path)
                     print(f"Complete model weights saved to {save_path}")
                     
                     if worker_args.wandb:
                         wandb.save(save_path)
                         print(f"Complete model weights saved to wandb: {save_path}")
+                
+            if (miou_tc + miou_ar) / 2 > best_miou_total:
+                best_miou_total = (miou_tc + miou_ar) / 2
+                print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
+                # Save best model (including all components)
+                if worker_args.save_model and epoch > 4:
+                    # Create best_weights directory if it doesn't exist
+                    best_weights_dir = os.path.join(worker_args.exp_dir, 'best_weights')
+                    os.makedirs(best_weights_dir, exist_ok=True)
+
+                    save_path = os.path.join(best_weights_dir, f"best_model_sam_type_{worker_args.sam_type}.pth")
+                    complete_model_weights = {
+                        'image_encoder': climatesam.image_encoder.state_dict(),
+                        'mask_decoder': climatesam.mask_decoder.state_dict(),
+                        # 'prompt_generator': prompt_generator.state_dict(),
+                        'epoch': epoch,
+                        'best_miou_tc': best_miou_tc,
+                        'best_miou_ar': best_miou_ar,
+                        'best_miou_total': best_miou_total,
+                        # 'best_logit_miou': best_logit_miou,
+                    }
+                    
+                    
+                            
+                    torch.save(complete_model_weights, save_path)
+                    print(f"Complete model weights saved to {save_path}")
+                    
+                    if worker_args.wandb:
+                        wandb.save(save_path)
+                        print(f"Complete model weights saved to wandb: {save_path}")
+                
+           
+                
+                
+            
         
         # Training
         train_one_epoch(
