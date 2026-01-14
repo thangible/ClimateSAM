@@ -149,56 +149,16 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
             
             step_count += 1
             epoch_loss_count += 1
-            
-            # Log step-level metrics to wandb (optional, for detailed monitoring)
-            if hasattr(worker_args, 'wandb') and worker_args.wandb and local_rank == 0:
-                step_losses = {key: epoch_loss_dict[key] / epoch_loss_count for key in epoch_loss_dict.keys() if key != 'total_loss_for_backward'}
-                
-                # Distributed reduction of losses for current step
-                if torch.distributed.is_initialized():
-                    for key in step_losses.keys():
-                        tensor_loss = torch.tensor(step_losses[key], device=device)
-                        torch.distributed.reduce(tensor_loss, dst=0, op=torch.distributed.ReduceOp.SUM)
-                        step_losses[key] = (tensor_loss / torch.distributed.get_world_size()).item()
-                
-                # Log step metrics (optional - comment out if too frequent)
-                step_log_dict = {f"train_step/{key}": step_losses[key] for key in step_losses.keys()}
-                step_log_dict["train_step/learning_rate"] = scheduler.get_last_lr()[0]
-                step_log_dict["global_step"] = epoch * len(train_dataloader) + train_step
-                wandb.log(step_log_dict)
-                
-    
-    # Calculate average losses for the entire epoch 
-    if epoch_loss_count > 0:
-        avg_epoch_losses = {key: epoch_loss_dict[key] / epoch_loss_count for key in epoch_loss_dict.keys() if key != 'total_loss_for_backward'}
-        
 
-        
-        # Log to wandb once per epoch
-        if worker_args.wandb and local_rank == 0:
-            log_dict = {f"train/{key}": avg_epoch_losses[key] for key in avg_epoch_losses.keys()}
-            log_dict["epoch"] = epoch
-            log_dict["learning_rate"] = scheduler.get_last_lr()[0]
-            wandb.log(log_dict, step=epoch)
-            
-    # Close progress bars
-    if local_rank == 0 and batch_pbar:
-        batch_pbar.close()
-            
-    scheduler.step()
+            step_loss_dict = {key: epoch_loss_dict[key] / epoch_loss_count for key in epoch_loss_dict.keys()}
 
-
-    # Handle any remaining gradients if the last batch doesn't complete a full accumulation
     if len(train_dataloader) % gradient_accumulation_steps != 0:
         scaler.step(optimizer)
         scaler.update()
         optimizer.zero_grad()
         step_count += 1
         epoch_loss_count += 1
-        # if step_pbar:
-        #     step_pbar.update(1)
-    
-    # Calculate average losses for the entire epoch
+        
     if epoch_loss_count > 0:
         avg_epoch_losses = {key: epoch_loss_dict[key] / epoch_loss_count for key in epoch_loss_dict.keys()}
         
@@ -216,27 +176,17 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
             log_dict["learning_rate"] = scheduler.get_last_lr()[0]
             wandb.log(log_dict, step=epoch)
             
+    # Close progress bars
+    if local_rank == 0 and batch_pbar:
+        batch_pbar.close()
+            
+    scheduler.step()
+            
     # Close progress bar
     if batch_pbar:
         batch_pbar.close()
             
     scheduler.step()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 # ------------------------------------------------------------
@@ -360,7 +310,8 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
                 )
                 
                 if worker_args.wandb:
-                    wandb_images[f"valid/final_pred_image_{i}"] = wandb.Image(fig, caption=f"Final Predictions - Image {i}")
+                    wandb_images[f"valid/val_step_{val_step}_final_pred_image_{i}"] = wandb.Image(fig, caption=f"Validation Step {val_step} Final Predictions - Image {i}")
+                    print(f"Epoch {epoch} - Final image {i} logged to W&B.")
                 
                 # Intermediate masks visualization
                 if interm_ar_masks_copy and interm_tc_masks_copy and i < len(interm_ar_masks_copy):
@@ -374,8 +325,9 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
                     )
                     
                     if worker_args.wandb:
-                        wandb_images[f"valid/interm_pred_image_{i}"] = wandb.Image(interm_fig, caption=f"Intermediate Predictions - Image {i}")
-                
+                        wandb_images[f"valid/val_step_{val_step}_interm_pred_image_{i}"] = wandb.Image(interm_fig, caption=f"Validation Step {val_step} Intermediate Predictions - Image {i}")
+                        print(f"Epoch {epoch} - Intermediate image {i} logged to W&B.")
+
                 # Final logit visualization (multiclass)
                 if final_logit_copy and i < len(final_logit_copy):
                     final_logit_pred_mask = final_logit_copy[i]
@@ -388,8 +340,9 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
                     )
                     
                     if worker_args.wandb:
-                        wandb_images[f"valid/logit_pred_image_{i}"] = wandb.Image(logit_fig, caption=f"Final Logit Predictions - Image {i}")
-            
+                        wandb_images[f"valid/val_step_{val_step}_logit_pred_image_{i}"] = wandb.Image(logit_fig, caption=f"Validation Step {val_step} Final Logit Predictions - Image {i}")
+                        print(f"Epoch {epoch} - Logit image {i} logged to W&B.")
+
             # Log all images at once for the same epoch
             if worker_args.wandb and wandb_images:
                 wandb_images["epoch"] = epoch
@@ -467,7 +420,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
     interm_ar_metrics.reset()
     interm_tc_metrics.reset()
     final_logit_metrics.reset()
-    
+     
     # Log metrics to wandb
     if worker_args.wandb:
         wandb.log({
@@ -500,7 +453,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
         }, step=epoch)
     
     valid_pbar.close()
-    return miou_tc, miou_ar
+    return miou_tc, miou_ar, logit_mean_iou
 
 
 
