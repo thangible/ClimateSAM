@@ -56,22 +56,24 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
     
     for train_step, batch in enumerate(train_dataloader):
         batch = batch_to_cuda(batch, device)
-        
-        with torch.amp.autocast('cuda'):
-            # Step 1: Encode images to get intermediate features
+
+        # Encode images with no_grad (we don't train ClimateSAM)
+        with torch.no_grad():
             image_embeddings, interm_features, image_input, ori_img_size = climatesam.encode_images(batch['input'])
-            
-            # Step 2: Generate masks and auxiliary predictions from intermediate features
+            # detach to be 100% sure no graph links back to ClimateSAM
+            image_embeddings = image_embeddings.detach()
+            interm_features = [f.detach() for f in interm_features]
+            image_input = image_input.detach()
+
+        # Only the prompter needs gradients
+        with torch.amp.autocast('cuda'):
             final_logit, interm_masks = prompter(interm_features)
-            
-            # Use Softmax to get probability maps for visualization
             softmax_final_logit = F.softmax(final_logit, dim=1)
             multiclass_mask = torch.argmax(softmax_final_logit, dim=1)
-
-            # Step 3: Create prompts from generated masks
             prompt_dict = prompt_maker.make_prompts(multiclass_mask)
-            
-            # Step 4: Forward through the rest of the model with generated prompts
+
+        # ClimateSAM forward also doesn't require gradients (we don't train it)
+        with torch.no_grad():
             tc_pred_masks, ar_pred_masks, _ = climatesam.forward(
                 image_input=image_input,
                 image_embeddings=image_embeddings,
@@ -84,41 +86,31 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
                 ar_mask_prompts=prompt_dict['ar_mask_prompts'],
                 tc_mask_prompts=prompt_dict['tc_mask_prompts']
             )
-            
-            # Ground truth masks
-            gt_masks = torch.stack(batch['gt_mask'], dim=0).to(device)  # B, H, W
-            masks_ar_gt = prompt_dict['ar_object_masks']
-            masks_tc_gt = prompt_dict['tc_object_masks']
-            
-            # Compute generator loss (auxiliary predictions)
-            loss_gen = compute_generator_loss(
-                multiclass_mask=softmax_final_logit,
-                interm_masks=interm_masks,
-                gt_masks=gt_masks,
-                device=device,
-                worker_args=worker_args
-            )
-            
-            # # Compute model loss (final predictions)
-            # loss_model = compute_climate_loss(
-            #     ar_masks=ar_pred_masks,
-            #     tc_masks=tc_pred_masks,
-            #     ar_masks_gt=masks_ar_gt,
-            #     tc_masks_gt=masks_tc_gt,
-            #     device=device,
-            #     worker_args=worker_args
-            # )
-            
-            # Combine losses
-            loss_dict = {}
-            loss_dict.update({f"gen_{k}": v for k, v in loss_gen.items()})
-            # loss_dict.update({f"model_{k}": v for k, v in loss_model.items()})
-            
-            # Total loss for backward
-            total_loss_gen = loss_gen.pop('total_loss_for_backward')
-            # total_loss_model = loss_model.pop('total_loss_for_backward')
-            total_loss = total_loss_gen # + total_loss_model
-            loss_dict['total_loss_for_backward'] = total_loss
+
+        # Compute generator loss (prompter is trained)
+        loss_gen = compute_generator_loss(
+            multiclass_mask=softmax_final_logit,
+            interm_masks=interm_masks,
+            gt_masks=torch.stack(batch['gt_mask'], dim=0).to(device),
+            device=device,
+            worker_args=worker_args
+        )
+
+        # Free ClimateSAM-related tensors before backward to reduce peak
+        del image_embeddings, image_input, tc_pred_masks, ar_pred_masks
+        # optionally also:
+        # import gc; gc.collect(); torch.cuda.empty_cache()
+
+        # Combine losses
+        loss_dict = {}
+        loss_dict.update({f"gen_{k}": v for k, v in loss_gen.items()})
+        # loss_dict.update({f"model_{k}": v for k, v in loss_model.items()})
+        
+        # Total loss for backward
+        total_loss_gen = loss_gen.pop('total_loss_for_backward')
+        # total_loss_model = loss_model.pop('total_loss_for_backward')
+        total_loss = total_loss_gen # + total_loss_model
+        loss_dict['total_loss_for_backward'] = total_loss
         
         # Scale loss by gradient accumulation steps
         total_loss = total_loss / gradient_accumulation_steps
