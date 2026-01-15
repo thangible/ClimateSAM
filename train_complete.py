@@ -65,8 +65,9 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
             final_logit, interm_masks = prompter(interm_features)
             
             # Use Softmax to get probability maps for visualization
-            multiclass_mask = F.softmax(final_logit, dim=1)
-            
+            softmax_final_logit = F.softmax(final_logit, dim=1)
+            multiclass_mask = torch.argmax(softmax_final_logit, dim=1)
+
             # Step 3: Create prompts from generated masks
             prompt_dict = prompt_maker.make_prompts(multiclass_mask)
             
@@ -91,32 +92,32 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
             
             # Compute generator loss (auxiliary predictions)
             loss_gen = compute_generator_loss(
-                multiclass_mask=multiclass_mask,
+                multiclass_mask=softmax_final_logit,
                 interm_masks=interm_masks,
                 gt_masks=gt_masks,
                 device=device,
                 worker_args=worker_args
             )
             
-            # Compute model loss (final predictions)
-            loss_model = compute_climate_loss(
-                ar_masks=ar_pred_masks,
-                tc_masks=tc_pred_masks,
-                ar_masks_gt=masks_ar_gt,
-                tc_masks_gt=masks_tc_gt,
-                device=device,
-                worker_args=worker_args
-            )
+            # # Compute model loss (final predictions)
+            # loss_model = compute_climate_loss(
+            #     ar_masks=ar_pred_masks,
+            #     tc_masks=tc_pred_masks,
+            #     ar_masks_gt=masks_ar_gt,
+            #     tc_masks_gt=masks_tc_gt,
+            #     device=device,
+            #     worker_args=worker_args
+            # )
             
             # Combine losses
             loss_dict = {}
             loss_dict.update({f"gen_{k}": v for k, v in loss_gen.items()})
-            loss_dict.update({f"model_{k}": v for k, v in loss_model.items()})
+            # loss_dict.update({f"model_{k}": v for k, v in loss_model.items()})
             
             # Total loss for backward
             total_loss_gen = loss_gen.pop('total_loss_for_backward')
-            total_loss_model = loss_model.pop('total_loss_for_backward')
-            total_loss = total_loss_gen + total_loss_model
+            # total_loss_model = loss_model.pop('total_loss_for_backward')
+            total_loss = total_loss_gen # + total_loss_model
             loss_dict['total_loss_for_backward'] = total_loss
         
         # Scale loss by gradient accumulation steps
@@ -306,7 +307,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
                 save_path = os.path.join(worker_args.exp_dir, worker_args.run_name, 'images', f"epoch_{epoch}_step_{val_step}_image_{i}.png")
                 fig = plot_mask_with_points_and_bbox(
                     mask, ar_points, tc_points, ar_bbox, tc_bbox, 
-                    tc_pred_mask, ar_pred_mask, radius=8, save_path=save_path, axis=True
+                    tc_pred_mask, ar_pred_mask, radius=8, save_path=save_path, axis=True, title = f"Epoch {epoch} - Prediction {i}"
                 )
                 
                 if worker_args.wandb:
@@ -321,12 +322,12 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
                     interm_save_path = os.path.join(worker_args.exp_dir, worker_args.run_name, 'images', f"epoch_{epoch}_step_{val_step}_interm_{i}.png")
                     interm_fig = plot_mask_with_points_and_bbox(
                         mask, ar_points, tc_points, ar_bbox, tc_bbox,
-                        interm_tc_pred, interm_ar_pred, radius=8, save_path=interm_save_path, axis=True
+                        interm_tc_pred, interm_ar_pred, radius=8, save_path=interm_save_path, axis=True, title = f"Epoch {epoch} - Intermediate Prediction {i}"
                     )
                     
                     if worker_args.wandb:
                         wandb_images[f"valid/val_step_{val_step}_interm_pred_image_{i}"] = wandb.Image(interm_fig, caption=f"Validation Step {val_step} Intermediate Predictions - Image {i}")
-                        print(f"Epoch {epoch} - Intermediate image {i} logged to W&B.")
+                        print(f"Epoch {epoch} - Generator Intermediate Prediction {i} logged to W&B.")
 
                 # Final logit visualization (multiclass)
                 if final_logit_copy and i < len(final_logit_copy):
@@ -336,7 +337,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
                     # For multiclass, we can visualize it as a single mask with different values
                     logit_fig = plot_mask_with_points_and_bbox(
                         mask, ar_points, tc_points, ar_bbox, tc_bbox,
-                        final_logit_pred_mask, final_logit_pred_mask, radius=8, save_path=logit_save_path, axis=True
+                        final_logit_pred_mask, final_logit_pred_mask, radius=8, save_path=logit_save_path, axis=True, title = f"Epoch {epoch} - Generator Prediction {i}"
                     )
                     
                     if worker_args.wandb:
@@ -564,10 +565,12 @@ def set_up_model(worker_args, device):
         features_per_block=features_per_block[worker_args.sam_type]
     ).to(device)
     
-    for params in climatesam.image_encoder.parameters():
-        params.requires_grad = True
-    for params in climatesam.mask_decoder.parameters():
-        params.requires_grad = True
+    for params in climatesam.parameters():
+        params.requires_grad = False
+    # for params in climatesam.image_encoder.parameters():
+    #     params.requires_grad = True
+    # for params in climatesam.mask_decoder.parameters():
+    #     params.requires_grad = True
         
     for params in prompt_generator.parameters():
         params.requires_grad = True
@@ -657,35 +660,35 @@ def main_worker(worker_id, worker_args):
                         wandb.save(save_path)
                         print(f"Complete model weights saved to wandb: {save_path}")
                 
-            if (miou_tc + miou_ar) / 2 > best_miou_total:
-                best_miou_total = (miou_tc + miou_ar) / 2
-                print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
-                # Save best model (including all components)
-                if worker_args.save_model and epoch > 4:
-                    # Create best_weights directory if it doesn't exist
-                    best_weights_dir = os.path.join(worker_args.exp_dir, 'best_weights')
-                    os.makedirs(best_weights_dir, exist_ok=True)
+            # if (miou_tc + miou_ar) / 2 > best_miou_total:
+            #     best_miou_total = (miou_tc + miou_ar) / 2
+            #     print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
+            #     # Save best model (including all components)
+            #     if worker_args.save_model and epoch > 4:
+            #         # Create best_weights directory if it doesn't exist
+            #         best_weights_dir = os.path.join(worker_args.exp_dir, 'best_weights')
+            #         os.makedirs(best_weights_dir, exist_ok=True)
 
-                    save_path = os.path.join(best_weights_dir, f"best_model_sam_type_{worker_args.sam_type}.pth")
-                    complete_model_weights = {
-                        'image_encoder': climatesam.image_encoder.state_dict(),
-                        'mask_decoder': climatesam.mask_decoder.state_dict(),
-                        # 'prompt_generator': prompt_generator.state_dict(),
-                        'epoch': epoch,
-                        'best_miou_tc': best_miou_tc,
-                        'best_miou_ar': best_miou_ar,
-                        'best_miou_total': best_miou_total,
-                        # 'best_logit_miou': best_logit_miou,
-                    }
+            #         save_path = os.path.join(best_weights_dir, f"best_model_sam_type_{worker_args.sam_type}.pth")
+            #         complete_model_weights = {
+            #             'image_encoder': climatesam.image_encoder.state_dict(),
+            #             'mask_decoder': climatesam.mask_decoder.state_dict(),
+            #             # 'prompt_generator': prompt_generator.state_dict(),
+            #             'epoch': epoch,
+            #             'best_miou_tc': best_miou_tc,
+            #             'best_miou_ar': best_miou_ar,
+            #             'best_miou_total': best_miou_total,
+            #             # 'best_logit_miou': best_logit_miou,
+            #         }
                     
                     
                             
-                    torch.save(complete_model_weights, save_path)
-                    print(f"Complete model weights saved to {save_path}")
+            #         torch.save(complete_model_weights, save_path)
+            #         print(f"Complete model weights saved to {save_path}")
                     
-                    if worker_args.wandb:
-                        wandb.save(save_path)
-                        print(f"Complete model weights saved to wandb: {save_path}")
+            #         if worker_args.wandb:
+            #             wandb.save(save_path)
+            #             print(f"Complete model weights saved to wandb: {save_path}")
                 
            
                 

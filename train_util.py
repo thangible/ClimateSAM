@@ -164,7 +164,7 @@ def plot_with_projection(image, ar_pred, tc_pred, ar_gt, tc_gt, save_path, use_p
 
 
 def plot_mask_with_points_and_bbox(mask, ar_points=None, tc_points=None, ar_bbox=None, tc_bbox=None, 
-                                   tc_pred_mask=None, ar_pred_mask=None, radius=8, save_path='exp', axis=False):
+                                   tc_pred_mask=None, ar_pred_mask=None, radius=8, save_path='exp', axis=False, title = None):
     if isinstance(mask, torch.Tensor):
         mask = mask.cpu().numpy()
     
@@ -301,7 +301,12 @@ def plot_mask_with_points_and_bbox(mask, ar_points=None, tc_points=None, ar_bbox
         legend_elements.append(plt.Line2D([0], [0], color='magenta', lw=2, linestyle='-', label='TC Prediction'))
 
     ax.legend(handles=legend_elements, loc='lower right', bbox_to_anchor=(1, -0.25), frameon=False, fontsize=14, ncol=4, columnspacing=0.5)
-    ax.set_title("Mask with AR/TC Points, BBoxes and Predictions", fontsize=16)
+    
+    
+    # Add title and labels
+    if title is None:
+        title = "Mask with AR/TC Points, BBoxes and Predictions"
+    ax.set_title(title, fontsize=16)
 
     # Show or hide axis/ruler
     if axis:
