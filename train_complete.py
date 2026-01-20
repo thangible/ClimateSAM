@@ -24,20 +24,16 @@ from dataset.climatenet import ClimateDataset
 from model.prompt_generator import PromptGenerator
 from model.prompt.prompt_maker import PromptMaker
 
-
-
-
-
-
-
 # ------------------------------------------------------------
-# TRAINING 
+# TRAINING
 # ------------------------------------------------------------
 
-    
+
 def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler, gradient_accumulation_steps):
     climatesam.eval()
     prompter.train()
+    # Monitor initial memory
+    monitor_gpu_memory("Training start")
     
     # Calculate effective number of optimizer steps
     effective_steps = len(train_dataloader) // gradient_accumulation_steps
@@ -85,6 +81,7 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
                 tc_mask_prompts=prompt_dict['tc_mask_prompts']
             )
             
+            
             # Ground truth masks
             gt_masks = torch.stack(batch['gt_mask'], dim=0).to(device)  # B, H, W
             masks_ar_gt = prompt_dict['ar_object_masks']
@@ -92,7 +89,7 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
             
             # Compute generator loss (auxiliary predictions)
             loss_gen = compute_generator_loss(
-                multiclass_mask=softmax_final_logit,
+                multiclass_mask=final_logit,
                 interm_masks=interm_masks,
                 gt_masks=gt_masks,
                 device=device,
@@ -456,8 +453,6 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
     valid_pbar.close()
     return miou_tc, miou_ar, logit_mean_iou
 
-
-
 #-----------------------------------------------------------
 # DATA
 #-----------------------------------------------------------
@@ -732,3 +727,9 @@ if __name__ == '__main__':
     if len(args.used_gpu) == 1:
         main_worker(worker_id=0, worker_args=args)
 
+
+def monitor_gpu_memory(step_name=""):
+    if torch.cuda.is_available():
+        allocated_gb = torch.cuda.memory_allocated() / 1024**3
+        reserved_gb = torch.cuda.memory_reserved() / 1024**3
+        print(f"{step_name} - Allocated: {allocated_gb:.2f}GB, Reserved: {reserved_gb:.2f}GB")
