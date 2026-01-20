@@ -67,6 +67,14 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
             softmax_final_logit = F.softmax(final_logit, dim=1)
             multiclass_mask = torch.argmax(softmax_final_logit, dim=1)
             prompt_dict = prompt_maker.make_prompts(multiclass_mask)
+            
+            # Ensure all prompts are on the correct device
+            for key in prompt_dict:
+                if prompt_dict[key] is not None:
+                    if isinstance(prompt_dict[key], list):
+                        prompt_dict[key] = [item.to(device) if item is not None else None for item in prompt_dict[key]]
+                    else:
+                        prompt_dict[key] = prompt_dict[key].to(device)
 
         # ClimateSAM forward also doesn't require gradients (we don't train it)
         with torch.no_grad():

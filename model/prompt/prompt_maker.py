@@ -34,7 +34,7 @@ class PromptMaker:
             
         for i in range(batch_size):
             mask_np = masks[i].squeeze(0).cpu().numpy() 
-            mask_np = distance_transform(mask_np, threshold=0.5)
+            # mask_np = distance_transform(mask_np, threshold=0.5)
             ar_mask = (mask_np == 2).astype(np.uint8)
             tc_mask = (mask_np == 1).astype(np.uint8)   
             # if sum(tc_mask.flatten()) == 0:
