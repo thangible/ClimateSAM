@@ -10,7 +10,7 @@ run_name = train_complete
 ; num_workers = None
 gradient_accumulation_steps = 4
 train_bs = 8
-val_bs = 1
+val_bs = 2
 ; weight_decay = 1e-4
 lr = 1e-4
 
@@ -25,7 +25,7 @@ prompt_type = point
 ; sam_type = vit_l
 sam_type = vit_l
 ; cat_type = cat-a
-fuse_channels = 32
+fuse_channels = 128
 
 [TRAINING LOOP]
 ; shot_num = 1
@@ -60,6 +60,7 @@ image_encoder_mlp_ratio = 0.5
 
 [DEBUGGING]
 load_pretrained = True
-wandb = False
-save_model = False
+wandb = True
+save_model = True
 debugging = False
+

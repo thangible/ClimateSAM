@@ -52,22 +52,24 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
     
     for train_step, batch in enumerate(train_dataloader):
         batch = batch_to_cuda(batch, device)
-        
-        with torch.amp.autocast('cuda'):
-            # Step 1: Encode images to get intermediate features
+
+        # Encode images with no_grad (we don't train ClimateSAM)
+        with torch.no_grad():
             image_embeddings, interm_features, image_input, ori_img_size = climatesam.encode_images(batch['input'])
-            
-            # Step 2: Generate masks and auxiliary predictions from intermediate features
+            # detach to be 100% sure no graph links back to ClimateSAM
+            image_embeddings = image_embeddings.detach()
+            interm_features = [f.detach() for f in interm_features]
+            image_input = image_input.detach()
+
+        # Only the prompter needs gradients
+        with torch.amp.autocast('cuda'):
             final_logit, interm_masks = prompter(interm_features)
-            
-            # Use Softmax to get probability maps for visualization
             softmax_final_logit = F.softmax(final_logit, dim=1)
             multiclass_mask = torch.argmax(softmax_final_logit, dim=1)
-
-            # Step 3: Create prompts from generated masks
             prompt_dict = prompt_maker.make_prompts(multiclass_mask)
-            
-            # Step 4: Forward through the rest of the model with generated prompts
+
+        # ClimateSAM forward also doesn't require gradients (we don't train it)
+        with torch.no_grad():
             tc_pred_masks, ar_pred_masks, _ = climatesam.forward(
                 image_input=image_input,
                 image_embeddings=image_embeddings,
