@@ -33,7 +33,7 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
     climatesam.eval()
     prompter.train()
     # Monitor initial memory
-    monitor_gpu_memory("Training start")
+    # monitor_gpu_memory("Training start")
     
     # Calculate effective number of optimizer steps
     effective_steps = len(train_dataloader) // gradient_accumulation_steps
@@ -66,18 +66,26 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
             final_logit, interm_masks = prompter(interm_features)
             softmax_final_logit = F.softmax(final_logit, dim=1)
             multiclass_mask = torch.argmax(softmax_final_logit, dim=1)
-            prompt_dict = prompt_maker.make_prompts(multiclass_mask)
             
-            # Ensure all prompts are on the correct device
-            for key in prompt_dict:
-                if prompt_dict[key] is not None:
-                    if isinstance(prompt_dict[key], list):
-                        prompt_dict[key] = [item.to(device) if item is not None else None for item in prompt_dict[key]]
-                    else:
-                        prompt_dict[key] = prompt_dict[key].to(device)
+            # Ground truth masks
+            gt_masks = torch.stack(batch['gt_mask'], dim=0).to(device)  # B, H, W
+
+            
+            # Compute generator loss (auxiliary predictions)
+            loss_gen = compute_generator_loss(
+                multiclass_mask=final_logit,
+                interm_masks=interm_masks,
+                gt_masks=gt_masks,
+                device=device,
+                worker_args=worker_args
+            )
+            
 
         # ClimateSAM forward also doesn't require gradients (we don't train it)
         with torch.no_grad():
+            prompt_dict = prompt_maker.make_prompts(multiclass_mask)
+            prompt_dict = batch_to_cuda(prompt_dict, device)
+                        
             tc_pred_masks, ar_pred_masks, _ = climatesam.forward(
                 image_input=image_input,
                 image_embeddings=image_embeddings,
@@ -91,20 +99,12 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
                 tc_mask_prompts=prompt_dict['tc_mask_prompts']
             )
             
-            
-            # Ground truth masks
-            gt_masks = torch.stack(batch['gt_mask'], dim=0).to(device)  # B, H, W
             masks_ar_gt = prompt_dict['ar_object_masks']
             masks_tc_gt = prompt_dict['tc_object_masks']
             
-            # Compute generator loss (auxiliary predictions)
-            loss_gen = compute_generator_loss(
-                multiclass_mask=final_logit,
-                interm_masks=interm_masks,
-                gt_masks=gt_masks,
-                device=device,
-                worker_args=worker_args
-            )
+            
+            
+            
             
             # # Compute model loss (final predictions)
             # loss_model = compute_climate_loss(
@@ -116,16 +116,16 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
             #     worker_args=worker_args
             # )
             
-            # Combine losses
-            loss_dict = {}
-            loss_dict.update({f"gen_{k}": v for k, v in loss_gen.items()})
-            # loss_dict.update({f"model_{k}": v for k, v in loss_model.items()})
-            
-            # Total loss for backward
-            total_loss_gen = loss_gen.pop('total_loss_for_backward')
-            # total_loss_model = loss_model.pop('total_loss_for_backward')
-            total_loss = total_loss_gen # + total_loss_model
-            loss_dict['total_loss_for_backward'] = total_loss
+        # Combine losses
+        loss_dict = {}
+        loss_dict.update({f"gen_{k}": v for k, v in loss_gen.items()})
+        # loss_dict.update({f"model_{k}": v for k, v in loss_model.items()})
+        
+        # Total loss for backward
+        total_loss_gen = loss_gen.pop('total_loss_for_backward')
+        # total_loss_model = loss_model.pop('total_loss_for_backward')
+        total_loss = total_loss_gen # + total_loss_model
+        loss_dict['total_loss_for_backward'] = total_loss
         
         # Scale loss by gradient accumulation steps
         total_loss = total_loss / gradient_accumulation_steps
@@ -215,19 +215,27 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
     for val_step, batch in enumerate(val_dataloader):
         batch = batch_to_cuda(batch, device)
         
-        with torch.amp.autocast('cuda'):
+        with torch.no_grad():
             # Step 1: Encode images to get intermediate features (same as training)
             image_embeddings, interm_features, image_input, ori_img_size = climatesam.encode_images(batch['input'])
+            # detach to be 100% sure no graph links back to ClimateSAM
+            image_embeddings = image_embeddings.detach()
+            interm_features = [f.detach() for f in interm_features]
+            image_input = image_input.detach()
             
-            # Step 2: Generate masks and auxiliary predictions from intermediate features
+            
             final_logit, interm_masks = prompter(interm_features)
+            softmax_final_logit = F.softmax(final_logit, dim=1)
+            multiclass_mask = torch.argmax(softmax_final_logit, dim=1)
             
-            # Use Softmax to get probability maps for prompt generation
-            interm_masks = [F.softmax(mask, dim=1) for mask in interm_masks] if interm_masks is not None else None
-            multiclass_mask = F.softmax(final_logit, dim=1)
+            # Ground truth masks
+            gt_masks = torch.stack(batch['gt_mask'], dim=0).to(device)  # B, H, W
+
             
-            # Step 3: Create prompts from generated masks
             prompt_dict = prompt_maker.make_prompts(multiclass_mask)
+            prompt_dict = batch_to_cuda(prompt_dict, device)
+            
+
             
             # Step 4: Forward through the rest of the model with generated prompts
             tc_pred_masks, ar_pred_masks, _ = climatesam.forward(
@@ -702,9 +710,11 @@ def main_worker(worker_id, worker_args):
         
         # Training
         train_one_epoch(
-            epoch, train_dataloader, climatesam, prompt_generator, prompt_maker,
-            optimizer, scheduler, device, local_rank, worker_args, 
-            max_epoch_num, scaler, gradient_accumulation_steps
+            epoch = epoch, train_dataloader=train_dataloader, climatesam=climatesam, prompter=prompt_generator,
+            prompt_maker=prompt_maker, optimizer=optimizer, scheduler=scheduler, scaler=scaler,
+            device=device, max_epoch_num=max_epoch_num, worker_args=worker_args,
+            gradient_accumulation_steps=gradient_accumulation_steps, local_rank=local_rank
+            
         )
     
     print(f"Training completed!")

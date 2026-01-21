@@ -244,159 +244,216 @@ def log_prompter_predictions(epoch, embeddings_file_path, prompt_generator, devi
     prompt_generator.train()
 
 @torch.no_grad()
-def validate_prompter(epoch, embeddings_file_path, prompt_generator, device, worker_args, sample_limit=None):
+def validate_prompter(epoch, val_source, prompt_generator, device, worker_args, sample_limit=None):
     """
-    Validate prompt generator using mIoU metrics every 5 epochs.
-    Adapted to use the single multi-class output (Class 1=TC, Class 2=AR).
-    
-    Args:
-        epoch: Current epoch number
-        embeddings_file_path: List of embedding file paths
-        prompt_generator: The prompt generator model
-        device: Training device
-        worker_args: Training arguments
-        sample_limit: Number of samples to evaluate (None for all)
+    Validate prompt generator every 5 epochs.
+
+    Accepts either:
+      - a DataLoader yielding batches with keys:
+            'input', 'ar_point_prompts', 'tc_point_prompts',
+            'ar_bbox_prompts', 'tc_bbox_prompts', 'gt_mask', 'index_name'
+      - OR the previous list-of-embedding-filepaths behavior (backward compatible).
     """
     if epoch % 5 != 0:
         return None, None
-        
+
     prompt_generator.eval()
-    
-    # Initialize metrics for binary segmentation (Foreground vs Background)
-    # The assumption is that Class 1 (TC) is Foreground for TC_metrics, and Class 2 (AR) 
-    # is Foreground for AR_metrics.
+
     ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
-    
-    # Select files for validation
-    validation_files = embeddings_file_path if sample_limit is None else embeddings_file_path[:sample_limit]
-    
-    if hasattr(worker_args, 'verbose') and worker_args.verbose:
-        try:
-            pbar = tqdm(validation_files, desc=f'Validation Epoch {epoch}')
-        except NameError:
-            pbar = validation_files
-    else:
-        pbar = validation_files
-    
-    total_samples = 0
-    
-    for embedding_file in pbar:
-        try:
-            # Load embeddings
-            embeddings = torch.load(embedding_file, map_location='cpu')
-            imgs, img_features, interm_embeddings, gt_masks, index = (
-                embeddings['imgs'], 
-                embeddings['img_features'], 
-                embeddings['interm_features'], 
-                embeddings['gt_mask'], 
-                embeddings['index_name']
+
+    # If a DataLoader is provided, run the new batched validation loop
+    if isinstance(val_source, DataLoader):
+        val_dataloader = val_source
+        valid_pbar = tqdm(total=len(val_dataloader), desc='valid', leave=False)
+
+        total_samples = 0
+        for val_step, batch in enumerate(val_dataloader):
+            batch = batch_to_cuda(batch, device)
+
+            # Set inference images once
+            _ = prompt_generator.set_infer_img(batch['input'])
+
+            ar_point_prompts_copy = copy.deepcopy(batch['ar_point_prompts'])
+            tc_point_prompts_copy = copy.deepcopy(batch['tc_point_prompts'])
+            ar_bbox_prompts_copy = copy.deepcopy(batch['ar_bbox_prompts'])
+            tc_bbox_prompts_copy = copy.deepcopy(batch['tc_bbox_prompts'])
+
+            # Perform inference with prompts (model returns tc_masks, ar_masks)
+            tc_masks, ar_masks = prompt_generator.infer(
+                ar_point_prompts=batch['ar_point_prompts'],
+                tc_point_prompts=batch['tc_point_prompts'],
+                ar_bbox_prompts=batch['ar_bbox_prompts'],
+                tc_bbox_prompts=batch['tc_bbox_prompts']
             )
-            
-            # Move to device
-            interm_embeddings = [e.to(device) for e in interm_embeddings]
-            gt_masks = gt_masks.to(device)
-            
-            # Generate predictions
-            final_logit, _ = prompt_generator(interm_embeddings)
-            
-            # Convert logits to hard multi-class prediction (B, H, W)
-            pred_mask = torch.argmax(final_logit, dim=1)
-            
-            # -----------------------------------------------
-            # 1. Prepare AR masks (Class 2)
-            # -----------------------------------------------
-            # Predicted AR: 1 where argmax == 2, else 0
-            ar_pred = (pred_mask == 2).long() 
-            # Ground Truth AR: 1 where GT == 2, else 0
-            ar_gt = (gt_masks == 2).long()
-            
-            # -----------------------------------------------
-            # 2. Prepare TC masks (Class 1)
-            # -----------------------------------------------
-            # Predicted TC: 1 where argmax == 1, else 0
-            tc_pred = (pred_mask == 1).long()
-            # Ground Truth TC: 1 where GT == 1, else 0
-            tc_gt = (gt_masks == 1).long()
-            
-            # Ensure proper dimensions for metrics
-            def prepare_mask_for_metrics(mask):
-                """Prepare mask (B, H, W) for StreamSegMetrics (numpy uint8)."""
-                # Metric expects values 0 (BG) or 1 (FG)
-                if len(mask.shape) == 4:
-                    mask = mask.squeeze(1) 
-                
-                # Convert to numpy and ensure type is uint8
-                return mask.cpu().numpy().astype(np.uint8)
-            
-            # Prepare masks for metrics computation
-            ar_pred_np = prepare_mask_for_metrics(ar_pred)
-            tc_pred_np = prepare_mask_for_metrics(tc_pred)
-            ar_gt_np = prepare_mask_for_metrics(ar_gt)
-            tc_gt_np = prepare_mask_for_metrics(tc_gt)
-            
-            # Update metrics
-            ar_metrics.update(ar_pred_np, ar_gt_np, [f"{index}_ar"])
-            tc_metrics.update(tc_pred_np, tc_gt_np, [f"{index}_tc"])
-            
+
+            masks_gt = batch['gt_mask']
+            # Support both tensor (B,H,W) or list of masks
+            if torch.is_tensor(masks_gt):
+                masks_gt_list = [masks_gt[i] for i in range(masks_gt.shape[0])]
+            else:
+                masks_gt_list = masks_gt
+
+            masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt_list]
+            masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt_list]
+
+            # ensure masks have shape (B,1,H,W) when provided as list of tensors
+            for masks in [masks_ar_gts, masks_tc_gts, ar_masks, tc_masks]:
+                for i in range(len(masks)):
+                    m = masks[i]
+                    if not torch.is_tensor(m):
+                        m = torch.tensor(m)
+                    if len(m.shape) == 2:
+                        m = m[None, None, :]
+                    elif len(m.shape) == 3:
+                        # (B, H, W) -> (B,1,H,W)
+                        if m.shape[0] != 1:
+                            m = m[:, None, :]
+                        else:
+                            m = m[:, None, :]
+                    if len(m.shape) != 4:
+                        raise RuntimeError("Mask has unexpected shape during validation.")
+                    masks[i] = m
+
+            # LOG first batch images for this epoch
+            if val_step == 0:
+                wandb_images = {}
+                masks_gt_copy = copy.deepcopy(masks_gt_list)
+                tc_masks_copy = copy.deepcopy(tc_masks)
+                ar_masks_copy = copy.deepcopy(ar_masks)
+                for i in range(len(masks_gt_copy)):
+                    mask = masks_gt_copy[i]
+                    ar_points = ar_point_prompts_copy[i]
+                    tc_points = tc_point_prompts_copy[i]
+                    ar_bbox = ar_bbox_prompts_copy[i]
+                    tc_bbox = tc_bbox_prompts_copy[i]
+                    tc_pred_mask = tc_masks_copy[i]
+                    ar_pred_mask = ar_masks_copy[i]
+                    save_dir = os.path.join(worker_args.exp_dir, getattr(worker_args, 'run_name', ''), 'images')
+                    os.makedirs(save_dir, exist_ok=True)
+                    save_path = os.path.join(save_dir, f"epoch_{epoch}_step_{val_step}_image_{i}.png")
+                    fig = plot_mask_with_points_and_bbox(mask, ar_points, tc_points, ar_bbox, tc_bbox, tc_pred_mask, ar_pred_mask, radius=8, save_path=save_path, axis=True)
+
+                    if getattr(worker_args, 'wandb', False):
+                        wandb_images[f"valid/val_step_{val_step}_image_{i}"] = wandb.Image(fig, caption=f"Validation Step {val_step} Image {i}")
+
+                if getattr(worker_args, 'wandb', False) and wandb_images:
+                    wandb_images["epoch"] = epoch
+                    wandb.log(wandb_images, step=epoch)
+
+                del ar_point_prompts_copy, tc_point_prompts_copy, ar_bbox_prompts_copy, tc_bbox_prompts_copy, masks_gt_copy, tc_masks_copy, ar_masks_copy
+                torch.cuda.empty_cache()
+
+            # Update metrics (StreamSegMetrics accepts lists of tensors)
+            tc_metrics.update(tc_masks, masks_tc_gts, batch['index_name'])
+            ar_metrics.update(ar_masks, masks_ar_gts, batch['index_name'])
+
             total_samples += 1
-            
-            # Update progress bar
-            if hasattr(pbar, 'set_postfix'):
-                pbar.set_postfix({
-                    'samples': total_samples,
-                    'file': os.path.basename(embedding_file)
-                })
-            
-            # Clean up
-            del embeddings, imgs, img_features, interm_embeddings, gt_masks
-            torch.cuda.empty_cache()
-            
-        except Exception as e:
-            print(f"Error processing validation file {embedding_file}: {e}")
-            continue
-    
+            valid_pbar.update(1)
+            valid_pbar.set_postfix_str(f"Epoch: {epoch}/{getattr(worker_args, 'max_epoch_num', '?')}.")
+
+        valid_pbar.close()
+
+    else:
+        # Backward compatible: val_source is list of embedding file paths (original behavior)
+        validation_files = val_source if sample_limit is None else val_source[:sample_limit]
+        if hasattr(worker_args, 'verbose') and worker_args.verbose:
+            try:
+                pbar = tqdm(validation_files, desc=f'Validation Epoch {epoch}')
+            except NameError:
+                pbar = validation_files
+        else:
+            pbar = validation_files
+
+        total_samples = 0
+        for embedding_file in pbar:
+            try:
+                embeddings = torch.load(embedding_file, map_location='cpu')
+                imgs, img_features, interm_embeddings, gt_masks, index = (
+                    embeddings['imgs'],
+                    embeddings['img_features'],
+                    embeddings['interm_features'],
+                    embeddings['gt_mask'],
+                    embeddings['index_name']
+                )
+
+                interm_embeddings = [e.to(device) for e in interm_embeddings]
+                gt_masks = gt_masks.to(device)
+
+                final_logit, _ = prompt_generator(interm_embeddings)
+                pred_mask = torch.argmax(final_logit, dim=1)
+
+                tc_pred = (pred_mask == 1).long()
+                ar_pred = (pred_mask == 2).long()
+                tc_gt = (gt_masks == 1).long()
+                ar_gt = (gt_masks == 2).long()
+
+                def prepare_mask_for_metrics(mask):
+                    if len(mask.shape) == 4:
+                        mask = mask.squeeze(1)
+                    return mask.cpu().numpy().astype(np.uint8)
+
+                ar_pred_np = prepare_mask_for_metrics(ar_pred)
+                tc_pred_np = prepare_mask_for_metrics(tc_pred)
+                ar_gt_np = prepare_mask_for_metrics(ar_gt)
+                tc_gt_np = prepare_mask_for_metrics(tc_gt)
+
+                ar_metrics.update(ar_pred_np, ar_gt_np, [f"{index}_ar"])
+                tc_metrics.update(tc_pred_np, tc_gt_np, [f"{index}_tc"])
+
+                total_samples += 1
+
+                if hasattr(pbar, 'set_postfix'):
+                    pbar.set_postfix({
+                        'samples': total_samples,
+                        'file': os.path.basename(embedding_file)
+                    })
+
+                del embeddings, imgs, img_features, interm_embeddings, gt_masks
+                torch.cuda.empty_cache()
+
+            except Exception as e:
+                print(f"Error processing validation file {embedding_file}: {e}")
+                continue
+
     # Compute final metrics
     ar_metric_dict, _ = ar_metrics.compute()
     tc_metric_dict, _ = tc_metrics.compute()
-    
-    # Extract key metrics
+
     miou_ar = ar_metric_dict['Mean Foreground IoU']
     mean_acc_ar = ar_metric_dict['Mean Acc']
     overall_acc_ar = ar_metric_dict['Overall Acc']
-    
+    freqw_acc_ar = ar_metric_dict.get('FreqW Acc', 0.0)
+    miout_including_bg_ar = ar_metric_dict.get('Mean IoU', 0.0)
+
     miou_tc = tc_metric_dict['Mean Foreground IoU']
     mean_acc_tc = tc_metric_dict['Mean Acc']
     overall_acc_tc = tc_metric_dict['Overall Acc']
-    
-    # Calculate combined metrics
-    miou_combined = (miou_ar + miou_tc) / 2
-    
-    # Log metrics to wandb
-    if hasattr(worker_args, 'wandb') and worker_args.wandb:
+    freqw_acc_tc = tc_metric_dict.get('FreqW Acc', 0.0)
+    miout_including_bg_tc = tc_metric_dict.get('Mean IoU', 0.0)
+
+    # Log to wandb
+    if getattr(worker_args, 'wandb', False):
         wandb.log({
             "valid_prompter/miou_ar": miou_ar,
             "valid_prompter/miou_tc": miou_tc,
-            "valid_prompter/miou_combined": miou_combined,
+            "valid_prompter/miou_combined": (miou_ar + miou_tc) / 2,
             "valid_prompter/mean_acc_ar": mean_acc_ar,
             "valid_prompter/mean_acc_tc": mean_acc_tc,
             "valid_prompter/overall_acc_ar": overall_acc_ar,
             "valid_prompter/overall_acc_tc": overall_acc_tc,
             "epoch": epoch,
         }, step=epoch)
-    
-    # Print results
+
     print(f"Epoch {epoch} Validation Results:")
     print(f"  AR  - mIoU: {miou_ar:.4f}, Mean Acc: {mean_acc_ar:.4f}, Overall Acc: {overall_acc_ar:.4f}")
     print(f"  TC  - mIoU: {miou_tc:.4f}, Mean Acc: {mean_acc_tc:.4f}, Overall Acc: {overall_acc_tc:.4f}")
-    print(f"  Combined mIoU: {miou_combined:.4f}")
-    
-    # Reset metrics
+    print(f"  Combined mIoU: {(miou_ar + miou_tc) / 2:.4f}")
+
     ar_metrics.reset()
     tc_metrics.reset()
-    
+
     prompt_generator.train()
-    
     return miou_ar, miou_tc
 
 def main_worker(worker_args):
@@ -457,13 +514,13 @@ def main_worker(worker_args):
     # Initialize prompt generator
     prompt_generator = PromptGenerator(
         in_channels=in_channels[model_type],
-        fused_channels=64,
+        fused_channels=worker_args.fuse_channels,
         num_features=num_features_map[model_type],
         features_per_block=features_per_block[model_type]
     ).to(device)
     
     # Setup optimizer and scheduler
-    optimizer, scheduler = setup_optimizer_and_scheduler(prompt_generator, worker_args)
+    optimizer, scheduler = setup_optimizer_and_scheduler(model=None, prompter=prompt_generator, worker_args=worker_args)
     
     # Initialize scaler
     scaler = torch.amp.GradScaler('cuda')
@@ -507,7 +564,7 @@ def main_worker(worker_args):
                     
                     # Save best model
                     if hasattr(worker_args, 'save_model') and worker_args.save_model:
-                        save_path = os.path.join(worker_args.exp_dir, f"prompt_generator_best.pth")
+                        save_path = os.path.join(worker_args.exp_dir, f"generator_fuse_channels_{worker_args.fuse_channels}_sam_type_{worker_args.sam_type}.pth")
                         os.makedirs(os.path.dirname(save_path), exist_ok=True)
                         torch.save({
                             'epoch': epoch,

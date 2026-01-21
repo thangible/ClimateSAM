@@ -494,7 +494,7 @@ def batch_to_cuda(batch, device):
             batch[key] = [
                 (item[0].to(device=device, dtype=torch.float32),
                  item[1].to(device=device, dtype=torch.float32))
-                if item[0] is not None
+                if (item is not None and item[0] is not None)
                 else None
                 for item in batch[key]
             ]
@@ -551,7 +551,13 @@ def setup_optimizer_and_scheduler(model, prompter, worker_args):
     lr = getattr(worker_args, 'lr', 1e-4)
     weight_decay = getattr(worker_args, 'weight_decay', 1e-4)
 
-    all_trainable_params = list(p for p in model.parameters() if p.requires_grad) + list(p for p in prompter.parameters() if p.requires_grad)
+    if model is None:
+        all_trainable_params = list(p for p in prompter.parameters() if p.requires_grad)
+    elif prompter is None:
+        all_trainable_params = list(p for p in model.parameters() if p.requires_grad)
+    else:
+        all_trainable_params = list(p for p in model.parameters() if p.requires_grad) + list(p for p in prompter.parameters() if p.requires_grad)
+    
 
     optimizer = torch.optim.AdamW(
         params=all_trainable_params, lr=lr, weight_decay=weight_decay

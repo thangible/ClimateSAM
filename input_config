@@ -8,7 +8,7 @@ run_name = train_complete
 
 [BATCH CONFIG]
 ; num_workers = None
-gradient_accumulation_steps = 4
+gradient_accumulation_steps = 1
 train_bs = 8
 val_bs = 2
 ; weight_decay = 1e-4
@@ -60,7 +60,7 @@ image_encoder_mlp_ratio = 0.5
 
 [DEBUGGING]
 load_pretrained = True
-wandb = True
-save_model = True
+wandb = False
+save_model = Tru
 debugging = False
 
