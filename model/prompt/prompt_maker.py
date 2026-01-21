@@ -19,18 +19,20 @@ class PromptMaker:
         self.negative_point_num = negative_point_num
 
     @torch.no_grad()
-    def make_prompts(self, masks: torch.Tensor):
+    def make_prompts(self, masks: torch.Tensor, prompt_type = None):
         batch_size = len(masks)
         prompt_list = []
         
         
-        #if prompt_type is a list, randomly choose one for each sample
-        if isinstance(self.prompt_type, (list, tuple)):
-            if len(self.prompt_type) == 0:
-                raise ValueError("prompt_type list must be non-empty")
-            prompt_type = random.choice(self.prompt_type)
-        else:
-            prompt_type = self.prompt_type
+        # #if prompt_type is a list, randomly choose one for each sample
+        # if isinstance(self.prompt_type, (list, tuple)):
+        #     if len(self.prompt_type) == 0:
+        #         raise ValueError("prompt_type list must be non-empty")
+        #     prompt_type = random.choice(self.prompt_type)
+        # else:
+        #     prompt_type = self.prompt_type
+        
+        prompt_type = random.choice(['bbox', 'point'])
             
         for i in range(batch_size):
             mask_np = masks[i].squeeze(0).cpu().numpy() 
@@ -102,7 +104,7 @@ def make_bbox_prompts(binary_mask, connectivity, threshold=20):
     
     return bboxes_prompts, object_masks
 
-def make_point_prompts(binary_mask, connectivity, threshold=20, num_positive_points=5, num_negative_points=5, erode_size=1, dilate_size=15):
+def make_point_prompts(binary_mask, connectivity, threshold=20, num_positive_points=5, num_negative_points=0, erode_size=1, dilate_size=15):
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_mask.astype(np.uint8), connectivity=connectivity)
     object_masks_list = []
     positive_points_list = []
@@ -121,24 +123,27 @@ def make_point_prompts(binary_mask, connectivity, threshold=20, num_positive_poi
             positive_points = make_positive_point_prompts(object_mask=object_masks, object_centroid=object_centroid, num_points=num_positive_points, erode_size=erode_size)
             positive_points_list.append(positive_points)
             #NEGATIVE POINTS
-            negative_points = make_negative_point_prompts(object_mask=object_masks, object_centroid=object_centroid, num_points=num_negative_points, dilate_size=dilate_size)
-            negative_points_list.append(negative_points)
-            
-            
+            if num_negative_points > 0:
+                negative_points = make_negative_point_prompts(object_mask=object_masks, object_centroid=object_centroid, num_points=num_negative_points, dilate_size=dilate_size)
+                negative_points_list.append(negative_points)
+
     object_masks = torch.from_numpy(np.stack(object_masks_list, axis=0)).to(torch.float32).unsqueeze(1) if object_masks_list else None
     
-    if len(positive_points_list) == 0 or len(negative_points_list) == 0 or len(object_masks_list) == 0:
+    if len(positive_points_list) == 0 or len(object_masks_list) == 0:
         return None, None
         
     # all entries in positive_points_list / negative_points_list are now arrays with shape (N_pos,2) and (N_neg,2)
     positive_point_coords = torch.from_numpy(np.stack(positive_points_list, axis=0)).to(torch.float32)
-    negative_point_coords = torch.from_numpy(np.stack(negative_points_list, axis=0)).to(torch.float32)
-    
-    point_coords = torch.cat([positive_point_coords, negative_point_coords], dim=1)
     positive_point_labels = torch.ones(positive_point_coords.shape[:-1], dtype=torch.float32)
-    negative_point_labels = torch.zeros(negative_point_coords.shape[:-1], dtype=torch.float32)
-    
-    point_labels = torch.cat([positive_point_labels, negative_point_labels], dim=1)
+    if num_negative_points > 0:
+        negative_point_coords = torch.from_numpy(np.stack(negative_points_list, axis=0)).to(torch.float32)
+        negative_point_labels = torch.zeros(negative_point_coords.shape[:-1], dtype=torch.float32)
+        point_coords = torch.cat([positive_point_coords, negative_point_coords], dim=1)
+        point_labels = torch.cat([positive_point_labels, negative_point_labels], dim=1)
+    else:
+        point_coords = positive_point_coords
+        point_labels = positive_point_labels
+
     point_prompts = (point_coords, point_labels)
     
     
@@ -175,20 +180,26 @@ def make_negative_point_prompts(object_mask, object_centroid, num_points=5, dila
     
 def make_positive_point_prompts(object_mask, object_centroid, num_points=5, erode_size=1):
     eroded_mask = cv2.erode(object_mask.astype(np.uint8), kernel=np.ones((erode_size,erode_size), np.uint8), iterations=1)
-    object_points = np.argwhere(eroded_mask)
+    
+    if num_points == 1:
+        return np.array([object_centroid], dtype=float)
+    
+    else:
+        
+        object_points = np.argwhere(eroded_mask)
 
-    if len(object_points) == 0:
-        # fallback: use centroid repeated to satisfy requested number
+        # if len(object_points) == 0:
+        #     # fallback: use centroid repeated to satisfy requested number
+        #     centroid_arr = np.array(object_centroid, dtype=float).reshape(1, 2)
+        #     positive_points = np.tile(centroid_arr, (num_points + 1, 1))  # include centroid + requested points
+        #     return positive_points
+
+        replace = num_points > len(object_points)  - 1
+        selected_indices = np.random.choice(len(object_points), size=num_points, replace=replace)
+        positive_points = object_points[selected_indices][:, ::-1].astype(float)  # (num_points, 2) in (x,y)
         centroid_arr = np.array(object_centroid, dtype=float).reshape(1, 2)
-        positive_points = np.tile(centroid_arr, (num_points + 1, 1))  # include centroid + requested points
+        positive_points = np.vstack([positive_points, centroid_arr])  # ensure last entry is centroid
         return positive_points
-
-    replace = num_points > len(object_points)
-    selected_indices = np.random.choice(len(object_points), size=num_points, replace=replace)
-    positive_points = object_points[selected_indices][:, ::-1].astype(float)  # (num_points, 2) in (x,y)
-    centroid_arr = np.array(object_centroid, dtype=float).reshape(1, 2)
-    positive_points = np.vstack([positive_points, centroid_arr])  # ensure last entry is centroid
-    return positive_points
 
 def make_noisy_mask_on_objects(binary_mask, connectivity, threshold, scale_factor: int = 8, noisy_mask_threshold: float = 0.5, h=256, w=256):
     """

@@ -17,8 +17,8 @@ lr = 1e-4
 [PHASE]
 phase = 1
 augmented = False
-positive_point_num = 2
-negative_point_num = 2
+positive_point_num = 1
+negative_point_num = 0
 prompt_type = point
 
 [MODEL CONFIG]
