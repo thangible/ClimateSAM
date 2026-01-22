@@ -368,68 +368,125 @@ class GeneratorLoss(nn.Module):
 def compute_generator_loss(multiclass_mask, interm_masks, gt_masks, device, worker_args, 
                           lambda_factors: list = None, num_blocks: int = 4) -> Dict[str, torch.Tensor]:
     """
-    Compute loss for generator (auxiliary predictions) with multi-level supervision.
+    Compute loss for generator (auxiliary predictions) with multi-level supervision using Tversky and BCE losses.
     
     Args:
-        multiclass_mask: Final multiclass logits (B, C, H, W)
+        multiclass_mask: Final multiclass logits (B, 3, H, W) - [background, TC, AR]
         interm_masks: List of intermediate multiclass logits from different resolution levels
-        gt_masks: Ground truth masks (B, H_gt, W_gt) of type long
+        gt_masks: Ground truth masks (B, H_gt, W_gt) of type long - [0=background, 1=TC, 2=AR]
         device: Device to compute on
-        worker_args: Training arguments (currently unused but kept for compatibility)
+        worker_args: Training arguments containing loss weights and parameters
         lambda_factors: Weights for intermediate losses, if None will use default decaying weights
         num_blocks: Number of blocks for default lambda calculation
     
     Returns:
         Dictionary containing loss components
     """
-    # Handle lambda factors like in GeneratorLoss class
+    # Handle lambda factors
     if lambda_factors is None:
         lambda_factors = [0.4 / (i + 1) for i in range(num_blocks)]
     
-    # Move ground truth to device and ensure correct type
+    # Move ground truth to device
     gt_masks = gt_masks.to(device).long()
     
-    # Initialize CrossEntropy criterion
-    criterion = nn.CrossEntropyLoss()
+    def compute_multiclass_losses(logits, gt_mask):
+        """Compute Tversky and BCE losses for multiclass logits"""
+        # Extract TC and AR logits (channels 1 and 2)
+        tc_logits = logits[:, 1, :, :]  # Channel 1: TC
+        ar_logits = logits[:, 2, :, :]  # Channel 2: AR
+        
+        # Create binary ground truth masks
+        tc_gt = (gt_mask == 1).float()  # TC class
+        ar_gt = (gt_mask == 2).float()  # AR class
+        
+        # Compute TC losses
+        tc_tversky = calculate_tversky_loss(
+            tc_logits, tc_gt, 
+            alpha=worker_args.alpha_tc_tversky, 
+            beta=worker_args.beta_tc_tversky
+        )
+        tc_bce = calculate_bce_loss(tc_logits, tc_gt, weight=worker_args.bce_weight_tc)
+        
+        # Compute AR losses  
+        ar_tversky = calculate_tversky_loss(
+            ar_logits, ar_gt,
+            alpha=worker_args.alpha_ar_tversky,
+            beta=worker_args.beta_ar_tversky
+        )
+        ar_bce = calculate_bce_loss(ar_logits, ar_gt, weight=worker_args.bce_weight_ar)
+        
+        # Apply weights and theta_tc factor
+        theta_tc = getattr(worker_args, 'theta_tc', 5.0)
+        tversky_weight = getattr(worker_args, 'tversky_weight', 3.0)
+        bce_weight = getattr(worker_args, 'bce_weight', 1.0)
+        
+        weighted_tc_tversky = tc_tversky * tversky_weight * theta_tc
+        weighted_ar_tversky = ar_tversky * tversky_weight
+        
+        weighted_tc_bce = tc_bce * bce_weight * theta_tc  
+        weighted_ar_bce = ar_bce * bce_weight
+        
+        total_tversky = weighted_tc_tversky + weighted_ar_tversky
+        total_bce = weighted_tc_bce + weighted_ar_bce
+        total_loss = total_tversky + total_bce
+        
+        return {
+            'total_loss': total_loss,
+            'tversky_loss': total_tversky,
+            'bce_loss': total_bce,
+            'tc_tversky': weighted_tc_tversky,
+            'ar_tversky': weighted_ar_tversky,
+            'tc_bce': weighted_tc_bce,
+            'ar_bce': weighted_ar_bce
+        }
     
     # 1. Final Loss (Full Resolution)
-    # Assuming multiclass_mask is already interpolated to match gt_masks' H, W
-    loss_final = criterion(multiclass_mask, gt_masks)
-    total_loss = loss_final.clone()
+    final_losses = compute_multiclass_losses(multiclass_mask, gt_masks)
+    total_loss = final_losses['total_loss'].clone()
     
     # 2. Intermediate Losses (Multi-Level Supervision)
     loss_intermediate_sum = torch.tensor(0.0, device=device)
+    intermediate_tversky_sum = torch.tensor(0.0, device=device)
+    intermediate_bce_sum = torch.tensor(0.0, device=device)
     
     if interm_masks is not None and len(interm_masks) > 0:
-        # We assume interm_masks are ordered from the lowest resolution (first block)
         for i, logit in enumerate(interm_masks):
-            # i=0 is the coarsest level, i=len(interm_masks)-1 is the finest intermediate level
-            
             # Determine target size for downsampling GT
             target_size = logit.shape[-2:]
             
             # Downsample the ground truth mask to match logit's spatial size
-            # IMPORTANT: Use 'nearest' for ground truth to maintain discrete class labels
             downsampled_gt = F.interpolate(
                 gt_masks.unsqueeze(1).float(),  # B, 1, H_gt, W_gt
                 size=target_size, 
                 mode='nearest'
             ).squeeze(1).long()  # B, H', W'
 
-            # Calculate loss for this level
-            loss_level = criterion(logit, downsampled_gt)
+            # Calculate losses for this level
+            level_losses = compute_multiclass_losses(logit, downsampled_gt)
             
             # Apply weighting factor
             lambda_i = lambda_factors[i] if i < len(lambda_factors) else 0.1
-            weighted_loss_level = lambda_i * loss_level
+            weighted_level_loss = lambda_i * level_losses['total_loss']
+            weighted_tversky = lambda_i * level_losses['tversky_loss']
+            weighted_bce = lambda_i * level_losses['bce_loss']
             
-            loss_intermediate_sum = loss_intermediate_sum + weighted_loss_level
-            total_loss = total_loss + weighted_loss_level
+            loss_intermediate_sum = loss_intermediate_sum + weighted_level_loss
+            intermediate_tversky_sum = intermediate_tversky_sum + weighted_tversky
+            intermediate_bce_sum = intermediate_bce_sum + weighted_bce
+            total_loss = total_loss + weighted_level_loss
     
-    # Ensure returned scalar summaries are tensors (detached to avoid interfering with backprop)
+    # Return comprehensive loss dictionary
     return {
-        'total_loss_for_backward': total_loss,                         # tensor with grad for backprop
-        'total_loss': total_loss.detach(),                            # detached tensor for logging
-        'final_loss': loss_final.detach(),                            # detached tensor for logging
-        'intermediate_loss_sum': loss_intermediate_sum.detach()       # detached tensor for logging
+        'total_loss_for_backward': total_loss,                                    # tensor with grad for backprop
+        'total_loss': total_loss.detach(),                                       # detached for logging
+        'final_loss': final_losses['total_loss'].detach(),                       # detached for logging
+        'final_tversky_loss': final_losses['tversky_loss'].detach(),            # detached for logging
+        'final_bce_loss': final_losses['bce_loss'].detach(),                    # detached for logging
+        'final_tc_tversky': final_losses['tc_tversky'].detach(),                # detached for logging
+        'final_ar_tversky': final_losses['ar_tversky'].detach(),                # detached for logging
+        'final_tc_bce': final_losses['tc_bce'].detach(),                        # detached for logging
+        'final_ar_bce': final_losses['ar_bce'].detach(),                        # detached for logging
+        'intermediate_loss_sum': loss_intermediate_sum.detach(),                 # detached for logging
+        'intermediate_tversky_sum': intermediate_tversky_sum.detach(),          # detached for logging
+        'intermediate_bce_sum': intermediate_bce_sum.detach()                   # detached for logging
     }
