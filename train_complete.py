@@ -241,8 +241,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
             tc_point_prompts_copy = copy.deepcopy(prompt_dict['tc_point_prompts'])
             ar_bbox_prompts_copy = copy.deepcopy(prompt_dict['ar_bbox_prompts'])
             tc_bbox_prompts_copy = copy.deepcopy(prompt_dict['tc_bbox_prompts'])
-            ar_mask_prompts_copy = copy.deepcopy(prompt_dict['ar_mask_prompts'])
-            tc_mask_prompts_copy = copy.deepcopy(prompt_dict['tc_mask_prompts'])
+
 
             # Step 4: Forward through the rest of the model with generated prompts
             tc_pred_masks, ar_pred_masks, _ = climatesam.forward(
@@ -250,12 +249,12 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
                 image_embeddings=image_embeddings,
                 interm_embeddings=interm_features,
                 ori_img_size=ori_img_size,
-                ar_point_prompts=ar_point_prompts_copy,
-                tc_point_prompts=tc_point_prompts_copy,
-                ar_bbox_prompts=ar_bbox_prompts_copy,
-                tc_bbox_prompts=tc_bbox_prompts_copy,
-                ar_mask_prompts=ar_mask_prompts_copy,
-                tc_mask_prompts=tc_mask_prompts_copy
+                ar_point_prompts=prompt_dict['ar_point_prompts'],
+                tc_point_prompts=prompt_dict['tc_point_prompts'],
+                ar_bbox_prompts=prompt_dict['ar_bbox_prompts'],
+                tc_bbox_prompts=prompt_dict['tc_bbox_prompts'],
+                ar_mask_prompts=prompt_dict['ar_mask_prompts'],
+                tc_mask_prompts=prompt_dict['tc_mask_prompts']
             )
         
         # Ground truth masks
