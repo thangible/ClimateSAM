@@ -225,7 +225,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
             
             
             final_logit, interm_masks = prompter(interm_features)
-            interm_masks = [F.interpolate(mask, size=ori_img_size, mode='bilinear', align_corners=False) for mask in interm_masks]
+            interm_masks = [F.interpolate(mask, size=ori_img_size[0], mode='bilinear', align_corners=False) for mask in interm_masks]
             
             softmax_final_logit = F.softmax(final_logit, dim=1) # B, 3, H, W
             multiclass_mask = torch.argmax(softmax_final_logit, dim=1) # B, H, W
@@ -584,6 +584,13 @@ def set_up_model(worker_args, device):
         num_features=num_features_map[worker_args.sam_type],
         features_per_block=features_per_block[worker_args.sam_type]
     ).to(device)
+    
+    if worker_args.load_pretrained:
+        generator_path = os.path.join(worker_args.exp_dir,'best_weights', f"best_generator_fuse_channels_{worker_args.fuse_channels}_sam_type_{worker_args.sam_type}.pth")
+        phase_2_checkpoint = torch.load(generator_path, map_location=device, weights_only=False)
+        print(f"Pretrained weights for prompt generator from phase 2 loaded from {generator_path}")
+        prompt_generator.load_state_dict(phase_2_checkpoint['prompt_generator'])
+        print(f"Prompt generator weights loaded from {generator_path}")
     
     for params in climatesam.parameters():
         params.requires_grad = False
