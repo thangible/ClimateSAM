@@ -64,3 +64,6 @@ wandb = False
 save_model = Tru
 debugging = False
 
+
+[VANILLA SAM CONFIG]
+data_type = 'ar'
