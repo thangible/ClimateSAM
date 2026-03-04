@@ -109,10 +109,14 @@ def prepare_batch_for_vanilla_sam(batch, data_type='ar'):
                 # point_prompt is a tuple (coords, labels)
                 input_dict['point_coords'] = point_prompt[0]  # coordinates
                 input_dict['point_labels'] = point_prompt[1]   # labels
-            
+                # mask inputs for SAM
+
             bbox_prompt = batch['ar_bbox_prompts'][i]
             if bbox_prompt is not None:
                 input_dict['boxes'] = bbox_prompt
+            mask_prompt = batch['ar_mask_prompts'][i]
+            if mask_prompt is not None:
+                input_dict['mask_inputs'] = mask_prompt
         elif data_type == 'tc':
             point_prompt = batch['tc_point_prompts'][i]
             if point_prompt is not None and point_prompt[0] is not None:
@@ -123,6 +127,9 @@ def prepare_batch_for_vanilla_sam(batch, data_type='ar'):
             bbox_prompt = batch['tc_bbox_prompts'][i]
             if bbox_prompt is not None:
                 input_dict['boxes'] = bbox_prompt
+            mask_prompt = batch['tc_mask_prompts'][i]
+            if mask_prompt is not None:
+                input_dict['mask_inputs'] = mask_prompt
                 
         batched_input.append(input_dict)
     
@@ -216,10 +223,12 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
             pred_masks = [output['masks'] for output in outputs]
             
             # Get ground truth masks based on data type
-            masks_gt = batch['gt_mask']
+            
             if data_type == 'ar':
+                masks_gt = batch['ar_object_masks']
                 gt_masks = [(mask == 2).to(torch.uint8) for mask in masks_gt]
             else:  # tc
+                masks_gt = batch['tc_object_masks']
                 gt_masks = [(mask == 1).to(torch.uint8) for mask in masks_gt]
             
             # Compute loss
