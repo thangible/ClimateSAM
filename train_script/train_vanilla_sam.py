@@ -1,3 +1,7 @@
+import sys
+import os 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import random
 import numpy as np
 import torch
@@ -78,24 +82,47 @@ def prepare_batch_for_vanilla_sam(batch, data_type='ar'):
     batched_input = []
     
     for i in range(batch_size):
+        # Use only first 3 channels for SAM (expects RGB)
+        image = batch['input'][i]
+        if image.shape[0] > 3:
+            image = image[:3]  # Take first 3 channels
+        
+        # Resize to SAM's expected size (1024x1024)
+        # SAM expects image to be in shape (C, H, W)
+        original_size = image.shape[-2:]  # (H, W)
+        image = F.interpolate(
+            image.unsqueeze(0),  # Add batch dimension
+            size=(1024, 1024),
+            mode='bilinear',
+            align_corners=False
+        ).squeeze(0)  # Remove batch dimension
+        
         input_dict = {
-            'image': batch['input'][i],
-            'original_size': batch['input'][i].shape[-2:],  # (H, W)
+            'image': image,
+            'original_size': original_size,  # Store original size for mask resizing later
         }
         
         # Add prompts based on data type
         if data_type == 'ar':
-            if batch['ar_point_prompts'][i] is not None:
-                input_dict['point_coords'] = batch['ar_point_prompts'][i][:, :2]  # x, y coordinates
-                input_dict['point_labels'] = batch['ar_point_prompts'][i][:, 2]   # labels
-            if batch['ar_bbox_prompts'][i] is not None:
-                input_dict['boxes'] = batch['ar_bbox_prompts'][i]
+            point_prompt = batch['ar_point_prompts'][i]
+            if point_prompt is not None and point_prompt[0] is not None:
+                # point_prompt is a tuple (coords, labels)
+                input_dict['point_coords'] = point_prompt[0]  # coordinates
+                input_dict['point_labels'] = point_prompt[1]   # labels
+            
+            bbox_prompt = batch['ar_bbox_prompts'][i]
+            if bbox_prompt is not None:
+                input_dict['boxes'] = bbox_prompt
         elif data_type == 'tc':
-            if batch['tc_point_prompts'][i] is not None:
-                input_dict['point_coords'] = batch['tc_point_prompts'][i][:, :2]  # x, y coordinates
-                input_dict['point_labels'] = batch['tc_point_prompts'][i][:, 2]   # labels
-            if batch['tc_bbox_prompts'][i] is not None:
-                input_dict['boxes'] = batch['tc_bbox_prompts'][i]
+            point_prompt = batch['tc_point_prompts'][i]
+            if point_prompt is not None and point_prompt[0] is not None:
+                # point_prompt is a tuple (coords, labels)
+                input_dict['point_coords'] = point_prompt[0]  # coordinates
+                input_dict['point_labels'] = point_prompt[1]   # labels
+            
+            bbox_prompt = batch['tc_bbox_prompts'][i]
+            if bbox_prompt is not None:
+                input_dict['boxes'] = bbox_prompt
                 
         batched_input.append(input_dict)
     
@@ -110,8 +137,21 @@ def compute_vanilla_sam_loss(pred_masks, gt_masks, device):
     dice_loss = 0.0
     
     for i, (pred, gt) in enumerate(zip(pred_masks, gt_masks)):
-        # Get the best mask from multimask output
-        if pred.shape[1] > 1:  # Multiple masks
+        # Convert gt to float
+        gt = gt.float()
+        
+        # Expand gt dimensions to match pred if needed
+        if len(gt.shape) == 2:
+            gt = gt.unsqueeze(0).unsqueeze(0)  # Add batch and channel dimensions
+        elif len(gt.shape) == 3:
+            gt = gt.unsqueeze(0)  # Add batch dimension
+        
+        # Select first mask if multiple masks from SAM multimask output
+        if len(pred.shape) == 4 and pred.shape[0] > 1:
+            pred = pred[0:1]  # Take first mask, keep batch dimension
+        
+        # Get the best mask from multimask output (if multiple masks per image)
+        if pred.shape[1] > 1:  # Multiple masks per image
             # Choose mask with highest IoU score or use first mask
             pred = pred[:, 0:1, :, :]  # Use first mask
         
@@ -125,7 +165,7 @@ def compute_vanilla_sam_loss(pred_masks, gt_masks, device):
         # Focal loss
         alpha = 0.25
         gamma = 2.0
-        ce_loss = F.binary_cross_entropy_with_logits(pred, gt.float(), reduction='none')
+        ce_loss = F.binary_cross_entropy_with_logits(pred, gt, reduction='none')
         p_t = pred_sigmoid * gt + (1 - pred_sigmoid) * (1 - gt)
         focal = alpha * (1 - p_t) ** gamma * ce_loss
         focal_loss += focal.mean()
@@ -176,10 +216,11 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
             pred_masks = [output['masks'] for output in outputs]
             
             # Get ground truth masks based on data type
+            masks_gt = batch['gt_mask']
             if data_type == 'ar':
-                gt_masks = batch['ar_object_masks']
+                gt_masks = [(mask == 2).to(torch.uint8) for mask in masks_gt]
             else:  # tc
-                gt_masks = batch['tc_object_masks']
+                gt_masks = [(mask == 1).to(torch.uint8) for mask in masks_gt]
             
             # Compute loss
             loss_dict = compute_vanilla_sam_loss(pred_masks, gt_masks, device)

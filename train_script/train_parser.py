@@ -188,6 +188,11 @@ def parse():
         '--fuse_channels', default=128, type=int,
         help="Number of channels to fuse in the prompt generator. Default is 128."
     )
+    
+    parser.add_argument(
+        '--data_type', type=str, default='ar', 
+        help="Type of data to train on. Choices are 'ar' for atmospheric rivers and 'tc' for tropical cyclones."
+    )
 
     args = parser.parse_args()
 
