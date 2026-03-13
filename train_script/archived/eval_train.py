@@ -8,7 +8,7 @@ import torch.multiprocessing as mp
 import torch.nn.functional as F
 from functools import partial
 from torch.utils.data import DataLoader
-from train_util import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, calculate_dice_loss, calculate_focal_loss, plot_with_projection
+from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, calculate_dice_loss, calculate_focal_loss, plot_with_projection
 from tqdm import tqdm
 from contextlib import nullcontext
 

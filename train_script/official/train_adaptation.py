@@ -1,3 +1,7 @@
+import sys
+import os 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import random
 import numpy as np
 import torch
@@ -7,11 +11,11 @@ import torch.multiprocessing as mp
 import torch.nn.functional as F
 from functools import partial
 from torch.utils.data import DataLoader
-from train_util import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug
+from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug
 from loss_function import ClimateLoss, compute_climate_loss
 from tqdm import tqdm
 from contextlib import nullcontext
-from train_parser import parse
+from parser_config import parse
 from climatesam import ClimateSAM
 from dataset.climatenet import ClimateDataset
 from evaluator import StreamSegMetrics
@@ -96,14 +100,19 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         batch = batch_to_cuda(batch, device)
         
         with torch.amp.autocast('cuda'):
-            tc_mask, ar_mask, _ = model(batch['input'],
-                                    ar_point_prompts = batch['ar_point_prompts'],
-                                    tc_point_prompts = batch['tc_point_prompts'], 
-                                    ar_bbox_prompts = batch['ar_bbox_prompts'], 
-                                    tc_bbox_prompts= batch['tc_bbox_prompts'],
-                                    ar_mask_prompts = batch['ar_mask_prompts'],
-                                    tc_mask_prompts = batch['tc_mask_prompts']
-                                    )
+            image_embeddings, interm_features, image_input, ori_img_size = model.encode_images(batch['input'])
+            tc_mask, ar_mask, _ = model.forward(
+                image_input=image_input,
+                image_embeddings=image_embeddings,
+                interm_embeddings=interm_features,
+                ori_img_size=ori_img_size,
+                ar_point_prompts=batch['ar_point_prompts'],
+                tc_point_prompts=batch['tc_point_prompts'],
+                ar_bbox_prompts=batch['ar_bbox_prompts'],
+                tc_bbox_prompts=batch['tc_bbox_prompts'],
+                ar_mask_prompts=batch['ar_mask_prompts'],
+                tc_mask_prompts=batch['tc_mask_prompts']
+            )
             
             # prompt_debug(batch, 'Train Step {train_step}')
             masks_ar_gt = batch['ar_object_masks']
@@ -171,15 +180,6 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
             else:
                 step_loss_dict = {key: epoch_loss_dict[key] / epoch_loss_count for key in epoch_loss_dict.keys()}
             
-            # Update step progress bar with current average losses
-            # if step_pbar:
-            #     step_pbar.update(1)
-            #     step_pbar.set_postfix({
-            #         'step': f"{effective_step}/{effective_steps}",
-            #         'total_loss': f"{step_loss_dict.get('total_loss', 0):.4f}",
-            #         'focal': f"{step_loss_dict.get('focal_loss', 0):.4f}",
-            #         'tversky': f"{step_loss_dict.get('tversky_loss', 0):.4f}"
-            #     })
                 
             step_count += 1
 
@@ -423,16 +423,16 @@ def main_worker(worker_id, worker_args):
             print(f"Error initializing DistributedDataParallel: {e}")
             model = model.to(device=device)
     
-    # Load pretrained weights
-    if worker_args.load_pretrained:
-        if worker_args.phase == 1:
-            image_encoder_path = os.path.join(worker_args.exp_dir,'best_weights', f"phase_2_weights_best.pth")
-            phase_1_checkpoint = torch.load(image_encoder_path, map_location=device)
-            print(f"Pretrained weights from phase 1 loaded from {image_encoder_path}")
-            model.image_encoder.load_state_dict(phase_1_checkpoint['image_encoder'])
-            print(f"Image encoder weights loaded from {image_encoder_path}")
-            model.mask_decoder.load_state_dict(phase_1_checkpoint['mask_decoder'])
-            print(f"Mask decoder weights loaded from {image_encoder_path}")
+    # # Load pretrained weights
+    # if worker_args.load_pretrained:
+    #     if worker_args.phase == 1:
+    #         image_encoder_path = os.path.join(worker_args.exp_dir,'best_weights', f"phase_2_weights_best_official.pth")
+    #         phase_1_checkpoint = torch.load(image_encoder_path, map_location=device)
+    #         print(f"Pretrained weights from phase 1 loaded from {image_encoder_path}")
+    #         model.image_encoder.load_state_dict(phase_1_checkpoint['image_encoder'])
+    #         print(f"Image encoder weights loaded from {image_encoder_path}")
+    #         model.mask_decoder.load_state_dict(phase_1_checkpoint['mask_decoder'])
+    #         print(f"Mask decoder weights loaded from {image_encoder_path}")
     
             
     # Optimizer and scheduler
@@ -464,7 +464,7 @@ def main_worker(worker_id, worker_args):
                 print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
                 if worker_args.save_model and epoch > 4:
                     if worker_args.phase == 1:
-                        save_path = os.path.join(worker_args.exp_dir, f"phase_1_weights.pth")
+                        save_path = os.path.join(worker_args.exp_dir, f"phase_1_weights_official_{worker_args.sam_type}.pth")
                         phase_1_weights = {
                             'image_encoder': model.image_encoder.state_dict(),
                             'mask_decoder': model.mask_decoder.state_dict(),
@@ -473,17 +473,7 @@ def main_worker(worker_id, worker_args):
                         print(f"Image encoder saved to {save_path}")
                         wandb.save(save_path)
                         print(f"Image encoder saved to wandb: {save_path}")
-                    if worker_args.phase == 2:
-                        save_path = os.path.join(worker_args.exp_dir, f"phase_2_weights.pth")
-                        phase_2_weights = {
-                            'image_encoder': model.image_encoder.state_dict(),
-                            'mask_decoder': model.mask_decoder.state_dict(),
-                            'input_adapter': model.input_adapter.state_dict(),
-                        }
-                        torch.save(phase_2_weights, save_path)
-                        print(f"Image encoder saved to {save_path}")
-                        wandb.save(save_path)
-                        print(f"Image encoder saved to wandb: {save_path}")
+               
         train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler)
         
 if __name__ == '__main__':
@@ -509,4 +499,3 @@ if __name__ == '__main__':
     # launch the experiment process for both single-GPU and multi-GPU settings
     if len(args.used_gpu) == 1:
         main_worker(worker_id=0, worker_args=args)
-

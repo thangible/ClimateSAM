@@ -5,8 +5,8 @@ from functools import partial
 import random
 import numpy as np
 import os
-from train_util import prompt_debug, plot_mask_with_points_and_bbox, batch_to_cuda
-from train_parser import parse
+from utility import prompt_debug, plot_mask_with_points_and_bbox, batch_to_cuda
+from ClimateSAM.parser_config import parse
 
 def setup_device_and_distributed(worker_id):
     gpu_num = 1
@@ -49,7 +49,7 @@ val_dataloader = DataLoader(
     )
 
 import matplotlib.pyplot as plt
-from train_util import batch_to_cuda
+from utility import batch_to_cuda
 
 
 from evaluator import StreamSegMetrics

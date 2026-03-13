@@ -16,9 +16,9 @@ from contextlib import nullcontext
 from evaluator import StreamSegMetrics
 
 
-from train_util import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug, setup_device_and_distributed, setup_optimizer_and_scheduler, worker_init_fn
+from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug, setup_device_and_distributed, setup_optimizer_and_scheduler, worker_init_fn
 from loss_function import ClimateLoss, compute_climate_loss, compute_generator_loss
-from train_parser import parse
+from ClimateSAM.parser_config import parse
 from climatesam import ClimateSAM
 from dataset.climatenet import ClimateDataset
 from model.prompt_generator import PromptGenerator

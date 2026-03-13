@@ -11,11 +11,11 @@ import torch.multiprocessing as mp
 import torch.nn.functional as F
 from functools import partial
 from torch.utils.data import DataLoader
-from train_util import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug
+from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug
 from loss_function import ClimateLoss, compute_climate_loss
 from tqdm import tqdm
 from contextlib import nullcontext
-from train_parser import parse
+from parser_config import parse
 # Remove ClimateSAM import and add vanilla SAM
 from model.segment_anything_ext.modeling.sam import Sam
 from model.segment_anything_ext.build_sam import sam_model_registry
@@ -157,10 +157,7 @@ def compute_vanilla_sam_loss(pred_masks, gt_masks, device):
         if len(pred.shape) == 4 and pred.shape[0] > 1:
             pred = pred[0:1]  # Take first mask, keep batch dimension
         
-        # Get the best mask from multimask output (if multiple masks per image)
-        if pred.shape[1] > 1:  # Multiple masks per image
-            # Choose mask with highest IoU score or use first mask
-            pred = pred[:, 0:1, :, :]  # Use first mask
+
         
         # Ensure same shape
         if pred.shape != gt.shape:

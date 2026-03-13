@@ -5,11 +5,11 @@ import os
 import torch.nn.functional as F
 from functools import partial
 from torch.utils.data import DataLoader
-from train_util import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug, worker_init_fn, setup_optimizer_and_scheduler, setup_device
+from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug, worker_init_fn, setup_optimizer_and_scheduler, setup_device
 from loss_function import ClimateLoss, compute_climate_loss, GeneratorLoss
 from tqdm import tqdm
 from contextlib import nullcontext
-from train_parser import parse
+from ClimateSAM.parser_config import parse
 from climatesam import ClimateSAM
 from model.prompt_generator import PromptGenerator
 from dataset.climatenet import ClimateDataset

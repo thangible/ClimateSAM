@@ -5,8 +5,8 @@ from functools import partial
 import random
 import numpy as np
 import os
-from train_util import prompt_debug, plot_mask_with_points_and_bbox, batch_to_cuda
-from train_parser import parse
+from utility import prompt_debug, plot_mask_with_points_and_bbox, batch_to_cuda
+from ClimateSAM.parser_config import parse
 import matplotlib.pyplot as plt
 
 from evaluator import StreamSegMetrics

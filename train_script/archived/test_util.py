@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import pytest
-from train_util import extract_point_and_bbox_prompts_from_climatenet_mask
+from utility import extract_point_and_bbox_prompts_from_climatenet_mask
 
 
 
