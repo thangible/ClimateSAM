@@ -1,6 +1,13 @@
 import sys
 import os 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+TRAIN_SCRIPT_DIR = os.path.dirname(CURRENT_DIR)
+PROJECT_ROOT = os.path.dirname(TRAIN_SCRIPT_DIR)
+
+for p in (PROJECT_ROOT, TRAIN_SCRIPT_DIR):
+    if p not in sys.path:
+        sys.path.insert(0, p)
 
 import random
 import numpy as np

@@ -4,13 +4,13 @@ exp_dir = ./exp
 data_dir = '../data/climatenet'
 pretrained_name = 'best_model.pth'
 project_name = climate-sam
-run_name = train_complete
+run_name = OFFICIAL_train_adaptation_vit_b
 
 [BATCH CONFIG]
 ; num_workers = None
 gradient_accumulation_steps = 1
-train_bs = 8
-val_bs = 2
+train_bs = 64
+val_bs = 4
 ; weight_decay = 1e-4
 lr = 1e-4
 
@@ -23,7 +23,7 @@ prompt_type = point
 
 [MODEL CONFIG]
 ; sam_type = vit_l
-sam_type = vit_l
+sam_type = vit_b
 ; cat_type = cat-a
 fuse_channels = 128
 
@@ -59,10 +59,10 @@ bce_weight_ar = 1
 image_encoder_mlp_ratio = 0.5
 
 [DEBUGGING]
-load_pretrained = True
-wandb = False
-save_model = False
-debugging = True
+load_pretrained = False
+wandb = True
+save_model = True
+debugging = False
 
 [VANILLA SAM CONFIG]
 data_type = 'ar'

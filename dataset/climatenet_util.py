@@ -1,4 +1,4 @@
-from train_parser import parse
+from parser_config import parse
 import os
 import random
 import numpy as np
