@@ -174,8 +174,8 @@ def plot_mask_with_points_and_bbox(mask, ar_points=None, tc_points=None, ar_bbox
     ax.imshow(mask, cmap=cmap, vmin=0, vmax=2, alpha=0.7)
 
     legend_elements = [
-        plt.Line2D([0], [0], marker='x', color='red', label='AR Point', markerfacecolor='red', markersize=10, markeredgecolor='red'),
-        plt.Line2D([0], [0], marker='x', color='cyan', label='TC Point', markerfacecolor='cyan', markersize=10, markeredgecolor='cyan'),
+        plt.Line2D([0], [0], marker='x', color='red', label='AR Point', markerfacecolor='red', markersize=10, markeredgecolor='red', ls='None'),
+        plt.Line2D([0], [0], marker='x', color='cyan', label='TC Point', markerfacecolor='cyan', markersize=10, markeredgecolor='cyan', ls='None'),
         plt.Line2D([0], [0], color='red', lw=2, label='AR BBox'),
         plt.Line2D([0], [0], color='cyan', lw=2, label='TC BBox'),
         plt.Line2D([0], [0], color='green', lw=0, marker='s', label='TC Groundtruth', markerfacecolor='green', markersize=10, markeredgecolor='black'),
