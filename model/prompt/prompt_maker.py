@@ -79,7 +79,7 @@ class PromptMaker:
         prompt_dict = {key: [d[key] if d[key] is not None else None for d in prompt_list] for key in prompt_list[0]}
         return prompt_dict
                 
-def make_bbox_prompts(binary_mask, connectivity, threshold=20):
+def make_bbox_prompts(binary_mask, connectivity, threshold=20, enlarge_ratio=0.5):
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_mask.astype(np.uint8), connectivity=connectivity)
     object_masks_list = []
     bboxes = []
@@ -96,8 +96,8 @@ def make_bbox_prompts(binary_mask, connectivity, threshold=20):
             bounding_box = [left, top, right, bottom]
             # enlarge bbox by 10% (clipped to image bounds)
             h_img, w_img = binary_mask.shape
-            pad_w = int(round(0.1 * width))
-            pad_h = int(round(0.1 * height))
+            pad_w = int(round(enlarge_ratio * width))
+            pad_h = int(round(enlarge_ratio * height))
             nleft = max(0, left - pad_w)
             ntop = max(0, top - pad_h)
             nright = min(w_img - 1, right + pad_w)

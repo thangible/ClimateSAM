@@ -4,7 +4,7 @@ exp_dir = ./exp
 data_dir = '../data/climatenet'
 pretrained_name = 'best_model.pth'
 project_name = climate-sam
-run_name = OFFICIAL_train_adaptation_vit_h
+run_name = OFFICIAL_train_generator_vit_l_0.5
 
 [BATCH CONFIG]
 num_workers = 4
