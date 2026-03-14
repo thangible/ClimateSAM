@@ -213,6 +213,66 @@ class LoRAClimateSAMVanilla(nn.Module):
         # we keep reference to image_encoder for API compatibility
         self.image_encoder = self.ori_sam.image_encoder
 
+    def train(self, mode: bool = True, phase: int = 1, verbose: bool = False):
+        """Mirror ClimateSAM.train() so that the phase/verbose API is respected.
+
+        Phase 1: train image_encoder (LoRA adapters inside it) + mask decoders.
+        Phase 3: train prompt_generator only.
+        LoRA adapter parameters are always kept trainable.
+        """
+        super().train(mode)
+
+        # Freeze everything first
+        for param in self.parameters():
+            param.requires_grad = False
+
+        if phase == 1:
+            # Unfreeze image encoder LoRA adapters (already injected in-place)
+            for n, c in self.named_children():
+                if n in ['image_encoder', 'mask_decoder_tc', 'mask_decoder_ar', 'input_adapter']:
+                    c.train(mode=mode)
+                else:
+                    c.eval()
+            # Only LoRA adapter params should require grad
+            for blk in self.image_encoder.blocks:
+                if hasattr(blk, 'attn') and hasattr(blk.attn, 'qkv'):
+                    qkv = blk.attn.qkv
+                    if isinstance(qkv, _LoRA_qkv):
+                        for p in qkv.parameters():
+                            if hasattr(p, 'is_lora') and p.is_lora:
+                                p.requires_grad = True
+            # also unfreeze input_adapter and mask decoders
+            for n, c in self.named_children():
+                if n in ['input_adapter', 'mask_decoder_tc', 'mask_decoder_ar']:
+                    for p in c.parameters():
+                        p.requires_grad = True
+            if verbose:
+                print("Phase 1: training LoRA adapters + input_adapter + mask decoders")
+
+        elif phase == 3:
+            if self.use_prompt_generator:
+                for n, c in self.named_children():
+                    if n == 'prompt_generator':
+                        c.train(mode=mode)
+                        for p in c.parameters():
+                            p.requires_grad = True
+                    else:
+                        c.eval()
+            if verbose:
+                print("Phase 3: training prompt_generator")
+
+        if verbose:
+            for n, c in self.named_children():
+                total = sum(p.numel() for p in c.parameters())
+                trainable = sum(p.numel() for p in c.parameters() if p.requires_grad)
+                if total > 0:
+                    print(f"{n.upper():<25} | train={str(c.training):<5} | {trainable:>9,}/{total:>12,} ({100*trainable/total:>5.2f}%)")
+            total = sum(p.numel() for p in self.parameters())
+            trainable = sum(p.numel() for p in self.parameters() if p.requires_grad)
+            print(f"Phase {phase}: trainable = {trainable:,} / {total:,}")
+
+        return self
+
     def encode_images(self, input: torch.Tensor):
         ori_img_size = [(input[i].shape[-2], input[i].shape[-1]) for i in range(len(input))]
         input = self.interpolate_input(input)
@@ -266,26 +326,27 @@ class LoRAClimateSAMVanilla(nn.Module):
             ar_sparse_embeddings.append(current_ar_sparse)
             ar_dense_embeddings.append(current_ar_dense)
 
-        # decode masks with two separate decoders
-        _, tc_pred_masks = self.mask_decoder_tc(
-            image_embeddings=image_embeddings,
-            image_pe=[self.prompt_encoder.get_dense_pe() for _ in range(batch_size)],
-            sparse_prompt_embeddings=tc_sparse_embeddings,
-            dense_prompt_embeddings=tc_dense_embeddings,
-            multimask_output=False,
-            interm_embeddings=interm_embeddings,
-            return_all_hq_masks=return_all_hq_masks
-        )
-
-        _, ar_pred_masks = self.mask_decoder_ar(
-            image_embeddings=image_embeddings,
-            image_pe=[self.prompt_encoder.get_dense_pe() for _ in range(batch_size)],
-            sparse_prompt_embeddings=ar_sparse_embeddings,
-            dense_prompt_embeddings=ar_dense_embeddings,
-            multimask_output=False,
-            interm_embeddings=interm_embeddings,
-            return_all_hq_masks=return_all_hq_masks
-        )
+        # decode masks per image with two separate decoders (vanilla SAM API)
+        tc_pred_masks = []
+        ar_pred_masks = []
+        dense_pe = self.prompt_encoder.get_dense_pe()
+        for i in range(batch_size):
+            tc_masks_i, _ = self.mask_decoder_tc(
+                image_embeddings=image_embeddings[i:i+1],
+                image_pe=dense_pe,
+                sparse_prompt_embeddings=tc_sparse_embeddings[i],
+                dense_prompt_embeddings=tc_dense_embeddings[i],
+                multimask_output=False,
+            )
+            ar_masks_i, _ = self.mask_decoder_ar(
+                image_embeddings=image_embeddings[i:i+1],
+                image_pe=dense_pe,
+                sparse_prompt_embeddings=ar_sparse_embeddings[i],
+                dense_prompt_embeddings=ar_dense_embeddings[i],
+                multimask_output=False,
+            )
+            tc_pred_masks.append(tc_masks_i)
+            ar_pred_masks.append(ar_masks_i)
 
         # postprocess masks to original sizes
         tc_post = [self.postprocess(m.clone(), ori_img_size[i]) for i, m in enumerate(tc_pred_masks)]
@@ -343,24 +404,26 @@ class LoRAClimateSAMVanilla(nn.Module):
             ar_sparse_embeddings.append(cur_ar_sparse)
             ar_dense_embeddings.append(cur_ar_dense)
 
-        _, tc_pred_masks = self.mask_decoder_tc(
-            image_embeddings=self.img_features,
-            image_pe=[self.prompt_encoder.get_dense_pe() for _ in range(batch_size)],
-            sparse_prompt_embeddings=tc_sparse_embeddings,
-            dense_prompt_embeddings=tc_dense_embeddings,
-            multimask_output=False,
-            interm_embeddings=self.interm_features,
-            return_all_hq_masks=return_all_hq_masks
-        )
-        _, ar_pred_masks = self.mask_decoder_ar(
-            image_embeddings=self.img_features,
-            image_pe=[self.prompt_encoder.get_dense_pe() for _ in range(batch_size)],
-            sparse_prompt_embeddings=ar_sparse_embeddings,
-            dense_prompt_embeddings=ar_dense_embeddings,
-            multimask_output=False,
-            interm_embeddings=self.interm_features,
-            return_all_hq_masks=return_all_hq_masks
-        )
+        tc_pred_masks = []
+        ar_pred_masks = []
+        dense_pe = self.prompt_encoder.get_dense_pe()
+        for i in range(batch_size):
+            tc_masks_i, _ = self.mask_decoder_tc(
+                image_embeddings=self.img_features[i:i+1],
+                image_pe=dense_pe,
+                sparse_prompt_embeddings=tc_sparse_embeddings[i],
+                dense_prompt_embeddings=tc_dense_embeddings[i],
+                multimask_output=False,
+            )
+            ar_masks_i, _ = self.mask_decoder_ar(
+                image_embeddings=self.img_features[i:i+1],
+                image_pe=dense_pe,
+                sparse_prompt_embeddings=ar_sparse_embeddings[i],
+                dense_prompt_embeddings=ar_dense_embeddings[i],
+                multimask_output=False,
+            )
+            tc_pred_masks.append(tc_masks_i)
+            ar_pred_masks.append(ar_masks_i)
 
         tc_post = [self.postprocess(m.clone(), self.ori_infer_img_size[i]) for i, m in enumerate(tc_pred_masks)]
         ar_post = [self.postprocess(m.clone(), self.ori_infer_img_size[i]) for i, m in enumerate(ar_pred_masks)]

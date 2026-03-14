@@ -112,7 +112,7 @@ def ensure_lora_trainable(model):
 
 
 def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler):
-    model.train(mode = True, phase = worker_args.phase, verbose = False)
+    model.train(mode = True)
     # after calling model.train, ensure LoRA params are still trainable
     ensure_lora_trainable(model)
 
