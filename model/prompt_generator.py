@@ -97,6 +97,7 @@ class PromptGenerator(nn.Module):
         #     nn.Conv2d(fused_channels, fused_channels, kernel_size=4, stride=2, groups=2, padding=1),  # 2x518x518
         #     nn.Conv2d(fused_channels, 1, kernel_size=4, stride=2, padding=1)  # 1x256x256
         #     )
+    
 
     def forward(self, feat_list):
         """

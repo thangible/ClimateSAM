@@ -78,7 +78,7 @@ def setup_device_and_distributed(worker_id, worker_args):
 
     
 def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler):
-    model.train(mode = True, phase = worker_args.phase, verbose = False)
+    model.train(mode = True, phase = worker_args.phase, verbose = True)
     
     # Get gradient accumulation steps
     gradient_accumulation_steps = getattr(worker_args, 'gradient_accumulation_steps', 1)
