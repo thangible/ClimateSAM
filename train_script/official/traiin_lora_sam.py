@@ -291,6 +291,34 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
     tc_metric_dict, _ = tc_metrics.compute()
     ar_metrics.reset()
     tc_metrics.reset()
+    miou_ar = ar_metrict_dict['Mean Foreground IoU']
+    mean_acc_ar = ar_metrict_dict['Mean Acc']
+    overall_acc_ar = ar_metrict_dict['Overall Acc']
+    freqw_acc_ar = ar_metrict_dict['FreqW Acc']
+    miout_including_bg_ar = ar_metrict_dict['Mean IoU']
+    miou_tc = tc_metric_dict['Mean Foreground IoU']
+    mean_acc_tc = tc_metric_dict['Mean Acc']
+    overall_acc_tc = tc_metric_dict['Overall Acc']
+    freqw_acc_tc = tc_metric_dict['FreqW Acc']
+    miout_including_bg_tc = tc_metric_dict['Mean IoU']
+    ar_metrics.reset()
+    tc_metrics.reset()
+    
+    if worker_args.wandb:
+        wandb.log({
+            "valid/miou_ar": miou_ar,
+            "valid/miou_tc": miou_tc,
+            "valid/mean_acc_ar": mean_acc_ar,
+            "valid/mean_acc_tc": mean_acc_tc,
+            "valid/overall_acc_ar": overall_acc_ar,
+            "valid/overall_acc_tc": overall_acc_tc,
+            "valid/freqw_acc_ar": freqw_acc_ar,
+            "valid/freqw_acc_tc": freqw_acc_tc,
+            "valid/miout_including_bg_ar": miout_including_bg_ar,
+            "valid/miout_including_bg_tc": miout_including_bg_tc,
+            "epoch": epoch,
+        },
+            step = epoch)
 
     if worker_args.wandb:
         wandb.log({
@@ -358,6 +386,7 @@ def main_worker(worker_id, worker_args):
 
     best_miou_tc = 0
     best_miou_ar = 0
+    best_miou_total = 0
     ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
 
@@ -370,6 +399,30 @@ def main_worker(worker_id, worker_args):
         if epoch % worker_args.valid_per_epochs == 1 or epoch == max_epoch_num:
             miou_tc, miou_ar = validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args)
             print(f"Epoch {epoch} - mIoU TC: {miou_tc:.4f}, mIoU AR: {miou_ar:.4f}")
+            print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}")
+            if miou_tc > best_miou_tc:
+                best_miou_tc = miou_tc
+                print(f'Best mIoU TC has been updated to {best_miou_tc:.2%}!')
+            if miou_ar > best_miou_ar:
+                best_miou_ar = miou_ar
+                print(f'Best mIoU AR has been updated to {best_miou_ar:.2%}!')
+            if (miou_tc + miou_ar) / 2 > best_miou_total:
+                best_miou_total = (miou_tc + miou_ar) / 2
+                print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
+                if getattr(worker_args, 'save_model', False) and epoch > 4:
+                    if getattr(worker_args, 'phase', None) == 1:
+                        os.makedirs(worker_args.exp_dir, exist_ok=True)
+                        base = model.module if hasattr(model, 'module') else model
+                        save_path = os.path.join(worker_args.exp_dir, f"LORA_phase_1_weights_official_{worker_args.sam_type}.pth")
+                        phase_1_weights = {
+                            'image_encoder': base.image_encoder.state_dict(),
+                            'mask_decoder': base.mask_decoder.state_dict(),
+                        }
+                        torch.save(phase_1_weights, save_path)
+                        print(f"Image encoder saved to {save_path}")
+                        if getattr(worker_args, 'wandb', False):
+                            wandb.save(save_path)
+                            print(f"Image encoder saved to wandb: {save_path}")
 
         train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler)
 
