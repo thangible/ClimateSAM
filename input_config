@@ -9,7 +9,7 @@ run_name = OFFICIAL_train_generator_vit_l_0.5
 [BATCH CONFIG]
 num_workers = 4
 gradient_accumulation_steps = 4
-train_bs = 32
+train_bs = 8
 val_bs = 4
 ; weight_decay = 1e-4
 lr = 1e-4

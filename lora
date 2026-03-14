@@ -60,9 +60,9 @@ image_encoder_mlp_ratio = 0.5
 
 [DEBUGGING]
 load_pretrained = False
-wandb = False
-save_model = False
-debugging = True
+wandb = True
+save_model = True
+debugging = False
 
 [VANILLA SAM CONFIG]
 data_type = 'ar'
