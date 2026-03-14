@@ -1,79 +1,68 @@
+import copy
+import math
+from typing import Any, Iterable, List, Optional, Tuple, Union
+
 import torch
 from torch import nn
-from typing import Iterable, List, Any, Optional, Tuple, Union
-import math
+import torch.nn.functional as F
+
+from model.segment_anything_ext.build_sam import sam_model_registry
+from model.prompt_encoder import PromptEncoderWrapper
+from model.prompt_generator import PromptGenerator
+
+
+sam_ckpt_path_dict = dict(
+    vit_b='./pretrained/sam_vit_b_01ec64.pth',
+    vit_l='./pretrained/sam_vit_l_0b3195.pth',
+    vit_h='./pretrained/sam_vit_h_4b8939.pth'
+)
 
 
 class LoRALinear(nn.Module):
-    """
-    Wrap an existing nn.Linear and add a low-rank adaptation W + scale * (B @ A)
-    where A: (r, in_features), B: (out_features, r). The adapter is applied to input x
-    as (B @ (A @ x)).
-
-    Attributes:
-        merged: when True, adapter is merged into the base linear weight for fast inference.
-    """
+    """Simple LoRA wrapper for nn.Linear (keeps original Linear and adds A,B adapters)."""
 
     def __init__(self, linear: nn.Linear, r: int = 4, alpha: float = 1.0, dropout: float = 0.0):
         super().__init__()
         if not isinstance(linear, nn.Linear):
             raise TypeError("LoRALinear must wrap nn.Linear")
-
+        self.linear = linear
         self.in_features = linear.in_features
         self.out_features = linear.out_features
-
-        # Keep a copy of the original linear (weight and bias)
-        self.linear = linear
-
         self.r = r
         self.alpha = alpha
         self.scaling = alpha / r if r > 0 else 1.0
         self.dropout = nn.Dropout(dropout) if dropout > 0.0 else nn.Identity()
-
         if r > 0:
-            # A maps from in_features -> r (we store as (r, in_features) so A @ x works)
             self.A = nn.Parameter(torch.zeros(r, self.in_features))
-            # B maps from r -> out_features (store as (out_features, r))
             self.B = nn.Parameter(torch.zeros(self.out_features, r))
-            # initialize
             nn.init.kaiming_uniform_(self.A, a=math.sqrt(5))
             nn.init.zeros_(self.B)
-            # mark params for easy detection
-            self.A.is_lora = True  # type: ignore[attr-defined]
-            self.B.is_lora = True  # type: ignore[attr-defined]
+            # marker
+            setattr(self.A, 'is_lora', True)
+            setattr(self.B, 'is_lora', True)
         else:
             self.A = None
             self.B = None
-
         self.merged = False
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # Base linear output
-        result = self.linear(x)
+        out = self.linear(x)
         if self.r > 0 and not self.merged:
-            # LoRA path: x -> A @ x  -> B @ (A @ x)
-            # x shape: (..., in_features)
-            orig_shape = x.shape
             x2 = self.dropout(x)
-            # compute A @ x: need shape (..., r)
-            # A: (r, in_f), so use matmul(x, A.t())
-            lora_inter = torch.matmul(x2, self.A.t())  # (..., r)
-            lora_out = torch.matmul(lora_inter, self.B.t())  # (..., out_features)
-            result = result + self.scaling * lora_out
-        return result
+            lora_inter = torch.matmul(x2, self.A.t())
+            lora_out = torch.matmul(lora_inter, self.B.t())
+            out = out + self.scaling * lora_out
+        return out
 
     def merge(self):
-        """Merge LoRA adapter into base linear weight (in-place)."""
         if self.r <= 0 or self.merged:
             return
-        # weight: (out_features, in_features)
         delta = (self.B @ self.A) * self.scaling
         with torch.no_grad():
             self.linear.weight += delta
         self.merged = True
 
     def unmerge(self):
-        """Remove merged adapter from base linear weight (in-place)."""
         if self.r <= 0 or not self.merged:
             return
         delta = (self.B @ self.A) * self.scaling
@@ -82,299 +71,388 @@ class LoRALinear(nn.Module):
         self.merged = False
 
 
-def _replace_linear(module: nn.Module, name: str, r: int, alpha: float, target_substrings: Iterable[str], dropout: float = 0.0) -> int:
-    """Recursively replace matching nn.Linear children with LoRALinear.
-
-    Returns the number of replacements performed in this module.
-    """
-    replacements = 0
-    for child_name, child in list(module.named_children()):
-        full_name = f"{name}.{child_name}" if name else child_name
-        # If child itself has submodules, recurse first
-        replacements += _replace_linear(child, full_name, r, alpha, target_substrings, dropout)
-
-        # If the child's class is Linear and its name contains any target substring, replace it
-        if isinstance(child, nn.Linear) and any(sub in child_name for sub in target_substrings):
-            wrapped = LoRALinear(child, r=r, alpha=alpha, dropout=dropout)
-            setattr(module, child_name, wrapped)
-            replacements += 1
-
-    return replacements
-
-
-def apply_lora_to_sam(sam_model: nn.Module, r: int = 4, alpha: float = 1.0, target_substrings: List[str] = None, dropout: float = 0.0) -> int:
-    """
-    Apply LoRA adapters to a SAM model by replacing selected nn.Linear modules.
-
-    Args:
-        sam_model: model instance (e.g. ori_sam returned by sam_model_registry)
-        r: LoRA rank
-        alpha: LoRA scaling
-        target_substrings: list of substrings of module names to target (defaults to common attention/mlp proj names)
-        dropout: optional dropout on LoRA input
-
-    Returns:
-        int: number of linear layers replaced
-    """
-    if target_substrings is None:
-        target_substrings = ["q", "k", "v", "proj", "mlp", "fc1", "fc2"]
-
-    # Apply replacement on the whole sam_model (safe generic approach)
-    replacements = _replace_linear(sam_model, name="", r=r, alpha=alpha, target_substrings=target_substrings, dropout=dropout)
-    return replacements
-
-
-def set_lora_trainable_only(model: nn.Module):
-    """
-    Freeze all parameters except LoRA adapter parameters (marked by attribute is_lora).
-    After calling this, only the LoRA A/B params will require gradients.
-    """
-    for p in model.parameters():
-        p.requires_grad = False
-
-    for module in model.modules():
-        for name, param in getattr(module, "named_parameters", lambda **kwargs: [])(recurse=False):
-            # safety: skip if no attribute
-            pass
-
-    # Unfreeze parameters that have the marker is_lora
-    for p in model.parameters():
-        if hasattr(p, 'is_lora') and getattr(p, 'is_lora'):
-            p.requires_grad = True
-
-
-def merge_lora(model: nn.Module):
-    """Merge all LoRALinear adapters into their base linear weights (use before exporting/eval if desired)."""
-    for m in model.modules():
-        if isinstance(m, LoRALinear):
-            m.merge()
-
-
-def unmerge_lora(model: nn.Module):
-    """Unmerge all LoRALinear adapters from base linear weights."""
-    for m in model.modules():
-        if isinstance(m, LoRALinear):
-            m.unmerge()
-
-
 class _LoRA_qkv(nn.Module):
-    """LoRA-aware replacement for SAM's qkv linear.
+    """Replacement for qkv linear that adds low-rank adapters for q and v slices."""
 
-    It keeps the original qkv linear and adds separate low-rank adapters
-    for q and v (like Sheng Wang's implementation). During forward the
-    adapters are computed and added to the q and v regions of the qkv output.
-    """
-
-    def __init__(
-        self,
-        qkv: nn.Linear,
-        linear_a_q: nn.Module,
-        linear_b_q: nn.Module,
-        linear_a_v: nn.Module,
-        linear_b_v: nn.Module,
-    ):
+    def __init__(self, qkv: nn.Linear, a_q: nn.Linear, b_q: nn.Linear, a_v: nn.Linear, b_v: nn.Linear):
         super().__init__()
         if not isinstance(qkv, nn.Linear):
             raise TypeError("qkv must be nn.Linear")
         self.qkv = qkv
-        self.linear_a_q = linear_a_q
-        self.linear_b_q = linear_b_q
-        self.linear_a_v = linear_a_v
-        self.linear_b_v = linear_b_v
+        self.a_q = a_q
+        self.b_q = b_q
+        self.a_v = a_v
+        self.b_v = b_v
         self.dim = qkv.in_features
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        # original qkv output (..., 3*dim)
         qkv = self.qkv(x)
-        # adapter outputs shape (..., dim)
-        new_q = self.linear_b_q(self.linear_a_q(x))
-        new_v = self.linear_b_v(self.linear_a_v(x))
-        # add into q and v slices
+        new_q = self.b_q(self.a_q(x))
+        new_v = self.b_v(self.a_v(x))
         qkv[..., : self.dim] = qkv[..., : self.dim] + new_q
         qkv[..., -self.dim :] = qkv[..., -self.dim :] + new_v
         return qkv
 
 
 class LoRA_Sam(nn.Module):
-    """Apply LoRA adapters to a SAM-like image encoder by surgery on the qkv linears.
+    """Apply q/v LoRA adapters to SAM image_encoder blocks in-place."""
 
-    This wrapper keeps a reference to the original sam_model and replaces
-    the qkv Linear in selected transformer blocks with _LoRA_qkv which
-    contains small adapter matrices.
-    """
-
-    def __init__(self, sam_model: nn.Module, r: int = 4, lora_layer: Optional[List[int]] = None):
+    def __init__(self, sam_model: nn.Module, r: int = 4, lora_layers: Optional[List[int]] = None):
         super().__init__()
-        assert r > 0, "r must be > 0"
+        assert r > 0
         self.sam = sam_model
-
-        # choose layers (by default all blocks)
-        blocks = getattr(self.sam.image_encoder, "blocks", None)
+        blocks = getattr(self.sam.image_encoder, 'blocks', None)
         if blocks is None:
-            raise RuntimeError("sam_model.image_encoder.blocks not found")
-
-        if lora_layer is None:
-            self.lora_layer = list(range(len(blocks)))
-        else:
-            self.lora_layer = lora_layer
-
-        # storage for adapters
-        self.w_As: List[nn.Module] = []
-        self.w_Bs: List[nn.Module] = []
-
-        # freeze base encoder weights
+            raise RuntimeError('sam_model.image_encoder.blocks not found')
+        if lora_layers is None:
+            lora_layers = list(range(len(blocks)))
+        self.adapters = []
+        # freeze base
         for p in self.sam.image_encoder.parameters():
             p.requires_grad = False
-
-        # perform surgery per-block
+        # inject adapters
         for i, blk in enumerate(blocks):
-            if i not in self.lora_layer:
+            if i not in lora_layers:
                 continue
-            # expect block.attn.qkv to be an nn.Linear
-            if not hasattr(blk.attn, "qkv") or not isinstance(blk.attn.qkv, nn.Linear):
+            if not hasattr(blk.attn, 'qkv') or not isinstance(blk.attn.qkv, nn.Linear):
                 continue
-            w_qkv_linear = blk.attn.qkv
-            dim = w_qkv_linear.in_features
-            # create adapter linear layers (A then B) for q and v
-            w_a_q = nn.Linear(dim, r, bias=False)
-            w_b_q = nn.Linear(r, dim, bias=False)
-            w_a_v = nn.Linear(dim, r, bias=False)
-            w_b_v = nn.Linear(r, dim, bias=False)
-
-            # store
-            self.w_As.append(w_a_q)
-            self.w_Bs.append(w_b_q)
-            self.w_As.append(w_a_v)
-            self.w_Bs.append(w_b_v)
-
-            # replace qkv with LoRA-enabled module
-            blk.attn.qkv = _LoRA_qkv(w_qkv_linear, w_a_q, w_b_q, w_a_v, w_b_v)
-
-        # initialize adapter parameters
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        for w_A in self.w_As:
-            nn.init.kaiming_uniform_(w_A.weight, a=math.sqrt(5))
-        for w_B in self.w_Bs:
-            nn.init.zeros_(w_B.weight)
+            w_qkv = blk.attn.qkv
+            dim = w_qkv.in_features
+            a_q = nn.Linear(dim, r, bias=False)
+            b_q = nn.Linear(r, dim, bias=False)
+            a_v = nn.Linear(dim, r, bias=False)
+            b_v = nn.Linear(r, dim, bias=False)
+            # initialize
+            nn.init.kaiming_uniform_(a_q.weight, a=math.sqrt(5))
+            nn.init.zeros_(b_q.weight)
+            nn.init.kaiming_uniform_(a_v.weight, a=math.sqrt(5))
+            nn.init.zeros_(b_v.weight)
+            # mark
+            setattr(a_q.weight, 'is_lora', True)
+            setattr(b_q.weight, 'is_lora', True)
+            setattr(a_v.weight, 'is_lora', True)
+            setattr(b_v.weight, 'is_lora', True)
+            blk.attn.qkv = _LoRA_qkv(w_qkv, a_q, b_q, a_v, b_v)
+            self.adapters.extend([a_q, b_q, a_v, b_v])
 
     def num_adapters(self) -> int:
-        return len(self.w_As)
-
-    def state_dict(self, *args, **kwargs):
-        # return only lora params plus base if needed; default to sam state_dict
-        return self.sam.state_dict(*args, **kwargs)
-
-    def forward(self, *args, **kwargs):
-        # transparent wrapper (users normally call sam directly)
-        return self.sam(*args, **kwargs)
+        return len(self.adapters)
 
 
-class LoRAClimateSAM(nn.Module):
-    """A thin LoRA wrapper around an existing ClimateSAM instance.
+class LoRAClimateSAMVanilla(nn.Module):
+    """LoRA SAM built from vanilla sam_model_registry, adapted for two-label (TC/AR) outputs.
 
-    This wrapper keeps the same input/output API as ClimateSAM but applies
-    the LoRA adapters to the image encoder internals. It delegates all
-    behavior to the wrapped ClimateSAM except for applying and managing the
-    LoRA adapters.
-
-    Usage:
-      base = ClimateSAM(...)
-      lora_wrapper = LoRAClimateSAM(base, r=8, alpha=32, freeze_base=True)
-      # use lora_wrapper.encode_images / forward / infer etc.
+    - loads a vanilla SAM from sam_model_registry
+    - adapts input channels to accept 16-channel climate input (input_adapter)
+    - duplicates mask_decoder into two heads: tc and ar
+    - applies LoRA adapters to the image encoder qkv projections
+    - exposes same high-level API as ClimateSAM for training/inference
     """
 
     def __init__(
         self,
-        base_model: nn.Module,
-        r: int = 4,
-        alpha: float = 1.0,
-        target_substrings: Optional[List[str]] = None,
-        dropout: float = 0.0,
+        model_type: str = 'vit_b',
+        r: int = 8,
+        lora_layers: Optional[List[int]] = None,
+        input_weights: Optional[List[int]] = None,
+        use_prompt_generator: bool = False,
+        mlp_ratio: float = 0.25,
         freeze_base: bool = True,
+        enable_wandb_logging: bool = False,
     ):
         super().__init__()
-        self.base = base_model
+        assert model_type in ['vit_b', 'vit_l', 'vit_h']
+        self.enable_wandb_logging = enable_wandb_logging
+        self.use_prompt_generator = use_prompt_generator
 
-        if target_substrings is None:
-            target_substrings = ["q", "k", "v", "proj", "mlp", "fc1", "fc2"]
+        # load vanilla sam
+        self.ori_sam = sam_model_registry[model_type](sam_ckpt_path_dict[model_type])
+        self.sam_img_size = (self.ori_sam.image_encoder.img_size, self.ori_sam.image_encoder.img_size)
 
-        # Apply LoRA adapters to the image encoder (only)
-        self.replacements = apply_lora_to_sam(self.base.image_encoder, r=r, alpha=alpha, target_substrings=target_substrings, dropout=dropout)
+        # input adapter 16->3 like ClimateSAM
+        self.input_adapter = nn.Sequential(
+            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(),
+            nn.Conv2d(32, 16, kernel_size=1),
+            nn.ReLU(),
+            nn.Conv2d(16, 3, kernel_size=1),
+        )
+        # set initial weights focusing on selected input channels
+        with torch.no_grad():
+            nn.init.normal_(self.input_adapter[0].weight, mean=0.0, std=0.02)
+            if input_weights is None:
+                input_weights = [0, 1, 2]
+            for out_ch in range(self.input_adapter[0].weight.shape[0]):
+                for in_ch in input_weights:
+                    self.input_adapter[0].weight[out_ch, in_ch, 0, 0] = 1.0
 
-        # Optionally freeze all non-LoRA params so only LoRA adapters are trained
+        # duplicate mask_decoder into two independent heads so they can adapt separately
+        self.mask_decoder_tc = copy.deepcopy(self.ori_sam.mask_decoder)
+        self.mask_decoder_ar = copy.deepcopy(self.ori_sam.mask_decoder)
+
+        # optionally use PromptGenerator
+        if self.use_prompt_generator:
+            num_features_map = {'vit_b': 12, 'vit_l': 24, 'vit_h': 32}
+            features_per_block = {'vit_b': 3, 'vit_l': 6, 'vit_h': 9}
+            self.prompt_generator = PromptGenerator(num_features=num_features_map[model_type],
+                                                    features_per_block=features_per_block[model_type])
+
+        # prompt encoder wrapper from original SAM
+        self.prompt_encoder = PromptEncoderWrapper(ori_sam=self.ori_sam, fix=True)
+
+        # apply LoRA adapters to image encoder
+        # we inject adapters in-place into self.ori_sam.image_encoder.blocks
+        self.lora = LoRA_Sam(self.ori_sam, r=r, lora_layers=lora_layers)
         if freeze_base:
-            set_lora_trainable_only(self.base)
-        else:
-            # ensure LoRA params are trainable even if the caller didn't freeze the rest
-            for p in self.base.parameters():
-                if hasattr(p, 'is_lora') and getattr(p, 'is_lora'):
-                    p.requires_grad = True
+            # By default LoRA_Sam already froze base encoder params; ensure mask decoders are frozen
+            for p in self.mask_decoder_tc.parameters():
+                p.requires_grad = False
+            for p in self.mask_decoder_ar.parameters():
+                p.requires_grad = False
+        # we keep reference to image_encoder for API compatibility
+        self.image_encoder = self.ori_sam.image_encoder
 
-    # Delegate common ClimateSAM interfaces so this wrapper can be used interchangeably
-    def encode_images(self, *args, **kwargs):
-        return self.base.encode_images(*args, **kwargs)
+    def encode_images(self, input: torch.Tensor):
+        ori_img_size = [(input[i].shape[-2], input[i].shape[-1]) for i in range(len(input))]
+        input = self.interpolate_input(input)
+        imgs = self.input_adapter(input)
+        imgs = self.preprocess_images(imgs)
+        image_input = imgs.clone().detach()
+        image_embeddings, interm_embeddings = self.image_encoder(imgs)
+        return image_embeddings, interm_embeddings, image_input, ori_img_size
 
-    def save_image_embeddings(self, *args, **kwargs):
-        return self.base.save_image_embeddings(*args, **kwargs)
+    def forward(self,
+                image_input,
+                image_embeddings: torch.Tensor,
+                interm_embeddings: List[torch.Tensor],
+                ori_img_size: List[Tuple],
+                ar_point_prompts: List[Union[torch.Tensor, None]] = None,
+                tc_point_prompts: List[Union[torch.Tensor, None]] = None,
+                ar_bbox_prompts: List[Union[torch.Tensor, None]] = None,
+                tc_bbox_prompts: List[Union[torch.Tensor, None]] = None,
+                ar_mask_prompts: List[Union[torch.Tensor, None]] = None,
+                tc_mask_prompts: List[Union[torch.Tensor, None]] = None,
+                return_all_hq_masks: bool = False,
+                hq_token_weight_ar: Optional[torch.Tensor] = None,
+                hq_token_weight_tc: Optional[torch.Tensor] = None,
+                ):
+        batch_size = len(image_embeddings)
 
-    def set_infer_img(self, *args, **kwargs):
-        return self.base.set_infer_img(*args, **kwargs)
+        ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = self.preprocess_prompts(
+            ar_point_prompts=ar_point_prompts,
+            tc_point_prompts=tc_point_prompts,
+            ar_bbox_prompts=ar_bbox_prompts,
+            tc_bbox_prompts=tc_bbox_prompts,
+            ori_img_size=ori_img_size
+        )
 
-    def infer(self, *args, **kwargs):
-        return self.base.infer(*args, **kwargs)
+        # encode prompts per image
+        tc_sparse_embeddings, tc_dense_embeddings = [], []
+        ar_sparse_embeddings, ar_dense_embeddings = [], []
+        for batch_idx in range(batch_size):
+            current_tc_sparse, current_tc_dense = self.prompt_encoder(
+                points=tc_point_prompts[batch_idx] if tc_point_prompts is not None else None,
+                boxes=tc_bbox_prompts[batch_idx] if tc_bbox_prompts is not None else None,
+                masks=tc_mask_prompts[batch_idx] if tc_mask_prompts is not None else None,
+            )
+            current_ar_sparse, current_ar_dense = self.prompt_encoder(
+                points=ar_point_prompts[batch_idx] if ar_point_prompts is not None else None,
+                boxes=ar_bbox_prompts[batch_idx] if ar_bbox_prompts is not None else None,
+                masks=ar_mask_prompts[batch_idx] if ar_mask_prompts is not None else None,
+            )
+            tc_sparse_embeddings.append(current_tc_sparse)
+            tc_dense_embeddings.append(current_tc_dense)
+            ar_sparse_embeddings.append(current_ar_sparse)
+            ar_dense_embeddings.append(current_ar_dense)
 
-    def preprocess_images(self, *args, **kwargs):
-        return self.base.preprocess_images(*args, **kwargs)
+        # decode masks with two separate decoders
+        _, tc_pred_masks = self.mask_decoder_tc(
+            image_embeddings=image_embeddings,
+            image_pe=[self.prompt_encoder.get_dense_pe() for _ in range(batch_size)],
+            sparse_prompt_embeddings=tc_sparse_embeddings,
+            dense_prompt_embeddings=tc_dense_embeddings,
+            multimask_output=False,
+            interm_embeddings=interm_embeddings,
+            return_all_hq_masks=return_all_hq_masks
+        )
 
-    def preprocess_prompts(self, *args, **kwargs):
-        return self.base.preprocess_prompts(*args, **kwargs)
+        _, ar_pred_masks = self.mask_decoder_ar(
+            image_embeddings=image_embeddings,
+            image_pe=[self.prompt_encoder.get_dense_pe() for _ in range(batch_size)],
+            sparse_prompt_embeddings=ar_sparse_embeddings,
+            dense_prompt_embeddings=ar_dense_embeddings,
+            multimask_output=False,
+            interm_embeddings=interm_embeddings,
+            return_all_hq_masks=return_all_hq_masks
+        )
 
-    def postprocess(self, *args, **kwargs):
-        return self.base.postprocess(*args, **kwargs)
+        # postprocess masks to original sizes
+        tc_post = [self.postprocess(m.clone(), ori_img_size[i]) for i, m in enumerate(tc_pred_masks)]
+        ar_post = [self.postprocess(m.clone(), ori_img_size[i]) for i, m in enumerate(ar_pred_masks)]
 
-    def assemble_raw_masks(self, *args, **kwargs):
-        return self.base.assemble_raw_masks(*args, **kwargs)
+        if not self.training:
+            tc_post = self.assemble_raw_masks(tc_post)
+            ar_post = self.assemble_raw_masks(ar_post)
 
-    def discretize_mask(self, *args, **kwargs):
-        return self.base.discretize_mask(*args, **kwargs)
+        # free memory
+        del image_embeddings, interm_embeddings
+        torch.cuda.empty_cache()
+        return tc_post, ar_post, image_input
 
-    def log_masks(self, *args, **kwargs):
-        return self.base.log_masks(*args, **kwargs)
+    @torch.no_grad()
+    def infer(self,
+              ar_point_prompts: List[Union[torch.Tensor, None]] = None,
+              tc_point_prompts: List[Union[torch.Tensor, None]] = None,
+              ar_bbox_prompts: List[Union[torch.Tensor, None]] = None,
+              tc_bbox_prompts: List[Union[torch.Tensor, None]] = None,
+              ar_mask_prompts: List[Union[torch.Tensor, None]] = None,
+              tc_mask_prompts: List[Union[torch.Tensor, None]] = None,
+              return_all_hq_masks: bool = False):
+        if not hasattr(self, 'img_features') or not hasattr(self, 'interm_features'):
+            raise RuntimeError('Call set_infer_img() before infer()')
+        batch_size = len(self.img_features)
 
-    def forward(self, *args, **kwargs):
-        return self.base.forward(*args, **kwargs)
+        ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = self.preprocess_prompts(
+            ar_point_prompts=ar_point_prompts,
+            tc_point_prompts=tc_point_prompts,
+            ar_bbox_prompts=ar_bbox_prompts,
+            tc_bbox_prompts=tc_bbox_prompts,
+            ori_img_size=self.ori_infer_img_size
+        )
 
-    def train(self, mode: bool = True, *args, **kwargs):
-        # delegate to base.train which may accept extra params like phase, verbose
-        return self.base.train(mode, *args, **kwargs)
+        if self.use_prompt_generator:
+            tc_masks, ar_masks = self.prompt_generator(self.interm_features)
+            ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = None, None, None, None
 
-    # LoRA utilities that operate on the wrapped model
-    def merge_lora(self):
-        """Merge LoRA adapters into base weights for faster inference."""
-        merge_lora(self.base.image_encoder)
+        tc_sparse_embeddings, tc_dense_embeddings = [], []
+        ar_sparse_embeddings, ar_dense_embeddings = [], []
+        for batch_idx in range(batch_size):
+            cur_tc_sparse, cur_tc_dense = self.prompt_encoder(
+                points=tc_point_prompts[batch_idx] if tc_point_prompts is not None else None,
+                boxes=tc_bbox_prompts[batch_idx] if tc_bbox_prompts is not None else None,
+                masks=tc_mask_prompts[batch_idx] if tc_mask_prompts is not None else None,
+            )
+            cur_ar_sparse, cur_ar_dense = self.prompt_encoder(
+                points=ar_point_prompts[batch_idx] if ar_point_prompts is not None else None,
+                boxes=ar_bbox_prompts[batch_idx] if ar_bbox_prompts is not None else None,
+                masks=ar_mask_prompts[batch_idx] if ar_mask_prompts is not None else None,
+            )
+            tc_sparse_embeddings.append(cur_tc_sparse)
+            tc_dense_embeddings.append(cur_tc_dense)
+            ar_sparse_embeddings.append(cur_ar_sparse)
+            ar_dense_embeddings.append(cur_ar_dense)
 
-    def unmerge_lora(self):
-        """Unmerge LoRA adapters from base weights to resume training."""
-        unmerge_lora(self.base.image_encoder)
+        _, tc_pred_masks = self.mask_decoder_tc(
+            image_embeddings=self.img_features,
+            image_pe=[self.prompt_encoder.get_dense_pe() for _ in range(batch_size)],
+            sparse_prompt_embeddings=tc_sparse_embeddings,
+            dense_prompt_embeddings=tc_dense_embeddings,
+            multimask_output=False,
+            interm_embeddings=self.interm_features,
+            return_all_hq_masks=return_all_hq_masks
+        )
+        _, ar_pred_masks = self.mask_decoder_ar(
+            image_embeddings=self.img_features,
+            image_pe=[self.prompt_encoder.get_dense_pe() for _ in range(batch_size)],
+            sparse_prompt_embeddings=ar_sparse_embeddings,
+            dense_prompt_embeddings=ar_dense_embeddings,
+            multimask_output=False,
+            interm_embeddings=self.interm_features,
+            return_all_hq_masks=return_all_hq_masks
+        )
 
-    def num_lora_replacements(self) -> int:
-        return int(self.replacements)
+        tc_post = [self.postprocess(m.clone(), self.ori_infer_img_size[i]) for i, m in enumerate(tc_pred_masks)]
+        ar_post = [self.postprocess(m.clone(), self.ori_infer_img_size[i]) for i, m in enumerate(ar_pred_masks)]
 
-    # Fallback attribute access to the wrapped model for transparency
-    def __getattr__(self, name: str) -> Any:
-        # This ensures attributes not defined on the wrapper are fetched from base
-        if name in ("base", "replacements"):
-            return super().__getattribute__(name)
-        return getattr(self.base, name)
+        tc_post = self.assemble_raw_masks(tc_post)
+        ar_post = self.assemble_raw_masks(ar_post)
+
+        return tc_post, ar_post
+
+    @torch.no_grad()
+    def set_infer_img(self, input: Union[List[torch.Tensor], torch.Tensor]):
+        if isinstance(input, torch.Tensor):
+            if len(input.shape) == 3:
+                input = [input]
+            elif len(input.shape) == 4:
+                input = [input[i] for i in range(input.shape[0])]
+            else:
+                raise RuntimeError(f"Unsupported input shape: {input.shape}")
+        elif not isinstance(input, list):
+            raise RuntimeError('Input must be tensor or list of tensors')
+        self.ori_infer_img_size = [(img.shape[-2], img.shape[-1]) for img in input]
+        self.ori_infer_img = input
+        input = self.interpolate_input(torch.stack(input))
+        imgs = self.input_adapter(input)
+        imgs = self.preprocess_images(imgs)
+        self.img_features, self.interm_features = self.image_encoder(imgs)
+        return imgs, self.img_features, self.interm_features
+
+    @staticmethod
+    def postprocess(output_masks: torch.Tensor, ori_img_size: Tuple):
+        output_mask_size = (output_masks.size(-2), output_masks.size(-1))
+        if output_mask_size != ori_img_size:
+            if len(output_masks.shape) == 3:
+                output_masks = output_masks.unsqueeze(1)
+            output_masks = F.interpolate(output_masks, ori_img_size, mode='bilinear', align_corners=False)
+        return output_masks
+
+    def interpolate_input(self, input: torch.Tensor):
+        if input.shape[-2:] != self.sam_img_size:
+            input = F.interpolate(input, size=self.sam_img_size, mode='bilinear', align_corners=False)
+        return input
+
+    def preprocess_images(self, input: torch.Tensor):
+        pixel_mean = self.ori_sam.pixel_mean.clone().detach().to(input.device).view(1, 3, 1, 1)
+        pixel_std = self.ori_sam.pixel_std.clone().detach().to(input.device).view(1, 3, 1, 1)
+        return (input - pixel_mean) / pixel_std
+
+    def preprocess_prompts(self, ar_point_prompts=None, tc_point_prompts=None, ar_bbox_prompts=None, tc_bbox_prompts=None, ori_img_size=None):
+        batch_num = len(ori_img_size)
+        for i in range(batch_num):
+            h_scale = self.sam_img_size[0] / ori_img_size[i][0]
+            w_scale = self.sam_img_size[1] / ori_img_size[i][1]
+            if tc_point_prompts is not None and tc_point_prompts[i] is not None:
+                tc_point, tc_label = tc_point_prompts[i]
+                tc_point[:, :, 0] *= w_scale
+                tc_point[:, :, 1] *= h_scale
+                tc_point = torch.round(tc_point)
+                tc_point_prompts[i] = (tc_point, tc_label)
+            if ar_point_prompts is not None and ar_point_prompts[i] is not None:
+                ar_point, ar_label = ar_point_prompts[i]
+                ar_point[:, :, 0] *= w_scale
+                ar_point[:, :, 1] *= h_scale
+                ar_point = torch.round(ar_point)
+                ar_point_prompts[i] = (ar_point, ar_label)
+            if tc_bbox_prompts is not None and tc_bbox_prompts[i] is not None:
+                tc_bbox_prompts[i][..., 0] *= w_scale
+                tc_bbox_prompts[i][..., 1] *= h_scale
+                tc_bbox_prompts[i][..., 2] *= w_scale
+                tc_bbox_prompts[i][..., 3] *= h_scale
+                tc_bbox_prompts[i] = torch.round(tc_bbox_prompts[i])
+            if ar_bbox_prompts is not None and ar_bbox_prompts[i] is not None:
+                ar_bbox_prompts[i][..., 0] *= w_scale
+                ar_bbox_prompts[i][..., 1] *= h_scale
+                ar_bbox_prompts[i][..., 2] *= w_scale
+                ar_bbox_prompts[i][..., 3] *= h_scale
+                ar_bbox_prompts[i] = torch.round(ar_bbox_prompts[i])
+        return ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts
+
+    def discretize_mask(self, masks_logits):
+        return torch.gt(masks_logits, self.ori_sam.mask_threshold).float()
+
+    def assemble_raw_masks(self, raw_masks: List):
+        masks = []
+        for r_m in raw_masks:
+            r_m = self.discretize_mask(r_m)
+            r_m = torch.sum(r_m, dim=0, keepdim=True)
+            masks.append(torch.clamp(r_m, max=1.0))
+        return masks
 
 
 __all__ = [
-    "LoRALinear",
-    "apply_lora_to_sam",
-    "set_lora_trainable_only",
-    "merge_lora",
-    "unmerge_lora",
-    "LoRAClimateSAM",
+    'LoRAClimateSAMVanilla',
+    'LoRA_Sam',
+    'LoRALinear',
 ]

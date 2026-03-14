@@ -29,8 +29,8 @@ from evaluator import StreamSegMetrics
 import copy
 import wandb
 
-# LoRA helpers
-from model.lora_sam import LoRAClimateSAM, LoRA_Sam, apply_lora_to_sam, set_lora_trainable_only, merge_lora, unmerge_lora
+# LoRA helpers (updated to match LoRA module names)
+from model.lora_sam import LoRAClimateSAMVanilla, LoRA_Sam, LoRALinear
 
 
 def worker_init_fn(worker_id: int, base_seed: int, same_worker_seed: bool = True):
@@ -66,9 +66,49 @@ def setup_device_and_distributed(worker_id, worker_args):
 
 
 def ensure_lora_trainable(model):
-    # if wrapped in DDP get module
+    """Freeze all params and unfreeze LoRA adapter params if present.
+
+    Works with LoRAClimateSAMVanilla (base.lora.adapters) or LoRA_Sam instances.
+    """
     m = model.module if hasattr(model, 'module') else model
-    set_lora_trainable_only(m)
+
+    # resolve wrapper -> base if needed
+    base = None
+    if hasattr(m, 'base'):
+        base = m.base
+    elif hasattr(m, 'sam'):
+        base = m
+    else:
+        base = m
+
+    # freeze everything first
+    for p in base.parameters():
+        p.requires_grad = False
+
+    # find adapter modules
+    adapter_modules = []
+    # check LoRAClimateSAMVanilla style
+    if hasattr(base, 'lora') and hasattr(base.lora, 'adapters'):
+        adapter_modules = list(base.lora.adapters)
+    # check LoRA_Sam instance
+    elif hasattr(base, 'adapters'):
+        adapter_modules = list(base.adapters)
+
+    # Unfreeze adapter params
+    for mod in adapter_modules:
+        for p in mod.parameters():
+            p.requires_grad = True
+
+    # As fallback, also unfreeze any parameter that has attribute 'is_lora' on its tensor
+    for name, p in base.named_parameters():
+        if hasattr(p, 'is_lora') and getattr(p, 'is_lora'):
+            p.requires_grad = True
+
+    # Ensure prompt encoder remains frozen unless explicitly part of adapters
+    if hasattr(base, 'prompt_encoder'):
+        for p in base.prompt_encoder.parameters():
+            if not (hasattr(p, 'is_lora') and getattr(p, 'is_lora')):
+                p.requires_grad = False
 
 
 def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler):
@@ -279,8 +319,8 @@ def main_worker(worker_id, worker_args):
     lora_alpha = getattr(worker_args, 'lora_alpha', 32)
     freeze_base = getattr(worker_args, 'lora_freeze_base', True)
 
-    # Use LoRAClimateSAM which applies LoRA to image_encoder and optionally freezes base
-    model = LoRAClimateSAM(base_model, r=lora_r, alpha=lora_alpha, target_substrings=None, dropout=0.0, freeze_base=freeze_base)
+    # Use LoRAClimateSAMVanilla which applies LoRA to image_encoder and optionally freezes base
+    model = LoRAClimateSAMVanilla(model_type=worker_args.sam_type, r=lora_r, lora_layers=None, input_weights=None, use_prompt_generator=False, mlp_ratio=worker_args.image_encoder_mlp_ratio, freeze_base=freeze_base, enable_wandb_logging=getattr(worker_args, 'debugging', False))
     model = model.to(device=device)
 
     if torch.distributed.is_initialized():
