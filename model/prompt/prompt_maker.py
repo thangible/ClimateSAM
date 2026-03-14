@@ -32,7 +32,7 @@ class PromptMaker:
         # else:
         #     prompt_type = self.prompt_type
         
-        prompt_type = random.choice(['bbox', 'point'])
+        prompt_type = random.choice(['bbox'])
             
         for i in range(batch_size):
             mask_np = masks[i].squeeze(0).cpu().numpy() 
@@ -94,6 +94,15 @@ def make_bbox_prompts(binary_mask, connectivity, threshold=20):
             right = left + width - 1
             bottom = top + height - 1
             bounding_box = [left, top, right, bottom]
+            # enlarge bbox by 10% (clipped to image bounds)
+            h_img, w_img = binary_mask.shape
+            pad_w = int(round(0.1 * width))
+            pad_h = int(round(0.1 * height))
+            nleft = max(0, left - pad_w)
+            ntop = max(0, top - pad_h)
+            nright = min(w_img - 1, right + pad_w)
+            nbottom = min(h_img - 1, bottom + pad_h)
+            bounding_box = [nleft, ntop, nright, nbottom]
             bboxes.append([bounding_box])
 
     if len(object_masks_list) == 0:

@@ -1,3 +1,15 @@
+import sys
+import os 
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+TRAIN_SCRIPT_DIR = os.path.dirname(CURRENT_DIR)
+PROJECT_ROOT = os.path.dirname(TRAIN_SCRIPT_DIR)
+
+for p in (PROJECT_ROOT, TRAIN_SCRIPT_DIR):
+    if p not in sys.path:
+        sys.path.insert(0, p)
+
+
 import random
 import numpy as np
 import torch
@@ -18,7 +30,7 @@ from evaluator import StreamSegMetrics
 
 from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug, setup_device_and_distributed, setup_optimizer_and_scheduler, worker_init_fn
 from loss_function import ClimateLoss, compute_climate_loss, compute_generator_loss
-from ClimateSAM.parser_config import parse
+from parser_config import parse
 from climatesam import ClimateSAM
 from dataset.climatenet import ClimateDataset
 from model.prompt_generator import PromptGenerator
