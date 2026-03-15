@@ -19,7 +19,7 @@ class PromptMaker:
         self.negative_point_num = negative_point_num
 
     @torch.no_grad()
-    def make_prompts(self, masks: torch.Tensor, prompt_type = None):
+    def make_prompts(self, masks: torch.Tensor, prompt_type = None, enlarge_ratio=0.2):
         batch_size = len(masks)
         prompt_list = []
         
@@ -31,8 +31,10 @@ class PromptMaker:
         #     prompt_type = random.choice(self.prompt_type)
         # else:
         #     prompt_type = self.prompt_type
-        
-        prompt_type = random.choice(['bbox'])
+        if prompt_type is None:
+            prompt_type = random.choice(['bbox'])
+        else:
+            prompt_type = prompt_type
             
         for i in range(batch_size):
             mask_np = masks[i].squeeze(0).cpu().numpy() 
@@ -52,8 +54,8 @@ class PromptMaker:
                 ar_noisy_masks = None
                 tc_noisy_masks = None
             elif prompt_type == 'bbox':
-                ar_bbox_prompts, ar_object_masks = make_bbox_prompts(ar_mask, self.connectivity, self.threshold)
-                tc_bbox_prompts, tc_object_masks = make_bbox_prompts(tc_mask, self.connectivity, self.threshold)
+                ar_bbox_prompts, ar_object_masks = make_bbox_prompts(ar_mask, self.connectivity, self.threshold, enlarge_ratio=enlarge_ratio)
+                tc_bbox_prompts, tc_object_masks = make_bbox_prompts(tc_mask, self.connectivity, self.threshold, enlarge_ratio=enlarge_ratio)
                 ar_point_prompts = (None, None)
                 tc_point_prompts = (None, None)
                 ar_noisy_masks = None

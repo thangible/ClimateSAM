@@ -213,7 +213,7 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
 # EVAL 
 # ------------------------------------------------------------
 @torch.no_grad()
-def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam, prompter, prompt_maker, device, max_epoch_num, worker_args):
+def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam, prompter, prompt_maker, device, max_epoch_num, worker_args, enlarge_ratio, prompt_type):
     climatesam.eval()
     prompter.eval()
     
@@ -245,8 +245,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
             # Ground truth masks
             gt_masks = torch.stack(batch['gt_mask'], dim=0).to(device)  # B, H, W
 
-            
-            prompt_dict = prompt_maker.make_prompts(multiclass_mask)
+            prompt_dict = prompt_maker.make_prompts(multiclass_mask, prompt_type=prompt_type, enlarge_ratio=enlarge_ratio)
             prompt_dict = batch_to_cuda(prompt_dict, device)
             
             ar_point_prompts_copy = copy.deepcopy(prompt_dict['ar_point_prompts'])
@@ -649,103 +648,60 @@ def main_worker(worker_id, worker_args):
     gradient_accumulation_steps = getattr(worker_args, 'gradient_accumulation_steps', 1)
     
     # Training loop
-    for epoch in range(1, max_epoch_num + 1):
-        
+    # prompt_type = worker_args.prompt_type if hasattr(worker_args, 'prompt_type') else 'point'
+    for epoch in range(1, 4):
+        enlarge_ratio = 0.1 * epoch
         # Validation
         if epoch % worker_args.valid_per_epochs == 1 or epoch == max_epoch_num:
-            miou_tc, miou_ar, logit_mean_iou = validate_one_epoch(
-                epoch, val_dataloader, ar_metrics, tc_metrics, 
-                climatesam, prompt_generator, prompt_maker, device, 
-                max_epoch_num, worker_args
-            )
-            print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}, Logit mIoU: {logit_mean_iou:.2%}")
+            try:
+                miou_tc, miou_ar, logit_mean_iou = validate_one_epoch(
+                    epoch, val_dataloader, ar_metrics, tc_metrics,
+                    climatesam, prompt_generator, prompt_maker, device,
+                    max_epoch_num, worker_args, enlarge_ratio=enlarge_ratio, prompt_type='bbox'
+                )
+                print(f"Epoch {epoch} enlarge_ratio {enlarge_ratio}- mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}, Logit mIoU: {logit_mean_iou:.2%}")
+            except Exception as e:
+                print(f"Validation error at epoch {epoch} (bbox, enlarge_ratio={enlarge_ratio}): {e}")
+                continue
 
-            if miou_tc > best_miou_tc:
-                best_miou_tc = miou_tc
-                print(f'Best mIoU TC has been updated to {best_miou_tc:.2%}!')
-                
-            if miou_ar > best_miou_ar:
-                best_miou_ar = miou_ar
-                print(f'Best mIoU AR has been updated to {best_miou_ar:.2%}!')
-                
-            if logit_mean_iou > best_logit_miou:
-                best_logit_miou = logit_mean_iou
-                print(f'Best Logit mIoU has been updated to {best_logit_miou:.2%}!')
-                # Save best model (including all components)
-                if worker_args.save_model and epoch > 4:
-                    # Create best_weights directory if it doesn't exist
-                    best_weights_dir = os.path.join(worker_args.exp_dir, 'best_weights')
-                    os.makedirs(best_weights_dir, exist_ok=True)
-
-                    save_path = os.path.join(best_weights_dir, f"best_generator_fuse_channels_{worker_args.fuse_channels}_sam_type_{worker_args.sam_type}.pth")
-                    complete_model_weights = {
-                        # 'image_encoder': climatesam.image_encoder.state_dict(),
-                        # 'mask_decoder': climatesam.mask_decoder.state_dict(),
-                        'prompt_generator': prompt_generator.state_dict(),
-                        'epoch': epoch,
-                        # 'best_miou_tc': best_miou_tc,
-                        # 'best_miou_ar': best_miou_ar,
-                        # 'best_miou_total': best_miou_total,
-                        'best_logit_miou': best_logit_miou,
-                    }
-                    
-                    
-                            
-                    torch.save(complete_model_weights, save_path)
-                    print(f"Complete model weights saved to {save_path}")
-                    
-                    if worker_args.wandb:
-                        wandb.save(save_path)
-                        print(f"Complete model weights saved to wandb: {save_path}")
-                
-            # if (miou_tc + miou_ar) / 2 > best_miou_total:
-            #     best_miou_total = (miou_tc + miou_ar) / 2
-            #     print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
-            #     # Save best model (including all components)
-            #     if worker_args.save_model and epoch > 4:
-            #         # Create best_weights directory if it doesn't exist
-            #         best_weights_dir = os.path.join(worker_args.exp_dir, 'best_weights')
-            #         os.makedirs(best_weights_dir, exist_ok=True)
-
-            #         save_path = os.path.join(best_weights_dir, f"best_model_sam_type_{worker_args.sam_type}.pth")
-            #         complete_model_weights = {
-            #             'image_encoder': climatesam.image_encoder.state_dict(),
-            #             'mask_decoder': climatesam.mask_decoder.state_dict(),
-            #             # 'prompt_generator': prompt_generator.state_dict(),
-            #             'epoch': epoch,
-            #             'best_miou_tc': best_miou_tc,
-            #             'best_miou_ar': best_miou_ar,
-            #             'best_miou_total': best_miou_total,
-            #             # 'best_logit_miou': best_logit_miou,
-            #         }
-                    
-                    
-                            
-            #         torch.save(complete_model_weights, save_path)
-            #         print(f"Complete model weights saved to {save_path}")
-                    
-            #         if worker_args.wandb:
-            #             wandb.save(save_path)
-            #             print(f"Complete model weights saved to wandb: {save_path}")
-                
-           
-                
-                
-            
-        
-        # Training
-        train_one_epoch(
-            epoch = epoch, train_dataloader=train_dataloader, climatesam=climatesam, prompter=prompt_generator,
-            prompt_maker=prompt_maker, optimizer=optimizer, scheduler=scheduler, scaler=scaler,
-            device=device, max_epoch_num=max_epoch_num, worker_args=worker_args,
-            gradient_accumulation_steps=gradient_accumulation_steps, local_rank=local_rank
-            
-        )
+    for negative_point_num in [1, 2, 5, 10]:
+        for positive_point_num in [1, 2, 5, 10]:
+            prompt_maker = PromptMaker(prompt_type='point', positive_point_num=positive_point_num, negative_point_num=negative_point_num)
+            try:
+                # reuse last epoch value for logging; if not set, default to 0
+                cur_epoch = locals().get('epoch', 0)
+                miou_tc, miou_ar, logit_mean_iou = validate_one_epoch(
+                    cur_epoch, val_dataloader, ar_metrics, tc_metrics,
+                    climatesam, prompt_generator, prompt_maker, device,
+                    max_epoch_num, worker_args, enlarge_ratio=enlarge_ratio, prompt_type='point'
+                )
+                print(f"Prompt Type: Point - Positive Num: {positive_point_num}, Negative Num: {negative_point_num} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}, Logit mIoU: {logit_mean_iou:.2%}")
+            except Exception as e:
+                print(f"Validation error for prompt (point) pos={positive_point_num} neg={negative_point_num}: {e}")
+                continue
     
+    
+    try:
+        # Final validation with default prompt settings
+        prompt_maker = PromptMaker(prompt_type='point', positive_point_num=worker_args.positive_point_num, negative_point_num=worker_args.negative_point_num)
+        miou_tc, miou_ar, logit_mean_iou = validate_one_epoch(
+            epoch, val_dataloader, ar_metrics, tc_metrics,
+            climatesam, prompt_generator, prompt_maker, device,
+            max_epoch_num, worker_args, enlarge_ratio=enlarge_ratio, prompt_type='mask'
+        )
+        print(f"Final Validation with default mask prompts - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}, Logit mIoU: {logit_mean_iou:.2%}")
+
+    except Exception as e:
+        print(f"Final validation error (mask): {e}")
+        
+    
+
     print(f"Training completed!")
     print(f"Best mIoU TC: {best_miou_tc:.2%}")
     print(f"Best mIoU AR: {best_miou_ar:.2%}")
     print(f"Best mIoU Total: {best_miou_total:.2%}")
+    
+    
 
         
 if __name__ == '__main__':

@@ -4,7 +4,7 @@ exp_dir = ./exp
 data_dir = '../data/climatenet'
 pretrained_name = 'best_model.pth'
 project_name = climate-sam
-run_name = OFFICIAL_train_generator_vit_l_0.5
+run_name = OFFICIAL_GENERATOR_TEST
 
 [BATCH CONFIG]
 num_workers = 4
@@ -64,7 +64,7 @@ image_encoder_mlp_ratio = 0.5
 [DEBUGGING]
 load_pretrained = True
 wandb = True
-save_model = True
+save_model = False
 debugging = False
 
 [VANILLA SAM CONFIG]
