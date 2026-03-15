@@ -5,41 +5,28 @@ def main():
     # os.system('python train_script/official/test_generator.py --run_name "GENERATOR_TEST" --config generator_test')
     # time.sleep(30)
     epoch_num = 20
-    lr_list = [1e-4, 1e-5, 1e-6]
+    lr_list = [1e-4, 1e-5]
     
-    bce_weight_list = [0, 1, 10]
-    focal_weight_list = [0, 1]
-    tversky_weight_list = [0, 1]
-    alpha_ar_tversky_list = [0.3, 0.5, 0.7]
-    beta_ar_tversky_list = [0.7, 0.5, 0.3]
-    alpha_tc_tversky_list = [0.3, 0.5, 0.7]
-    beta_tc_tversky_list = [0.7, 0.5, 0.3]
-    gamma_ar_list = [3]
-    gamma_tc_list = [8]
-    alpha_ar_list = [0.75]
-    alpha_tc_list = [0.996]
-
-
-
-    for bce_weight in bce_weight_list:
-        for focal_weight in focal_weight_list:
+    bce_weight_list = [1, 10]
+    tversky_weight_list = [1]
+    
+    tversky_pairs = [
+    (0.3, 0.7), # Focus on Recall (High Beta - good for tiny objects)
+    (0.5, 0.5), # Balanced (Standard Dice)
+    (0.7, 0.3)  # Focus on Precision (High Alpha - reduces fake detections)
+]
+    for lr in lr_list:
+        for bce_weight in bce_weight_list:
             for tversky_weight in tversky_weight_list:
-                for alpha_ar_tversky in alpha_ar_tversky_list:
-                    for beta_ar_tversky in beta_ar_tversky_list:
-                        for alpha_tc_tversky in alpha_tc_tversky_list:
-                            for beta_tc_tversky in beta_tc_tversky_list:
-                                for gamma_ar in gamma_ar_list:
-                                    for gamma_tc in gamma_tc_list:
-                                        for alpha_ar in alpha_ar_list:
-                                            for alpha_tc in alpha_tc_list:
-                                                for lr in lr_list:
-                                                    if bce_weight == 0 and focal_weight == 0 and tversky_weight == 0:
-                                                        continue
-                                                    
-                                                    run_name = f'ADAPTATION_bce_{bce_weight}_focal_{focal_weight}_tversky_{tversky_weight}_alpha_ar_tversky_{alpha_ar_tversky}_beta_ar_tversky_{beta_ar_tversky}_alpha_tc_tversky_{alpha_tc_tversky}_beta_tc_tversky_{beta_tc_tversky}_gamma_ar_{gamma_ar}_gamma_tc_{gamma_tc}_alpha_ar_{alpha_ar}_alpha_tc_{alpha_tc}_lr_{lr}'
-                                                    
-                                                    os.system(f'python train_script/official/train_adaptation.py --config input_config --run_name {run_name}  --bce_weight {bce_weight} --focal_weight {focal_weight} --alpha_ar_tversky {alpha_ar_tversky} --beta_ar_tversky {beta_ar_tversky} --alpha_tc_tversky {alpha_tc_tversky} --beta_tc_tversky {beta_tc_tversky} --gamma_ar {gamma_ar} --gamma_tc {gamma_tc} --alpha_ar {alpha_ar} --alpha_tc {alpha_tc} --lr {lr} --max_epoch_num {epoch_num} ')
-                                                    time.sleep(30)
+                for alpha, beta in tversky_pairs:
+                    run_name = f"HP_TUNING_lr{lr}_bce{bce_weight}_tversky{tversky_weight}_alpha{alpha}_beta{beta}"
+                    config_name = "hp_mode"
+                    os.system(f'python train_script/official/test_generator.py --run_name "{run_name}" --config {config_name} '
+                              f'--learning_rate {lr} --bce_weight_ar {bce_weight} --bce_weight_tc {bce_weight} '
+                              f'--alpha_ar_tversky {alpha} --beta_ar_tversky {beta} --alpha_tc_tversky {alpha} --beta_tc_tversky {beta} '
+                              f'--epoch_num {epoch_num}')
+                    time.sleep(30)  # Sleep for 30 seconds between runs to avoid resource contention
+    
 
 
 if __name__ == "__main__":

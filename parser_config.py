@@ -197,6 +197,10 @@ def parse():
         '--prompt_enlarge_ratio', default=0.2, type=float,
         help="Enlarge ratio for the prompt points. Default is 0.2." 
     )
+    parser.add_argument(
+        '--hp_mode', action='store_true',
+        help="Flag to enable hyperparameter tuning mode. Default is False."
+    )
 
     args = parser.parse_args()
 

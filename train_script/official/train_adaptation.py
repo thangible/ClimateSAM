@@ -376,22 +376,23 @@ def main_worker(worker_id, worker_args):
         max_epoch_num = 2
         worker_args.valid_per_epochs = 1
         print(f"Debug mode: Setting max_epoch_num to {max_epoch_num} and valid_per_epochs to {worker_args.valid_per_epochs}")
-
-    # if hasattr(worker_args, 'hp_mode') and worker_args.hp_mode:
-    #     # Use 5% of the training set for hyperparameter tuning by default
-    #     orig_train_len = len(train_dataset)
-    #     # Allow override via worker_args.hp_size, otherwise use 5% (at least 1)
-    #     hp_size = getattr(worker_args, 'hp_size', max(1, int(orig_train_len * 0.05)))
-    #     hp_size = min(hp_size, orig_train_len)
-    #     # Deterministic sampling for reproducibility; seed can be overridden with hp_seed
-    #     rng = random.Random(getattr(worker_args, 'hp_seed', 3407))
-    #     indices = rng.sample(range(orig_train_len), k=hp_size)
-    #     train_dataset = torch.utils.data.Subset(train_dataset, indices)
-    #     print(f"Hyperparameter mode enabled: using {hp_size}/{orig_train_len} training samples (~{hp_size / orig_train_len * 100:.2f}%).")
         
-    #     max_epoch_num = 20
-    #     worker_args.valid_per_epochs = 5
-    #     print(f"Hyperparameter mode: Setting max_epoch_num to {max_epoch_num} and valid_per_epochs to {worker_args.valid_per_epochs}")
+    if hasattr(worker_args, 'hp_mode') and worker_args.hp_mode:
+        # Use 20% of the training set for hyperparameter tuning by default
+        orig_train_len = len(train_dataset)
+        # Allow override via worker_args.hp_size, otherwise use 20% (at least 1)
+        hp_size = getattr(worker_args, 'hp_size', max(1, int(orig_train_len * 0.2)))
+        hp_size = min(hp_size, orig_train_len)
+        # Deterministic sampling for reproducibility; seed can be overridden with hp_seed
+        rng = random.Random(getattr(worker_args, 'hp_seed', 3407))
+        indices = rng.sample(range(orig_train_len), k=hp_size)
+        train_dataset = torch.utils.data.Subset(train_dataset, indices)
+        print(f"Hyperparameter mode enabled: using {hp_size}/{orig_train_len} training samples (~{hp_size / orig_train_len * 100:.2f}%).")
+        
+        max_epoch_num = 10
+        worker_args.valid_per_epochs = 2
+        print(f"Hyperparameter mode: Setting max_epoch_num to {max_epoch_num} and valid_per_epochs to {worker_args.valid_per_epochs}") 
+
         
         
         

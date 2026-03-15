@@ -4,7 +4,7 @@ exp_dir = ./exp
 data_dir = '../data/climatenet'
 pretrained_name = 'best_model.pth'
 project_name = climate-sam
-run_name = OFFICIAL_train_generator_vit_l_0.5
+run_name = OFFICIAL_TEST_HP
 
 [BATCH CONFIG]
 num_workers = 4
@@ -23,9 +23,9 @@ prompt_type = point
 
 [MODEL CONFIG]
 ; sam_type = vit_l
-sam_type = vit_l
+sam_type = vit_b
 ; cat_type = cat-a
-fuse_channels = 256
+fuse_channels = 128
 
 [PROMPTS]
 prompt_enlarge_ratio = 0.2
@@ -66,6 +66,7 @@ load_pretrained = True
 wandb = True
 save_model = False
 debugging = False
+hp_mode = True
 
 [VANILLA SAM CONFIG]
 data_type = 'ar'
