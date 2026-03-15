@@ -663,7 +663,7 @@ def main_worker(worker_id, worker_args):
             print(f"Validation error at epoch {epoch} (bbox, enlarge_ratio={enlarge_ratio}): {e}")
             continue
 
-    for negative_point_num in [1, 2, 5, 10]:
+    for negative_point_num in [2, 5, 10]:
         for positive_point_num in [1, 2, 5, 10]:
             prompt_maker = PromptMaker(prompt_type='point', positive_point_num=positive_point_num, negative_point_num=negative_point_num)
             try:

@@ -78,7 +78,7 @@ def setup_device_and_distributed(worker_id, worker_args):
 
     
 def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler):
-    model.train(mode = True, phase = worker_args.phase, verbose = True)
+    # model.train(mode = True, phase = worker_args.phase, verbose = True)
     
     # Get gradient accumulation steps
     gradient_accumulation_steps = getattr(worker_args, 'gradient_accumulation_steps', 1)
@@ -448,15 +448,15 @@ def main_worker(worker_id, worker_args):
             model = model.to(device=device)
     
     # Load pretrained weights
-    if worker_args.load_pretrained:
-        if worker_args.phase == 1:
-            image_encoder_path = os.path.join(worker_args.exp_dir,'best_weights', f"phase_2_weights_best_official.pth")
-            phase_1_checkpoint = torch.load(image_encoder_path, map_location=device)
-            print(f"Pretrained weights from phase 1 loaded from {image_encoder_path}")
-            model.image_encoder.load_state_dict(phase_1_checkpoint['image_encoder'])
-            print(f"Image encoder weights loaded from {image_encoder_path}")
-            model.mask_decoder.load_state_dict(phase_1_checkpoint['mask_decoder'])
-            print(f"Mask decoder weights loaded from {image_encoder_path}")
+    # if worker_args.load_pretrained:
+    #     if worker_args.phase == 1:
+    #         image_encoder_path = os.path.join(worker_args.exp_dir,'best_weights', f"phase_2_weights_best_official.pth")
+    #         phase_1_checkpoint = torch.load(image_encoder_path, map_location=device)
+    #         print(f"Pretrained weights from phase 1 loaded from {image_encoder_path}")
+    #         model.image_encoder.load_state_dict(phase_1_checkpoint['image_encoder'])
+    #         print(f"Image encoder weights loaded from {image_encoder_path}")
+    #         model.mask_decoder.load_state_dict(phase_1_checkpoint['mask_decoder'])
+    #         print(f"Mask decoder weights loaded from {image_encoder_path}")
     
             
     # Optimizer and scheduler
