@@ -193,6 +193,10 @@ def parse():
         '--data_type', type=str, default='ar', 
         help="Type of data to train on. Choices are 'ar' for atmospheric rivers and 'tc' for tropical cyclones."
     )
+    parser.add_argument(
+        '--prompt_enlarge_ratio', default=0.2, type=float,
+        help="Enlarge ratio for the prompt points. Default is 0.2." 
+    )
 
     args = parser.parse_args()
 
