@@ -416,13 +416,15 @@ def main_worker(worker_id, worker_args):
                         save_path = os.path.join(worker_args.exp_dir, f"LORA_phase_1_weights_official_{worker_args.sam_type}.pth")
                         phase_1_weights = {
                             'image_encoder': base.image_encoder.state_dict(),
-                            'mask_decoder': base.mask_decoder.state_dict(),
+                            'input_adapter': base.input_adapter.state_dict(),
+                            'mask_decoder_tc': base.mask_decoder_tc.state_dict(),
+                            'mask_decoder_ar': base.mask_decoder_ar.state_dict(),
                         }
                         torch.save(phase_1_weights, save_path)
-                        print(f"Image encoder saved to {save_path}")
+                        print(f"LoRA checkpoint saved to {save_path}")
                         if getattr(worker_args, 'wandb', False):
                             wandb.save(save_path)
-                            print(f"Image encoder saved to wandb: {save_path}")
+                            print(f"LoRA checkpoint saved to wandb: {save_path}")
 
         train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler)
 

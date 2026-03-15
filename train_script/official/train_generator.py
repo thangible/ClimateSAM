@@ -652,7 +652,7 @@ def main_worker(worker_id, worker_args):
     for epoch in range(1, max_epoch_num + 1):
         
         # Validation
-        if epoch % worker_args.valid_per_epochs == 0 or epoch == max_epoch_num:
+        if epoch % worker_args.valid_per_epochs == 1 or epoch == max_epoch_num:
             miou_tc, miou_ar, logit_mean_iou = validate_one_epoch(
                 epoch, val_dataloader, ar_metrics, tc_metrics, 
                 climatesam, prompt_generator, prompt_maker, device, 
