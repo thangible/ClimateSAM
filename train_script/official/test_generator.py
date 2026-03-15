@@ -649,20 +649,19 @@ def main_worker(worker_id, worker_args):
     
     # Training loop
     # prompt_type = worker_args.prompt_type if hasattr(worker_args, 'prompt_type') else 'point'
-    for epoch in range(1, 4):
+    for epoch in range(2, 4):
         enlarge_ratio = 0.1 * epoch
         # Validation
-        if epoch % worker_args.valid_per_epochs == 1 or epoch == max_epoch_num:
-            try:
-                miou_tc, miou_ar, logit_mean_iou = validate_one_epoch(
-                    epoch, val_dataloader, ar_metrics, tc_metrics,
-                    climatesam, prompt_generator, prompt_maker, device,
-                    max_epoch_num, worker_args, enlarge_ratio=enlarge_ratio, prompt_type='bbox'
-                )
-                print(f"Epoch {epoch} enlarge_ratio {enlarge_ratio}- mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}, Logit mIoU: {logit_mean_iou:.2%}")
-            except Exception as e:
-                print(f"Validation error at epoch {epoch} (bbox, enlarge_ratio={enlarge_ratio}): {e}")
-                continue
+        try:
+            miou_tc, miou_ar, logit_mean_iou = validate_one_epoch(
+                epoch, val_dataloader, ar_metrics, tc_metrics,
+                climatesam, prompt_generator, prompt_maker, device,
+                max_epoch_num, worker_args, enlarge_ratio=enlarge_ratio, prompt_type='bbox'
+            )
+            print(f"Epoch {epoch} enlarge_ratio {enlarge_ratio}- mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}, Logit mIoU: {logit_mean_iou:.2%}")
+        except Exception as e:
+            print(f"Validation error at epoch {epoch} (bbox, enlarge_ratio={enlarge_ratio}): {e}")
+            continue
 
     for negative_point_num in [1, 2, 5, 10]:
         for positive_point_num in [1, 2, 5, 10]:

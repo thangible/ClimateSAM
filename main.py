@@ -38,7 +38,7 @@ def main():
                                                     
                                                     run_name = f'ADAPTATION bce_{bce_weight}_focal_{focal_weight}_tversky_{tversky_weight}_alpha_ar_tversky_{alpha_ar_tversky}_beta_ar_tversky_{beta_ar_tversky}_alpha_tc_tversky_{alpha_tc_tversky}_beta_tc_tversky_{beta_tc_tversky}_gamma_ar_{gamma_ar}_gamma_tc_{gamma_tc}_alpha_ar_{alpha_ar}_alpha_tc_{alpha_tc}_lr_{lr}'
                                                     
-                                                    os.system(f'python train_script/official/train_adaptation.py --run_name {run_name} --fuse_channels 256 --bce_weight {bce_weight} --focal_weight {focal_weight} --alpha_ar_tversky {alpha_ar_tversky} --beta_ar_tversky {beta_ar_tversky} --alpha_tc_tversky {alpha_tc_tversky} --beta_tc_tversky {beta_tc_tversky} --gamma_ar {gamma_ar} --gamma_tc {gamma_tc} --alpha_ar {alpha_ar} --alpha_tc {alpha_tc} --lr {lr} --epoch_num {epoch_num} ')
+                                                    os.system(f'python train_script/official/train_adaptation.py --run_name {run_name}  --fuse_channels 256 --bce_weight {bce_weight} --focal_weight {focal_weight} --alpha_ar_tversky {alpha_ar_tversky} --beta_ar_tversky {beta_ar_tversky} --alpha_tc_tversky {alpha_tc_tversky} --beta_tc_tversky {beta_tc_tversky} --gamma_ar {gamma_ar} --gamma_tc {gamma_tc} --alpha_ar {alpha_ar} --alpha_tc {alpha_tc} --lr {lr} --epoch_num {epoch_num} ')
                                                     time.sleep(30)
 
 
