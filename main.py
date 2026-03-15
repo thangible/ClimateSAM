@@ -22,9 +22,9 @@ def main():
                     run_name = f"HP_TUNING_lr{lr}_bce{bce_weight}_tversky{tversky_weight}_alpha{alpha}_beta{beta}"
                     config_name = "hp_mode"
                     os.system(f'python train_script/official/test_generator.py --run_name "{run_name}" --config {config_name} '
-                              f'--learning_rate {lr} --bce_weight_ar {bce_weight} --bce_weight_tc {bce_weight} '
+                              f'--lr {lr} --bce_weight_ar {bce_weight} --bce_weight_tc {bce_weight} '
                               f'--alpha_ar_tversky {alpha} --beta_ar_tversky {beta} --alpha_tc_tversky {alpha} --beta_tc_tversky {beta} '
-                              f'--epoch_num {epoch_num}')
+                              f'--max_epoch_num {epoch_num}')
                     time.sleep(30)  # Sleep for 30 seconds between runs to avoid resource contention
     
 
