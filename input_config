@@ -4,7 +4,7 @@ exp_dir = ./exp
 data_dir = '../data/climatenet'
 pretrained_name = 'best_model.pth'
 project_name = climate-sam
-run_name = OFFICIAL_train_generator_vit_l_0.5
+run_name = ADAPTATION_OPTIMAL_1
 
 [BATCH CONFIG]
 num_workers = 4
@@ -37,21 +37,21 @@ valid_per_epochs = 5
 
 [LOSS CONFIG DICE]
 
-gamma_ar = 3
+gamma_ar = 4
 alpha_ar = 0.75
 
-gamma_tc = 8
+gamma_tc = 10
 alpha_tc = 0.996
 
 [LOSS CONFIG TVERSKY]
-alpha_ar_tversky = 0.3
-beta_ar_tversky = 0.7
+alpha_ar_tversky = 0.8
+beta_ar_tversky = 0.2
 
-alpha_tc_tversky = 0.3
-beta_tc_tversky = 0.7
+alpha_tc_tversky = 0.2
+beta_tc_tversky = 0.8
 
 [LOSS Weights]
-focal_weight = 0.0
+focal_weight = 10
 tversky_weight = 1.0
 bce_weight = 10
 [LOSS CONFIG COMMON]
