@@ -25,7 +25,7 @@ prompt_type = point
 ; sam_type = vit_l
 sam_type = vit_l
 ; cat_type = cat-a
-fuse_channels = 256
+fuse_channels = 128
 
 [PROMPTS]
 prompt_enlarge_ratio = 0.2
@@ -36,24 +36,23 @@ max_epoch_num = 50
 valid_per_epochs = 5
 
 [LOSS CONFIG DICE]
-
-gamma_ar = 4
+gamma_ar = 2
 alpha_ar = 0.75
 
-gamma_tc = 10
+gamma_tc = 5
 alpha_tc = 0.996
 
 [LOSS CONFIG TVERSKY]
-alpha_ar_tversky = 0.8
-beta_ar_tversky = 0.2
+alpha_ar_tversky = 0.3
+beta_ar_tversky = 0.7
 
-alpha_tc_tversky = 0.2
-beta_tc_tversky = 0.8
+alpha_tc_tversky = 0.3
+beta_tc_tversky = 0.7
 
 [LOSS Weights]
-focal_weight = 10
+focal_weight = 1
 tversky_weight = 1.0
-bce_weight = 10
+bce_weight = 0
 [LOSS CONFIG COMMON]
 bce_weight_tc = 1
 bce_weight_ar = 1

@@ -1,71 +1,60 @@
 import os
 import time
+import random
 
 def main():
-    # epoch_num = 50
-    # # Testing a wider LR range and a 'middle' ground
-    # lr_list = [1e-4, 5e-5, 1e-5]
-    
-    # # Testing the balance between the two specific classes
-    # # AR is easier to find, TC is 8x smaller/harder
-    # class_balance_configs = [
-    #     (1, 1),  # Equal importance
-    #     (1, 5),  # TC is 5x more important than AR
-    #     (1, 10)  # TC is 10x more important than AR
-    # ]
-    
-    # # Tversky Pairs: (Alpha, Beta)
-    # tversky_pairs = [
-    #     (0.3, 0.7), # Focus on Recall (Tiny objects)
-    #     (0.2, 0.8), # Extremely aggressive Recall (Tiny TCs)
-    #     (0.5, 0.5)  # Balanced
-    # ]
-    
-    # # Focal Configs: (Focal_Weight, Gamma_AR, Gamma_TC)
-    # focal_configs = [
-    #     (1.0, 2.0, 5.0),  # Moderate focus
-    #     (5.0, 3.0, 8.0),  # High focus (Best for 257:1 ratio)
-    #     (10.0, 4.0, 10.0) # Extreme focus for microscopic targets
-    # ]
+    # Configuration
+    epoch_num = 50
+    total_samples = 40  # Set how many random combinations to test
+    log_file = "hparam_search_log.txt"
 
-    # for lr in lr_list:
-    #     for bce_ar, bce_tc in class_balance_configs:
-    #         for f_weight, g_ar, g_tc in focal_configs:
-    #             for alpha, beta in tversky_pairs:
-                    
-    #                 # Shortening run_name to avoid OS path length limits
-    #                 run_name = f"EXP_LR{lr}_BCE{bce_tc}_FW{f_weight}_G{g_tc}_A{alpha}"
-                    
-    #                 cmd = (
-    #                     f'python train_script/official/train_adaptation.py '
-    #                     f'--run_name "{run_name}" '
-    #                     f'--config hp_mode '
-    #                     f'--lr {lr} '
-    #                     f'--max_epoch_num {epoch_num} '
-    #                     f'--bce_weight 10 ' # Base BCE weight
-    #                     f'--bce_weight_ar {bce_ar} '
-    #                     f'--bce_weight_tc {bce_tc} '
-    #                     f'--focal_weight {f_weight} '
-    #                     f'--gamma_ar {g_ar} '
-    #                     f'--gamma_tc {g_tc} '
-    #                     f'--alpha_ar_tversky {alpha} '
-    #                     f'--beta_ar_tversky {beta} '
-    #                     f'--alpha_tc_tversky {alpha} '
-    #                     f'--beta_tc_tversky {beta} '
-    #                     f'--tversky_weight 1.0'
-    #                 )
-                    
-    #                 print(f"\n>>> RUNNING: {run_name}")
-    #                 os.system(cmd)
-    #                 time.sleep(15)
-    os.system('python train_script/official/train_adaptation.py --sam_type vit_b')
-    time.sleep(15)
-    os.system('python train_script/official/train_adaptation.py --sam_type vit_h')
-    time.sleep(15)
-    os.system('python train_script/official/train_lora_sam.py --config lora ')
-    time.sleep(15)
-    os.system('python train_script/official/train_generator.py ')
+    # Search Space
+    tversky_pairs_tc = [(0.3, 0.7), (0.2, 0.8), (0.5, 0.5)]
+    tversky_pairs_ar = [(0.7, 0.3), (0.8, 0.2), (0.5, 0.5)]
+    
+    # Reduced gamma range to prevent gradient instability (Max 8.0)
+    focal_configs_ar = [(2.0, 5.0), (3.0, 8.0), (4.0, 7.0)]
+    focal_configs_tc = [(2.0, 5.0), (3.0, 8.0), (4.0, 7.0)]
+    
+    loss_weight_pairs = [(1.0, 1.0), (0.5, 1.5), (1.5, 0.5)]
 
+    # Tracking executed combinations to avoid duplicates
+    executed = set()
+
+    print(f"Starting Random Search: {total_samples} iterations.")
+
+    for i in range(total_samples):
+        # Randomly sample from your lists
+        atc_t, btc_t = random.choice(tversky_pairs_tc)
+        aar_t, bar_t = random.choice(tversky_pairs_ar)
+        aar_f, gar_f = random.choice(focal_configs_ar)
+        atc_f, gtc_f = random.choice(focal_configs_tc)
+        # tw, fw = random.choice(loss_weight_pairs)
+        tw, fw = 1.0, 1.0  # Keep weights constant for stability
+
+        combo = (atc_t, btc_t, aar_t, bar_t, aar_f, gar_f, atc_f, gtc_f, tw, fw)
+        
+        if combo in executed:
+            continue
+        executed.add(combo)
+
+        cmd = (
+            f"python train_script/official/train_adaptation.py --config hp_mode "
+            f"--alpha_ar_tversky {aar_t} --beta_ar_tversky {bar_t} "
+            f"--alpha_tc_tversky {atc_t} --beta_tc_tversky {btc_t} "
+            f"--focal_weight {fw} --gamma_ar {gar_f} --gamma_tc {gtc_f} "
+            f"--tversky_weight {tw}"
+        )
+
+        print(f"\n--- Running Iteration {i+1}/{total_samples} ---")
+        print(cmd)
+        
+        # Log the attempt
+        with open(log_file, "a") as f:
+            f.write(f"Iter {i+1}: {cmd}\n")
+
+        os.system(cmd)
+        time.sleep(15)
 
 if __name__ == "__main__":
     main()
