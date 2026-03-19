@@ -5,7 +5,7 @@ import random
 def main():
     # Configuration
     epoch_num = 50
-    total_samples = 40  
+    total_samples = 100
     log_file = "hparam_search_log.txt"
 
     # Search Space Refined for ClimateNet Imbalance
@@ -36,7 +36,7 @@ def main():
         atc_f, gtc_f = random.choice(focal_configs_tc)
         
         # Constant weights for loss stability in Adaptation Phase [cite: 212]
-        tw, fw = 1.0, 1.0  
+        tw, fw, bcew = 1.0, 1.0 , 0.0 
 
         combo = (atc_t, btc_t, aar_t, bar_t, aar_f, gar_f, atc_f, gtc_f)
         
@@ -50,9 +50,9 @@ def main():
             f"python train_script/official/train_adaptation.py --config hp_mode "
             f"--alpha_ar_tversky {aar_t} --beta_ar_tversky {bar_t} "
             f"--alpha_tc_tversky {atc_t} --beta_tc_tversky {btc_t} "
-            f"--alpha_ar_focal {aar_f} --gamma_ar {gar_f} "
-            f"--alpha_tc_focal {atc_f} --gamma_tc {gtc_f} "
-            f"--focal_weight {fw} --tversky_weight {tw} --epochs {epoch_num} --run_name hparam_search_{count}"
+            f"--alpha_ar {aar_f} --gamma_ar {gar_f} "
+            f"--alpha_tc {atc_f} --gamma_tc {gtc_f} "
+            f"--focal_weight {fw} --tversky_weight {tw} --bce_weight {bcew} --epochs {epoch_num} --run_name hparam_search_{count}"
         )
 
         print(f"\n--- Running Iteration {count}/{total_samples} ---")
