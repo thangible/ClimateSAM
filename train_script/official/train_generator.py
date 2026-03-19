@@ -448,6 +448,12 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
     logit_mean_acc = final_logit_dict['Mean Acc']
     logit_overall_acc = final_logit_dict['Overall Acc']
     
+    # Also extract per-class IoUs from final_logit_metrics (Background, TC, AR)
+    # These keys are added by StreamSegMetrics.compute() as '{class_name} IoU'
+    logit_bg_iou = final_logit_dict.get('Background IoU', None)
+    logit_tc_iou = final_logit_dict.get('TC IoU', None)
+    logit_ar_iou = final_logit_dict.get('AR IoU', None)
+    
     # Reset metrics for next epoch
     ar_metrics.reset()
     tc_metrics.reset()
@@ -482,7 +488,11 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
             "valid/logit_mean_iou": logit_mean_iou,
             "valid/logit_mean_acc": logit_mean_acc,
             "valid/logit_overall_acc": logit_overall_acc,
-            
+            # Per-class IoU for final logits
+            "valid/logit_bg_iou": logit_bg_iou,
+            "valid/logit_tc_iou": logit_tc_iou,
+            "valid/logit_ar_iou": logit_ar_iou,
+             
             "epoch": epoch,
         }, step=epoch)
     
@@ -677,7 +687,7 @@ def main_worker(worker_id, worker_args):
                     best_weights_dir = os.path.join(worker_args.exp_dir, 'best_weights')
                     os.makedirs(best_weights_dir, exist_ok=True)
 
-                    save_path = os.path.join(best_weights_dir, f"best_generator_fuse_channels_{worker_args.fuse_channels}_sam_type_{worker_args.sam_type}.pth")
+                    save_path = os.path.join(best_weights_dir, f"best_generator_fuse_channels_{worker_args.fuse_channels}_sam_type_{worker_args.sam_type}_{worker_args.run_name}.pth")
                     complete_model_weights = {
                         # 'image_encoder': climatesam.image_encoder.state_dict(),
                         # 'mask_decoder': climatesam.mask_decoder.state_dict(),

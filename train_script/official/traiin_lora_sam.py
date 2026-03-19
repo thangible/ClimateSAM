@@ -366,7 +366,7 @@ def main_worker(worker_id, worker_args):
     base_model = ClimateSAM(model_type=worker_args.sam_type, mlp_ratio=worker_args.image_encoder_mlp_ratio, enable_wandb_logging=getattr(worker_args, 'debugging', False))
 
     # Wrap with LoRA
-    lora_r = getattr(worker_args, 'lora_r', 8)
+    lora_r = getattr(worker_args, 'lora_r', 32)
     lora_alpha = getattr(worker_args, 'lora_alpha', 32)
     freeze_base = getattr(worker_args, 'lora_freeze_base', True)
 
