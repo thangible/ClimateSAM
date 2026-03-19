@@ -5,56 +5,71 @@ import random
 def main():
     # Configuration
     epoch_num = 50
-    total_samples = 40  # Set how many random combinations to test
+    total_samples = 40  
     log_file = "hparam_search_log.txt"
 
-    # Search Space
-    tversky_pairs_tc = [(0.3, 0.7), (0.2, 0.8), (0.5, 0.5)]
-    tversky_pairs_ar = [(0.7, 0.3), (0.8, 0.2), (0.5, 0.5)]
+    # Search Space Refined for ClimateNet Imbalance
+    # TC: 0.5% pixels - Prioritize high Beta for Recall [cite: 68, 76]
+    tversky_pairs_tc = [(0.2, 0.8), (0.1, 0.9), (0.15, 0.85), (0.3, 0.7)] 
     
-    # Reduced gamma range to prevent gradient instability (Max 8.0)
-    focal_configs_ar = [(2.0, 5.0), (3.0, 8.0), (4.0, 7.0)]
-    focal_configs_tc = [(2.0, 5.0), (3.0, 8.0), (4.0, 7.0)]
+    # AR: 5.7% pixels - Balanced approach [cite: 68, 76]
+    tversky_pairs_ar = [(0.3, 0.7), (0.4, 0.6), (0.5, 0.5)]
     
-    loss_weight_pairs = [(1.0, 1.0), (0.5, 1.5), (1.5, 0.5)]
+    # Focal Configs: (Alpha, Gamma)
+    # TC: 257:1 Ratio - Requires high Alpha and Gamma 
+    focal_configs_tc = [(0.99, 2.0), (0.99, 5.0), (0.995, 8.0)]
+    
+    # AR: 17:1 Ratio - Moderate Alpha 
+    focal_configs_ar = [(0.80, 2.0), (0.85, 5.0), (0.90, 2.0)]
 
-    # Tracking executed combinations to avoid duplicates
+    # Tracking executed combinations
     executed = set()
 
-    print(f"Starting Random Search: {total_samples} iterations.")
+    print(f"Starting Random Search: {total_samples} iterations targeted.")
 
-    for i in range(total_samples):
-        # Randomly sample from your lists
+    count = 0
+    while count < total_samples:
+        # Randomly sample from your refined lists
         atc_t, btc_t = random.choice(tversky_pairs_tc)
         aar_t, bar_t = random.choice(tversky_pairs_ar)
         aar_f, gar_f = random.choice(focal_configs_ar)
         atc_f, gtc_f = random.choice(focal_configs_tc)
-        # tw, fw = random.choice(loss_weight_pairs)
-        tw, fw = 1.0, 1.0  # Keep weights constant for stability
+        
+        # Constant weights for loss stability in Adaptation Phase [cite: 212]
+        tw, fw = 1.0, 1.0  
 
-        combo = (atc_t, btc_t, aar_t, bar_t, aar_f, gar_f, atc_f, gtc_f, tw, fw)
+        combo = (atc_t, btc_t, aar_t, bar_t, aar_f, gar_f, atc_f, gtc_f)
         
         if combo in executed:
             continue
+            
         executed.add(combo)
+        count += 1
 
         cmd = (
             f"python train_script/official/train_adaptation.py --config hp_mode "
             f"--alpha_ar_tversky {aar_t} --beta_ar_tversky {bar_t} "
             f"--alpha_tc_tversky {atc_t} --beta_tc_tversky {btc_t} "
-            f"--focal_weight {fw} --gamma_ar {gar_f} --gamma_tc {gtc_f} "
-            f"--tversky_weight {tw}"
+            f"--alpha_ar_focal {aar_f} --gamma_ar {gar_f} "
+            f"--alpha_tc_focal {atc_f} --gamma_tc {gtc_f} "
+            f"--focal_weight {fw} --tversky_weight {tw} --epochs {epoch_num} --run_name hparam_search_{count}"
         )
 
-        print(f"\n--- Running Iteration {i+1}/{total_samples} ---")
-        print(cmd)
+        print(f"\n--- Running Iteration {count}/{total_samples} ---")
+        print(f"TC Tversky (a={atc_t}, b={btc_t}) | AR Focal (a={aar_f}, g={gar_f})")
         
-        # Log the attempt
+        # Log the specific attempt
         with open(log_file, "a") as f:
-            f.write(f"Iter {i+1}: {cmd}\n")
+            f.write(f"Iter {count}: {cmd}\n")
 
-        os.system(cmd)
-        time.sleep(15)
+        # Execute training
+        exit_code = os.system(cmd)
+        
+        if exit_code != 0:
+            print(f"Warning: Iteration {count} failed with exit code {exit_code}")
+
+        # Short cooldown to ensure file handles/GPU memory are cleared
+        time.sleep(10)
 
 if __name__ == "__main__":
     main()
