@@ -33,7 +33,7 @@ from loss_function import ClimateLoss, compute_climate_loss, compute_generator_l
 from parser_config import parse
 from climatesam import ClimateSAM
 from dataset.climatenet import ClimateDataset
-from model.prompt_generator import PromptGenerator
+from model.prompt_generator_token import PromptGenerator
 from model.prompt.prompt_maker import PromptMaker
 
 # ------------------------------------------------------------
