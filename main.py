@@ -4,23 +4,25 @@ import random
 
 def main():
     # Configuration
-    epoch_num = 50
-    total_samples = 100
-    log_file = "hparam_search_log.txt"
+    epoch_num = 30
+    total_samples = 20
+    log_file = "hparam_search_log_part_2.txt"
 
     # Search Space Refined for ClimateNet Imbalance
     # TC: 0.5% pixels - Prioritize high Beta for Recall [cite: 68, 76]
-    tversky_pairs_tc = [(0.2, 0.8), (0.1, 0.9), (0.15, 0.85), (0.3, 0.7)] 
+    tversky_pairs_tc = [(0.3, 0.7)] 
     
     # AR: 5.7% pixels - Balanced approach [cite: 68, 76]
-    tversky_pairs_ar = [(0.3, 0.7), (0.4, 0.6), (0.5, 0.5)]
+    tversky_pairs_ar = [(0.5, 0.5)]
     
     # Focal Configs: (Alpha, Gamma)
     # TC: 257:1 Ratio - Requires high Alpha and Gamma 
-    focal_configs_tc = [(0.99, 2.0), (0.99, 5.0), (0.995, 8.0)]
+    focal_configs_tc = [(0.99, 5.0)]
     
     # AR: 17:1 Ratio - Moderate Alpha 
-    focal_configs_ar = [(0.80, 2.0), (0.85, 5.0), (0.90, 2.0)]
+    focal_configs_ar = [(0.90, 2.0)]
+    
+    fw_configs = [10.0, 20.0, 50.0]  # Focal weights to test
 
     # Tracking executed combinations
     executed = set()
@@ -34,9 +36,10 @@ def main():
         aar_t, bar_t = random.choice(tversky_pairs_ar)
         aar_f, gar_f = random.choice(focal_configs_ar)
         atc_f, gtc_f = random.choice(focal_configs_tc)
+        fw = random.choice(fw_configs)
         
         # Constant weights for loss stability in Adaptation Phase [cite: 212]
-        tw, fw, bcew = 1.0, 1.0 , 0.0 
+        tw, bcew = 1.0, 0.0
 
         combo = (atc_t, btc_t, aar_t, bar_t, aar_f, gar_f, atc_f, gtc_f)
         
@@ -52,7 +55,7 @@ def main():
             f"--alpha_tc_tversky {atc_t} --beta_tc_tversky {btc_t} "
             f"--alpha_ar {aar_f} --gamma_ar {gar_f} "
             f"--alpha_tc {atc_f} --gamma_tc {gtc_f} "
-            f"--focal_weight {fw} --tversky_weight {tw} --bce_weight {bcew} --epochs {epoch_num} --run_name hparam_search_{count}"
+            f"--focal_weight {fw} --tversky_weight {tw} --bce_weight {bcew} --max_epoch_num {epoch_num} --run_name hparam_search_{count}"
         )
 
         print(f"\n--- Running Iteration {count}/{total_samples} ---")
