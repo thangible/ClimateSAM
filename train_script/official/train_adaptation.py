@@ -397,9 +397,9 @@ def main_worker(worker_id, worker_args):
         val_dataset = torch.utils.data.Subset(val_dataset, val_indices)
         print(f"Hyperparameter mode: using {hp_val_size}/{orig_val_len} validation samples (~{hp_val_size / orig_val_len * 100:.2f}%).")
         
-        max_epoch_num = 50
-        worker_args.valid_per_epochs = 5
-        print(f"Hyperparameter mode: Setting max_epoch_num to {max_epoch_num} and valid_per_epochs to {worker_args.valid_per_epochs}") 
+        # max_epoch_num = 
+        # worker_args.valid_per_epochs = 5
+        # print(f"Hyperparameter mode: Setting max_epoch_num to {max_epoch_num} and valid_per_epochs to {worker_args.valid_per_epochs}") 
 
         
         

@@ -10,19 +10,19 @@ def main():
 
     # Search Space Refined for ClimateNet Imbalance
     # TC: 0.5% pixels - Prioritize high Beta for Recall [cite: 68, 76]
-    tversky_pairs_tc = [(0.3, 0.7)] 
+    tversky_pairs_tc = [(0.3, 0.7), (0.2, 0.8)] 
     
     # AR: 5.7% pixels - Balanced approach [cite: 68, 76]
-    tversky_pairs_ar = [(0.5, 0.5)]
+    tversky_pairs_ar = [(0.5, 0.5), (0.4, 0.6), (0.6, 0.4)]
     
     # Focal Configs: (Alpha, Gamma)
     # TC: 257:1 Ratio - Requires high Alpha and Gamma 
-    focal_configs_tc = [(0.99, 5.0)]
+    focal_configs_tc = [(0.99, 5.0), (0.99, 3.0), (0.99, 2.0)]
     
     # AR: 17:1 Ratio - Moderate Alpha 
-    focal_configs_ar = [(0.90, 2.0)]
+    focal_configs_ar = [(0.90, 2.0), (0.90, 3.0), (0.90, 5.0)]
     
-    fw_configs = [10.0, 20.0, 50.0]  # Focal weights to test
+    fw_configs = [1, 10]  # Focal weights to test
 
     # Tracking executed combinations
     executed = set()
