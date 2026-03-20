@@ -201,6 +201,10 @@ def parse():
         '--hp_mode', action='store_true',
         help="Flag to enable hyperparameter tuning mode. Default is False."
     )
+    parser.add_argument(
+        '--lora_r', default=32, type=int,
+        help="Rank for LoRA finetuning. Default is 32."
+    )
 
     args = parser.parse_args()
 

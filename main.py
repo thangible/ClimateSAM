@@ -4,7 +4,7 @@ import random
 
 def main():
     # Configuration
-    epoch_num = 30
+    epoch_num = 15
     total_samples = 20
     log_file = "hparam_search_log_part_2.txt"
 

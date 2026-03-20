@@ -162,8 +162,330 @@ def plot_with_projection(image, ar_pred, tc_pred, ar_gt, tc_gt, save_path, use_p
     return plot_array, title
 
 
+def plot_mask_with_points_and_bbox(mask, ar_points=None, tc_points=None, ar_bbox=None, tc_bbox=None,
+                                   tc_pred_mask=None, ar_pred_mask=None, radius=8, save_path='exp', axis=False, title=None):
+    if isinstance(mask, torch.Tensor):
+        mask = mask.cpu().numpy()
+    
+    # Custom colormap: 0=black, 1=yellow, 2=blue
+    cmap = ListedColormap(['#636363', '#64b163', '#6363ff'])
+    fig, ax = plt.subplots(figsize=(10, 8))
+    ax.imshow(mask, cmap=cmap, vmin=0, vmax=2, alpha=1)
 
-def plot_mask_with_points_and_bbox(mask, ar_points=None, tc_points=None, ar_bbox=None, tc_bbox=None, 
+    # Base legend entries for masks/bboxes
+    legend_elements = [
+        plt.Line2D([0], [0], color='green', lw=0, marker='s', label='TC Groundtruth', markerfacecolor='green', markersize=10, markeredgecolor='black'),
+        plt.Line2D([0], [0], color='blue', lw=0, marker='s', label='AR Groundtruth', markerfacecolor='blue', markersize=10),
+        plt.Line2D([0], [0], color='red', lw=2, label='AR BBox'),
+        plt.Line2D([0], [0], color='cyan', lw=2, label='TC BBox'),
+    ]
+
+    csv_rows = []  # collect rows to save: kind,label,x,y,x2,y2 (label carries pos/neg)
+
+    def _extract_points_and_labels(obj):
+        """Return (coords_array, labels_array_or_None).
+        Supports: - None -> empty
+                  - tuple (coords, labels)
+                  - single coords tensor/array
+                  - list/tuple of per-sample entries -> use first element
+        coords returned as shape (N,2); labels as shape (N,) or None
+        This version is more robust to object-dtype and oddly-shaped inputs.
+        """
+        if obj is None:
+            return np.empty((0, 2)), None
+        # If a list/tuple of samples (not the (coords, labels) format), choose first non-None element
+        if isinstance(obj, (list, tuple)) and not (len(obj) == 2 and not isinstance(obj[0], (list, tuple))):
+            # try to find a sensible element
+            el = None
+            for item in obj:
+                if item is not None:
+                    el = item
+                    break
+            if el is None:
+                return np.empty((0, 2)), None
+            # recurse on the chosen element
+            return _extract_points_and_labels(el)
+        # If it's the expected (coords, labels) tuple
+        if isinstance(obj, (list, tuple)) and len(obj) == 2:
+            coords_obj, labels_obj = obj
+        else:
+            coords_obj, labels_obj = obj, None
+
+        # Convert coords to numpy in a safe way
+        try:
+            if isinstance(coords_obj, torch.Tensor):
+                coords = coords_obj.detach().cpu().numpy()
+            else:
+                coords = np.asarray(coords_obj)
+        except Exception:
+            # fallback: try to build from iterable
+            try:
+                coords = np.array(list(coords_obj))
+            except Exception:
+                return np.empty((0, 2)), None
+
+        # Helper to coerce various shapes into (N,2)
+        def _coords_to_pairs(arr):
+            if arr is None:
+                return np.empty((0, 2))
+            arr = np.asarray(arr)
+            if arr.size == 0:
+                return np.empty((0, 2))
+            # handle object dtype (nested lists)
+            if arr.dtype == object:
+                # try to extract numeric subarrays
+                flat_list = []
+                for x in np.ravel(arr):
+                    if x is None:
+                        continue
+                    try:
+                        xa = np.asarray(x, dtype=float)
+                    except Exception:
+                        continue
+                    if xa.size == 0:
+                        continue
+                    if xa.ndim == 1 and xa.size == 2:
+                        flat_list.append(xa.reshape(1, 2))
+                    elif xa.ndim == 2 and xa.shape[1] == 2:
+                        flat_list.append(xa)
+                    elif xa.size % 2 == 0:
+                        flat_list.append(xa.reshape(-1, 2))
+                if len(flat_list) == 0:
+                    return np.empty((0, 2))
+                return np.vstack(flat_list)
+            # numeric dtype
+            if arr.ndim == 0:
+                # scalar -> cannot form point
+                return np.empty((0, 2))
+            if arr.ndim == 1:
+                if arr.size == 2:
+                    return arr.reshape(1, 2)
+                if arr.size % 2 == 0:
+                    return arr.reshape(-1, 2)
+                return np.empty((0, 2))
+            if arr.ndim == 2:
+                # common case: (N,2) or (M,2)
+                if arr.shape[1] == 2:
+                    return arr
+                # if total elements == 2 -> single point
+                if arr.size == 2:
+                    return arr.reshape(1, 2)
+                # try flatten and reshape
+                if arr.size % 2 == 0:
+                    return arr.reshape(-1, 2)
+                return np.empty((0, 2))
+            if arr.ndim >= 3:
+                # try to collapse leading dims and keep last dim as 2
+                if arr.shape[-1] == 2:
+                    return arr.reshape(-1, 2)
+                if arr.size % 2 == 0:
+                    return arr.reshape(-1, 2)
+                return np.empty((0, 2))
+            return np.empty((0, 2))
+
+        coords = _coords_to_pairs(coords)
+
+        # Handle labels
+        if labels_obj is None:
+            return coords, None
+        try:
+            if isinstance(labels_obj, torch.Tensor):
+                labs = labels_obj.detach().cpu().numpy()
+            else:
+                labs = np.asarray(labels_obj)
+        except Exception:
+            labs = None
+        if labs is None or labs.size == 0:
+            return coords, None
+        labs = np.asarray(labs)
+        # Flatten labs and try to align with coords
+        labs = labs.reshape(-1)
+        if labs.shape[0] != coords.shape[0]:
+            # If labs looks per-object while coords contains multiple points per object, attempt repeat
+            try:
+                if hasattr(coords_obj, 'ndim') and coords_obj.ndim == 3 and labs.shape[0] == coords_obj.shape[0]:
+                    labs = np.repeat(labs, coords_obj.shape[1])
+                    labs = labs.reshape(-1)
+                else:
+                    # truncate or pad with ones
+                    if labs.shape[0] < coords.shape[0]:
+                        pad = np.ones(coords.shape[0] - labs.shape[0], dtype=labs.dtype)
+                        labs = np.concatenate([labs[:coords.shape[0]], pad])
+                    else:
+                        labs = labs[:coords.shape[0]]
+            except Exception:
+                # final fallback: mark all as positive
+                labs = np.ones(coords.shape[0], dtype=float)
+        return coords, labs
+
+    def _bboxes_to_list(obj):
+        bboxes = []
+        if obj is None:
+            return bboxes
+        # If it's a list/tuple of per-sample tensors, iterate through elements
+        if isinstance(obj, (list, tuple)):
+            for item in obj:
+                if item is None:
+                    continue
+                if isinstance(item, torch.Tensor):
+                    arr = item.squeeze(1).cpu().numpy() if item.ndim == 3 else item.cpu().numpy()
+                else:
+                    arr = np.asarray(item)
+                    if arr.ndim == 3:
+                        arr = arr.squeeze(1)
+                arr = np.atleast_2d(arr.reshape(-1, 4))
+                bboxes.extend(arr.tolist())
+            return bboxes
+        # Single tensor/array
+        if isinstance(obj, torch.Tensor):
+            arr = obj.squeeze(1).cpu().numpy() if obj.ndim == 3 else obj.cpu().numpy()
+        else:
+            arr = np.asarray(obj)
+            if arr.ndim == 3:
+                arr = arr.squeeze(1)
+        arr = np.atleast_2d(arr.reshape(-1, 4))
+        bboxes.extend(arr.tolist())
+        return bboxes
+
+    # Plot function for points with labels
+    def _plot_points(coords, labels, pos_color, neg_color, pos_marker='x', neg_marker='o', label_prefix='AR'):
+        # coords: (N,2), labels: (N,) or None
+        if coords is None or coords.size == 0:
+            return
+        if labels is None:
+            # treat all as positive
+            for x, y in coords:
+                ax.scatter(x, y, marker=pos_marker, color=pos_color, s=50, linewidth=1)
+                csv_rows.append(['point', f'{label_prefix}_pos', float(x), float(y), '', ''])
+            # add a legend entry for positives if not present
+            legend_elements.append(plt.Line2D([0], [0], marker=pos_marker, color=pos_color, label=f'{label_prefix} Pos', markerfacecolor=pos_color, markersize=8, ls='None'))
+            return
+        coords = coords.reshape(-1, 2)
+        labels = np.asarray(labels).reshape(-1)
+        pos_idx = labels > 0.5
+        neg_idx = ~pos_idx
+        if pos_idx.any():
+            for x, y in coords[pos_idx]:
+                ax.scatter(x, y, marker=pos_marker, color=pos_color, s=50, linewidth=1)
+                csv_rows.append(['point', f'{label_prefix}_pos', float(x), float(y), '', ''])
+            legend_elements.append(plt.Line2D([0], [0], marker=pos_marker, color=pos_color, label=f'{label_prefix} Pos', markerfacecolor=pos_color, markersize=8, ls='None'))
+        if neg_idx.any():
+            for x, y in coords[neg_idx]:
+                ax.scatter(x, y, marker=neg_marker, color=neg_color, s=40, linewidth=1)
+                csv_rows.append(['point', f'{label_prefix}_neg', float(x), float(y), '', ''])
+            legend_elements.append(plt.Line2D([0], [0], marker=neg_marker, color=neg_color, label=f'{label_prefix} Neg', markerfacecolor=neg_color, markersize=8, ls='None'))
+
+    # Plot AR points (positive/negative distinction)
+    if ar_points is not None:
+        ar_coords, ar_labels = _extract_points_and_labels(ar_points)
+        _plot_points(ar_coords, ar_labels, pos_color='red', neg_color='orange', pos_marker='x', neg_marker='o', label_prefix='AR')
+
+    # Plot TC points (positive/negative distinction)
+    if tc_points is not None:
+        tc_coords, tc_labels = _extract_points_and_labels(tc_points)
+        _plot_points(tc_coords, tc_labels, pos_color='cyan', neg_color='magenta', pos_marker='x', neg_marker='o', label_prefix='TC')
+
+    # Plot AR bounding boxes
+    if ar_bbox is not None:
+        bboxes = _bboxes_to_list(ar_bbox)
+        for bbox in bboxes:
+            x1, y1, x2, y2 = map(float, bbox)
+            width = x2 - x1
+            height = y2 - y1
+            rect = plt.Rectangle((x1, y1), width, height, linewidth=1, edgecolor='red', facecolor='none')
+            ax.add_patch(rect)
+            csv_rows.append(['bbox', 'AR', x1, y1, x2, y2])
+
+    # Plot TC bounding boxes
+    if tc_bbox is not None:
+        bboxes = _bboxes_to_list(tc_bbox)
+        for bbox in bboxes:
+            x1, y1, x2, y2 = map(float, bbox)
+            width = x2 - x1
+            height = y2 - y1
+            rect = plt.Rectangle((x1, y1), width, height, linewidth=1, edgecolor='cyan', facecolor='none')
+            ax.add_patch(rect)
+            csv_rows.append(['bbox', 'TC', x1, y1, x2, y2])
+
+    # Plot AR prediction mask as filled overlay (alpha=0.6)
+    if ar_pred_mask is not None:
+        if isinstance(ar_pred_mask, torch.Tensor):
+            ar_pred_np = ar_pred_mask.cpu().numpy()
+        else:
+            ar_pred_np = ar_pred_mask
+
+        # Squeeze to 2D if necessary
+        if ar_pred_np.ndim > 2:
+            ar_pred_np = ar_pred_np.squeeze()
+
+        # Create a masked array so only predicted pixels are shown (threshold 0.5)
+        ar_masked = np.ma.masked_where(ar_pred_np <= 0.5, ar_pred_np)
+
+        # Use a sequential colormap and alpha for filled overlay
+        ax.imshow(ar_masked, cmap=ListedColormap(['#feb61f']), alpha=0.5, vmin=0, vmax=1)
+
+        # Legend entry (filled color)
+        legend_elements.append(plt.Line2D([0], [0], color='#feb61f', lw=6, alpha=0.5, label='AR Prediction'))
+
+    # Plot TC prediction mask as filled overlay (alpha=0.6)
+    if tc_pred_mask is not None:
+        if isinstance(tc_pred_mask, torch.Tensor):
+            tc_pred_np = tc_pred_mask.cpu().numpy()
+        else:
+            tc_pred_np = tc_pred_mask
+
+        # Squeeze to 2D if necessary
+        if tc_pred_np.ndim > 2:
+            tc_pred_np = tc_pred_np.squeeze()
+
+        # Mask out pixels below threshold so overlay only shows predicted pixels
+        tc_masked = np.ma.masked_where(tc_pred_np <= 0.5, tc_pred_np)
+
+        # Use a sequential colormap and alpha for filled overlay
+        ax.imshow(tc_masked, cmap=ListedColormap(['#dd2ddd']), alpha=0.5, vmin=0, vmax=1)
+
+        legend_elements.append(plt.Line2D([0], [0], color='#dd2ddd', lw=6, alpha=0.6, label='TC Prediction'))
+
+    ax.legend(handles=legend_elements, loc='lower right', bbox_to_anchor=(1, -0.25), frameon=False, fontsize=14, ncol=4, columnspacing=0.5)
+    
+    
+    # Add title and labels
+    if title is None:
+        title = "Mask with AR/TC Points, BBoxes and Predictions"
+    ax.set_title(title, fontsize=16)
+
+    # Show or hide axis/ruler
+    if axis:
+        h, w = mask.shape
+        max_ticks = 10
+        x_ticks = np.unique(np.round(np.linspace(0, w - 1, min(max_ticks, w))).astype(int))
+        y_ticks = np.unique(np.round(np.linspace(0, h - 1, min(max_ticks, h))).astype(int))
+        ax.set_xticks(x_ticks)
+        ax.set_yticks(y_ticks)
+        ax.set_xticklabels([str(int(t)) for t in x_ticks], fontsize=10)
+        ax.set_yticklabels([str(int(t)) for t in y_ticks], fontsize=10)
+        ax.tick_params(axis='both', which='major', length=6)
+        ax.grid(True, color='white', linestyle='--', linewidth=0.5, alpha=0.6)
+    else:
+        ax.axis('off')
+    
+    os.makedirs(os.path.dirname(save_path) or '.', exist_ok=True)
+    plt.savefig(save_path, bbox_inches='tight', pad_inches=0.1)
+
+    # Save prompts (points and bboxes) to a CSV with the same base name as save_path
+    csv_path = os.path.splitext(save_path)[0] + '.csv'
+    if csv_rows:
+        with open(csv_path, mode='w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['kind', 'label', 'x', 'y', 'x2', 'y2'])
+            writer.writerows(csv_rows)
+
+    plt.close(fig)
+    
+    return fig
+
+
+def plot_mask_with_points_and_bbox_old(mask, ar_points=None, tc_points=None, ar_bbox=None, tc_bbox=None, 
                                    tc_pred_mask=None, ar_pred_mask=None, radius=8, save_path='exp', axis=False, title = None):
     if isinstance(mask, torch.Tensor):
         mask = mask.cpu().numpy()
@@ -420,7 +742,7 @@ def plot_mask_with_points_and_bbox(mask, ar_points=None, tc_points=None, ar_bbox
         
         # Plot contour lines for AR predictions
         ax.contour(ar_pred_np, levels=[0.5], colors=['orange'], linewidths=2, linestyles='--')
-        legend_elements.append(plt.Line2D([0], [0], color='orange', lw=2, linestyle='--', label='AR Prediction'))
+        legend_elements.append(plt.Line2D([0], [0], color='orange', lw=0, marker='s', label='AR Prediction', markerfacecolor='orange', markersize=10, markeredgecolor='black'))
 
     # Plot TC prediction mask as contour lines
     if tc_pred_mask is not None:
@@ -434,7 +756,7 @@ def plot_mask_with_points_and_bbox(mask, ar_points=None, tc_points=None, ar_bbox
         
         # Plot contour lines for TC predictions
         ax.contour(tc_pred_np, levels=[0.5], colors=['magenta'], linewidths=2, linestyles='-')
-        legend_elements.append(plt.Line2D([0], [0], color='magenta', lw=2, linestyle='-', label='TC Prediction'))
+        legend_elements.append(plt.Line2D([0], [0], color='magenta', lw=0, marker='s', label='TC Prediction', markerfacecolor='magenta', markersize=10, markeredgecolor='black'))
 
     ax.legend(handles=legend_elements, loc='lower right', bbox_to_anchor=(1, -0.25), frameon=False, fontsize=14, ncol=4, columnspacing=0.5)
     

@@ -66,3 +66,6 @@ debugging = False
 
 [VANILLA SAM CONFIG]
 data_type = 'ar'
+
+[LORA]
+lora_r = 32
