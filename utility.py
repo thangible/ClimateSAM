@@ -162,7 +162,7 @@ def plot_with_projection(image, ar_pred, tc_pred, ar_gt, tc_gt, save_path, use_p
     return plot_array, title
 
 
-def plot_mask_with_points_and_bbox(mask, ar_points=None, tc_points=None, ar_bbox=None, tc_bbox=None,
+def plot_mask_with_points_and_bbox_weird(mask, ar_points=None, tc_points=None, ar_bbox=None, tc_bbox=None,
                                    tc_pred_mask=None, ar_pred_mask=None, radius=8, save_path='exp', axis=False, title=None):
     if isinstance(mask, torch.Tensor):
         mask = mask.cpu().numpy()
@@ -485,7 +485,7 @@ def plot_mask_with_points_and_bbox(mask, ar_points=None, tc_points=None, ar_bbox
     return fig
 
 
-def plot_mask_with_points_and_bbox_old(mask, ar_points=None, tc_points=None, ar_bbox=None, tc_bbox=None, 
+def plot_mask_with_points_and_bbox(mask, ar_points=None, tc_points=None, ar_bbox=None, tc_bbox=None, 
                                    tc_pred_mask=None, ar_pred_mask=None, radius=8, save_path='exp', axis=False, title = None):
     if isinstance(mask, torch.Tensor):
         mask = mask.cpu().numpy()

@@ -75,13 +75,19 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
 
         # Only the prompter needs gradients
         with torch.amp.autocast('cuda'):
-            final_logit, interm_masks = prompter(interm_features)
+            # Pass HF tokens from the ClimateSAM mask decoder for token gating
+            final_logit, interm_masks = prompter(
+                interm_features,
+                ar_token_weight=climatesam.mask_decoder.hf_token_ar.weight,
+                tc_token_weight=climatesam.mask_decoder.hf_token_tc.weight,
+                mode='AR'
+            )
+            
             softmax_final_logit = F.softmax(final_logit, dim=1)
             multiclass_mask = torch.argmax(softmax_final_logit, dim=1)
             
             # Ground truth masks
             gt_masks = torch.stack(batch['gt_mask'], dim=0).to(device)  # B, H, W
-
             
             # Compute generator loss (auxiliary predictions)
             loss_gen = compute_generator_loss(
@@ -604,11 +610,12 @@ def set_up_model(worker_args, device):
     ).to(device)
     
     if worker_args.load_pretrained:
-        generator_path = os.path.join(worker_args.exp_dir,'best_weights', f"best_generator_fuse_channels_{worker_args.fuse_channels}_sam_type_{worker_args.sam_type}.pth")
-        phase_2_checkpoint = torch.load(generator_path, map_location=device, weights_only=False)
-        print(f"Pretrained weights for prompt generator from phase 2 loaded from {generator_path}")
-        prompt_generator.load_state_dict(phase_2_checkpoint['prompt_generator'])
-        print(f"Prompt generator weights loaded from {generator_path}")
+        generator_path = os.path.join(worker_args.exp_dir,'best_weights', f"best_generator_token_fuse_channels_{worker_args.fuse_channels}_sam_type_{worker_args.sam_type}_{worker_args.run_name}.pth")
+        if  os.path.exists(generator_path):
+            phase_2_checkpoint = torch.load(generator_path, map_location=device, weights_only=False)
+            print(f"Pretrained weights for prompt generator from phase 2 loaded from {generator_path}")
+            prompt_generator.load_state_dict(phase_2_checkpoint['prompt_generator'])
+            print(f"Prompt generator weights loaded from {generator_path}")
     
     for params in climatesam.parameters():
         params.requires_grad = False
@@ -684,16 +691,16 @@ def main_worker(worker_id, worker_args):
                     best_weights_dir = os.path.join(worker_args.exp_dir, 'best_weights')
                     os.makedirs(best_weights_dir, exist_ok=True)
 
-                    save_path = os.path.join(best_weights_dir, f"best_generator_fuse_channels_{worker_args.fuse_channels}_sam_type_{worker_args.sam_type}_{worker_args.run_name}.pth")
+                    save_path = os.path.join(best_weights_dir, f"best_generator_token_fuse_channels_{worker_args.fuse_channels}_sam_type_{worker_args.sam_type}_{worker_args.run_name}.pth")
                     complete_model_weights = {
                         # 'image_encoder': climatesam.image_encoder.state_dict(),
                         # 'mask_decoder': climatesam.mask_decoder.state_dict(),
-                        'prompt_generator': prompt_generator.state_dict(),
-                        'epoch': epoch,
+                        'prompt_generator': prompt_generator.state_dict()
+                        # 'epoch': epoch,
                         # 'best_miou_tc': best_miou_tc,
                         # 'best_miou_ar': best_miou_ar,
                         # 'best_miou_total': best_miou_total,
-                        'best_logit_miou': best_logit_miou,
+                        # 'best_logit_miou': best_logit_miou,
                     }
                     
                     
