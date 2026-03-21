@@ -4,7 +4,8 @@ import torch.nn.functional as F
 from .layer_module import LayerNorm2d
 
 class PromptGenerator(nn.Module):
-    def __init__(self, pool_size: tuple = (2, 2),
+    def __init__(self, 
+                 pool_size: tuple = (2, 2),
                  fused_channels: int = 128,
                  in_channels: int = 768,
                  out_channels: int = 3,
@@ -13,18 +14,15 @@ class PromptGenerator(nn.Module):
                  transformer_dim: int = 256):
         super(PromptGenerator, self).__init__()  
         
-        # keep fused_channels accessible for token gating
         self.fused_channels = fused_channels
+        self.num_blocks = num_features // features_per_block
+        self.features_per_block = features_per_block
         
-        # New: Project transformer tokens into the fusion space and produce a sigmoid gate
-        self.token_projection = nn.Sequential(
-            nn.Linear(transformer_dim, fused_channels),
-            nn.ReLU(),
-            nn.Linear(fused_channels, fused_channels),
-            nn.Sigmoid()
-        )
-        
-        # Project refined (MLP) tokens (dim = transformer_dim//8) into class-specific gates
+        if num_features % features_per_block != 0:
+            raise ValueError(f"num_features ({num_features}) must be divisible by features_per_block ({features_per_block})")
+             
+        # Project refined (MLP) tokens (dim = 32) into class-specific gates
+        # These refined tokens are the 'intelligence' from the Mask Decoder [cite: 246, 249]
         refined_dim = transformer_dim // 8
         self.ar_gate_proj = nn.Sequential(
             nn.Linear(refined_dim, fused_channels),
@@ -35,25 +33,17 @@ class PromptGenerator(nn.Module):
             nn.Sigmoid()
         )
 
-        # Final binary heads for AR and TC (task-specific)
+        # Final binary heads for automated prompt generation [cite: 367, 369]
         self.ar_head = nn.Conv2d(fused_channels, 1, kernel_size=1)
         self.tc_head = nn.Conv2d(fused_channels, 1, kernel_size=1)
         
-        # Calculate number of blocks based on total features and features per block
-        self.num_blocks = num_features // features_per_block
-        self.features_per_block = features_per_block
-        
-        if num_features % features_per_block != 0:
-            raise ValueError(f"num_features ({num_features}) must be divisible by features_per_block ({features_per_block})")
-             
-        self.pool = nn.AdaptiveAvgPool2d(pool_size)
-        # Create blocks based on calculated number
+        # Encoder blocks for multi-scale fusion [cite: 323, 480]
         self.input_reduction = nn.ModuleList()
         self.block_feature_upsamplers = nn.ModuleList()
         self.block_fuse_convs = nn.ModuleList()
         self.block_out_trans = nn.ModuleList()
         
-        # Output convolutions for multi-level supervision
+        # Multi-level supervision to address ribbon-like and circular structures [cite: 258, 487]
         self.multilevel_mask_convs = nn.ModuleList()
         for _ in range(self.num_blocks):
             self.multilevel_mask_convs.append(
@@ -63,177 +53,90 @@ class PromptGenerator(nn.Module):
         for block_idx in range(self.num_blocks):
             self.input_reduction.append(
                 nn.Sequential(
-                nn.Conv2d(in_channels, fused_channels, kernel_size=1, padding=0, bias=False),
-                nn.ReLU(),
+                    nn.Conv2d(in_channels, fused_channels, kernel_size=1, padding=0, bias=False),
+                    nn.ReLU(),
                 )
             )
             num_layers = block_idx + 1
-            # Each input feature is assumed to have fused_channels channels.
-            # Upsample each feature (by a factor of 2 each ConvTranspose2d)
             self.block_feature_upsamplers.append(
                 nn.Sequential(*[
                     nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
-                    for i in range(num_layers)
+                    for _ in range(num_layers)
                 ])
             )
-            # self.block_feature_upsamplers.append(
-            #     nn.Sequential(*[
-            #         nn.ConvTranspose2d(fused_channels, fused_channels, kernel_size=2, stride=2)
-            #         for i in range(num_layers)
-            #     ])
-            # )
-            # Fuse the three features:
-            # The concatenation will have features_per_block*fused_channels channels.
             self.block_fuse_convs.append(
                 nn.Sequential(
                     nn.Conv2d(features_per_block * fused_channels, fused_channels, kernel_size=1),
-                    # LayerNorm2d(fused_channels),
-                    # nn.ReLU(),
                     nn.Conv2d(fused_channels, fused_channels, kernel_size=3, padding=1, stride=2),
                     LayerNorm2d(fused_channels),
                     nn.ReLU()
                 )
             )
-            # After fusion, if this is not the first block, we will concatenate with the previous block's
-            # upsampled output. That doubles the channels from fused_channels to 2*fused_channels.
-            up_in_channels = fused_channels if block_idx == 0 else fused_channels * 2
-            # Extra upsampling: always upsample by a factor of 2.
             self.block_out_trans.append(
                 nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
             )
 
         self.neck = nn.Sequential(
-            nn.Conv2d(self.num_blocks * fused_channels, fused_channels, kernel_size=1, padding=0),  # fused_channelsx1024x1024
+            nn.Conv2d(self.num_blocks * fused_channels, fused_channels, kernel_size=1, padding=0),
             nn.ReLU()
         )
         
         self.multiclass_mask_conv = nn.Sequential(
             nn.Conv2d(fused_channels, fused_channels, kernel_size=3, padding=1),
             nn.ReLU(),
-            # Output channels set to 3 for classes 0, 1, and 2
-            # Sigmoid is removed to output logits for CrossEntropyLoss
-            nn.Conv2d(fused_channels, out_channels, kernel_size=3, padding=1), # Use out_channels=3
+            nn.Conv2d(fused_channels, out_channels, kernel_size=3, padding=1), 
         )
-        
-        # self.mask1_conv =  nn.Sequential(
-        #     nn.Conv2d(fused_channels, fused_channels, kernel_size=4, stride=2, groups=2, padding=1),  # 2x518x518
-        #     nn.Conv2d(fused_channels, 1, kernel_size=4, stride=2,  padding=1)  # 1x256x256
-        #     )
-        
-        # self.mask2_conv = nn.Sequential(
-        #     nn.Conv2d(fused_channels, fused_channels, kernel_size=4, stride=2, groups=2, padding=1),  # 2x518x518
-        #     nn.Conv2d(fused_channels, 1, kernel_size=4, stride=2, padding=1)  # 1x256x256
-        #     )
-    
 
-    def forward(self, feat_list, ar_token_weight=None, tc_token_weight=None, mode='AR'):
-        """
-        Args:
-            feat_list: list of feature maps, each of shape (B, 64, 64, 768)
-            ar_token_weight: tensor (1, transformer_dim)
-            tc_token_weight: tensor (1, transformer_dim)
-            mode: 'AR' or 'TC' to decide which token to use
-        Returns:
-            multiclass_mask, intermediate_masks
-        """
-        # Permute feature maps from (B, 64, 64, 768) to (B, 768, 64, 64)
+    def forward(self, feat_list, ar_refined=None, tc_refined=None):
+        # Permute feature maps from (B, 64, 64, 768) to (B, 768, 64, 64) [cite: 154]
         feat_list = [f.permute(0, 3, 1, 2) for f in feat_list]
         intermediate_masks = []
         reversed_feats = feat_list[::-1]
-        # Prepare token gate
-        token = None
-        feat_batch = reversed_feats[0].shape[0]
-        if ar_token_weight is not None and tc_token_weight is not None:
-            token = ar_token_weight if mode == 'AR' else tc_token_weight
-            # ensure token has batch dimension
-            if token.dim() == 1:
-                token = token.unsqueeze(0)
-            # Project token to fused space -> (T, fused_channels)
-            gate = self.token_projection(token)  # (T, C)
-            gate = gate.view(gate.size(0), self.fused_channels, 1, 1)  # (T, C, 1, 1)
-            # If single token provided, expand to batch size for broadcasting
-            if gate.size(0) == 1 and feat_batch > 1:
-                gate = gate.expand(feat_batch, self.fused_channels, 1, 1)
-            # If token batch matches feature batch, keep as-is. Otherwise, fallback to first token expanded.
-            if gate.size(0) != feat_batch and gate.size(0) != 1:
-                gate = gate[0:1].expand(feat_batch, self.fused_channels, 1, 1)
-            gate = gate.to(reversed_feats[0].device)
-        else:
-            # fallback: no gating (all ones)
-            gate = torch.ones(feat_batch, self.fused_channels, 1, 1, 
-                  device=reversed_feats[0].device, 
-                  dtype=reversed_feats[0].dtype)
 
         prev_up = None
         for block_idx in range(self.num_blocks):
-            # Get group of features for this block.
             start_idx = block_idx * self.features_per_block
             end_idx = (block_idx + 1) * self.features_per_block
             group = reversed_feats[start_idx:end_idx]
-            # reduce the input channels to fused_channels.
+            
+            # 1. Feature reduction and multi-scale fusion [cite: 323, 480]
             reduced_group = [self.input_reduction[block_idx](f) for f in group]
-
-            # Apply Token Gating to each reduced feature map in the group
-            gated_group = [f * gate for f in reduced_group]
-
-            # Upsample each feature using the corresponding block upsampler.
-            upsampled_group = [self.block_feature_upsamplers[block_idx](f) for f in gated_group]
-            # Concatenate along the channel dimension.
-            group_concat = torch.cat(upsampled_group, dim=1)  # shape: (B, 3*256, H, W)
-            # Fuse the concatenated features.
-            fused = self.block_fuse_convs[block_idx](group_concat)  # shape: (B, 256, H', W')
-            # ----------------------------------------------------
-            # 1. Compute intermediate mask (logits)
-            # Use the fused feature for the output convolution for this level
+            upsampled_group = [self.block_feature_upsamplers[block_idx](f) for f in reduced_group]
+            
+            group_concat = torch.cat(upsampled_group, dim=1)
+            fused = self.block_fuse_convs[block_idx](group_concat)
+            
+            # 2. Intermediate auxiliary logits [cite: 322, 487]
             intermediate_logit = self.multilevel_mask_convs[block_idx](fused)
-            # No interpolation here; it will be done on the loss side
             intermediate_masks.append(intermediate_logit)
 
-            # For blocks after the first, concatenate with the previous block’s upsampled output.
             if prev_up is not None:
-                fused = torch.cat([prev_up, fused], dim=1)  # shape: (B, 512, H', W')
-            # Upsample fused result to feed next block.
+                fused = torch.cat([prev_up, fused], dim=1)
+            
             up = self.block_out_trans[block_idx](fused)
             prev_up = up
 
-        # The final fused feature is the output from the last block.
+        # 3. Global neck features
         neck_out = self.neck(prev_up)
-        # Compute the multi-class mask (logits)
-        multiclass_mask = self.multiclass_mask_conv(neck_out)
         
-        # Additionally compute class-specific binary masks using refined tokens if provided
-        ar_mask = None
-        tc_mask = None
-        if ar_token_weight is not None and tc_token_weight is not None:
-            # ar_token_weight and tc_token_weight expected to be the MLP-refined tokens (B, refined_dim)
-            ar_token = ar_token_weight
-            tc_token = tc_token_weight
-            if ar_token.dim() == 1:
-                ar_token = ar_token.unsqueeze(0)
-            if tc_token.dim() == 1:
-                tc_token = tc_token.unsqueeze(0)
-            # Project to gates
-            ar_gate = self.ar_gate_proj(ar_token).view(-1, self.fused_channels, 1, 1).to(neck_out.device).type_as(neck_out)
-            tc_gate = self.tc_gate_proj(tc_token).view(-1, self.fused_channels, 1, 1).to(neck_out.device).type_as(neck_out)
-            # Expand gates to batch if needed
+        # 4. Multiclass Prediction (Logits for classes 0, 1, 2) [cite: 48, 553]
+        multiclass_mask = self.multiclass_mask_conv(neck_out)
+        multiclass_mask = F.interpolate(multiclass_mask, size=(768, 1152), mode='bilinear', align_corners=False)
+        
+        # 5. Class-specific binary heads using refined task tokens [cite: 249, 362]
+        ar_mask, tc_mask = None, None
+        if ar_refined is not None and tc_refined is not None:
+            # Broadcast gates to match batch size [cite: 308]
             b = neck_out.shape[0]
-            if ar_gate.shape[0] == 1 and b > 1:
-                ar_gate = ar_gate.expand(b, -1, -1, -1)
-            if tc_gate.shape[0] == 1 and b > 1:
-                tc_gate = tc_gate.expand(b, -1, -1, -1)
+            ar_gate = self.ar_gate_proj(ar_refined).view(-1, self.fused_channels, 1, 1).expand(b, -1, -1, -1)
+            tc_gate = self.tc_gate_proj(tc_refined).view(-1, self.fused_channels, 1, 1).expand(b, -1, -1, -1)
 
-            ar_features = neck_out * ar_gate
-            tc_features = neck_out * tc_gate
+            # Task-specific feature highlighting
+            ar_mask = self.ar_head(neck_out * ar_gate)
+            tc_mask = self.tc_head(neck_out * tc_gate)
 
-            ar_mask = self.ar_head(ar_features)
-            tc_mask = self.tc_head(tc_features)
-
-            # Interpolate AR/TC masks to final output size
             ar_mask = F.interpolate(ar_mask, size=(768, 1152), mode='bilinear', align_corners=False)
             tc_mask = F.interpolate(tc_mask, size=(768, 1152), mode='bilinear', align_corners=False)
-
-        # Interpolate the multiclass mask (B, 3, H, W)
-        multiclass_mask = F.interpolate(multiclass_mask, size=(768, 1152), mode='bilinear', align_corners=False)
 
         return multiclass_mask, intermediate_masks, ar_mask, tc_mask
 

@@ -83,9 +83,8 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
             # Pass refined tokens into the prompt generator for gating
             final_logit, interm_masks, ar_mask, tc_mask = prompter(
                 interm_features,
-                ar_token_weight=ar_refined,
-                tc_token_weight=tc_refined,
-                mode='AR'
+                ar_refined=ar_refined,
+                tc_refined=tc_refined
             )
             
             softmax_final_logit = F.softmax(final_logit, dim=1)
@@ -251,9 +250,8 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
 
             final_logit, interm_masks, ar_mask, tc_mask = prompter(
                 interm_features,
-                ar_token_weight=ar_refined,
-                tc_token_weight=tc_refined,
-                mode='AR'
+                ar_refined=ar_refined,
+                tc_refined=tc_refined
             )
 
             if interm_masks is not None:
