@@ -101,10 +101,17 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
             # Compute combined generator + optional AR/TC binary loss via helper
             ar_masks_pred = None
             tc_masks_pred = None
+            ar_masks_gt = None
+            tc_masks_gt = None
             if ar_mask is not None and tc_mask is not None:
                 b = ar_mask.shape[0]
                 ar_masks_pred = [ar_mask[i:i+1] for i in range(b)]
                 tc_masks_pred = [tc_mask[i:i+1] for i in range(b)]
+
+                # Use true per-image binary GT masks for AR/TC head supervision.
+                # Each entry shape: [1, 1, H, W] to match pred list entries.
+                ar_masks_gt = [((gt_masks[i:i+1] == 2).float()).unsqueeze(1) for i in range(b)]
+                tc_masks_gt = [((gt_masks[i:i+1] == 1).float()).unsqueeze(1) for i in range(b)]
             
             merged_loss = calculate_generator_token_loss(
                 multiclass_mask=final_logit,
@@ -114,8 +121,8 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
                 worker_args=worker_args,
                 ar_masks_pred=ar_masks_pred,
                 tc_masks_pred=tc_masks_pred,
-                ar_masks_gt=prompt_dict.get('ar_object_masks', None),
-                tc_masks_gt=prompt_dict.get('tc_object_masks', None)
+                ar_masks_gt=ar_masks_gt,
+                tc_masks_gt=tc_masks_gt
             )
             
         # ClimateSAM forward also doesn't require gradients (we don't train it)
