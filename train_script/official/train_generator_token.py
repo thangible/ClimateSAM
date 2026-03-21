@@ -602,17 +602,14 @@ def set_up_model(worker_args, device):
     ).to(device)
     
     # Load pretrained weights
-    if worker_args.load_pretrained:
-        if worker_args.phase == 1:
-            image_encoder_path = os.path.join(worker_args.exp_dir,'best_weights', f"phase_2_weights_best.pth")
-            phase_1_checkpoint = torch.load(image_encoder_path, map_location=device)
-            print(f"Pretrained weights from phase 1 loaded from {image_encoder_path}")
-            climatesam.image_encoder.load_state_dict(phase_1_checkpoint['image_encoder'])
-            print(f"Image encoder weights loaded from {image_encoder_path}")
-            climatesam.mask_decoder.load_state_dict(phase_1_checkpoint['mask_decoder'])
-            print(f"Mask decoder weights loaded from {image_encoder_path}")
-    
-    
+    image_encoder_path = os.path.join(worker_args.exp_dir,'best_weights', f"phase_2_weights_best.pth")
+    phase_1_checkpoint = torch.load(image_encoder_path, map_location=device)
+    print(f"Pretrained weights from phase 1 loaded from {image_encoder_path}")
+    climatesam.image_encoder.load_state_dict(phase_1_checkpoint['image_encoder'])
+    print(f"Image encoder weights loaded from {image_encoder_path}")
+    climatesam.mask_decoder.load_state_dict(phase_1_checkpoint['mask_decoder'])
+    print(f"Mask decoder weights loaded from {image_encoder_path}")
+            
     ###################################################
     num_features_map = {
         'vit_b': 12,
