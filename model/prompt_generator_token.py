@@ -24,6 +24,21 @@ class PromptGenerator(nn.Module):
             nn.Sigmoid()
         )
         
+        # Project refined (MLP) tokens (dim = transformer_dim//8) into class-specific gates
+        refined_dim = transformer_dim // 8
+        self.ar_gate_proj = nn.Sequential(
+            nn.Linear(refined_dim, fused_channels),
+            nn.Sigmoid()
+        )
+        self.tc_gate_proj = nn.Sequential(
+            nn.Linear(refined_dim, fused_channels),
+            nn.Sigmoid()
+        )
+
+        # Final binary heads for AR and TC (task-specific)
+        self.ar_head = nn.Conv2d(fused_channels, 1, kernel_size=1)
+        self.tc_head = nn.Conv2d(fused_channels, 1, kernel_size=1)
+        
         # Calculate number of blocks based on total features and features per block
         self.num_blocks = num_features // features_per_block
         self.features_per_block = features_per_block
@@ -185,9 +200,40 @@ class PromptGenerator(nn.Module):
         neck_out = self.neck(prev_up)
         # Compute the multi-class mask (logits)
         multiclass_mask = self.multiclass_mask_conv(neck_out)
+        
+        # Additionally compute class-specific binary masks using refined tokens if provided
+        ar_mask = None
+        tc_mask = None
+        if ar_token_weight is not None and tc_token_weight is not None:
+            # ar_token_weight and tc_token_weight expected to be the MLP-refined tokens (B, refined_dim)
+            ar_token = ar_token_weight
+            tc_token = tc_token_weight
+            if ar_token.dim() == 1:
+                ar_token = ar_token.unsqueeze(0)
+            if tc_token.dim() == 1:
+                tc_token = tc_token.unsqueeze(0)
+            # Project to gates
+            ar_gate = self.ar_gate_proj(ar_token).view(-1, self.fused_channels, 1, 1).to(neck_out.device).type_as(neck_out)
+            tc_gate = self.tc_gate_proj(tc_token).view(-1, self.fused_channels, 1, 1).to(neck_out.device).type_as(neck_out)
+            # Expand gates to batch if needed
+            b = neck_out.shape[0]
+            if ar_gate.shape[0] == 1 and b > 1:
+                ar_gate = ar_gate.expand(b, -1, -1, -1)
+            if tc_gate.shape[0] == 1 and b > 1:
+                tc_gate = tc_gate.expand(b, -1, -1, -1)
 
-        # Interpolate the mask (B, 3, H, W)
+            ar_features = neck_out * ar_gate
+            tc_features = neck_out * tc_gate
+
+            ar_mask = self.ar_head(ar_features)
+            tc_mask = self.tc_head(tc_features)
+
+            # Interpolate AR/TC masks to final output size
+            ar_mask = F.interpolate(ar_mask, size=(768, 1152), mode='bilinear', align_corners=False)
+            tc_mask = F.interpolate(tc_mask, size=(768, 1152), mode='bilinear', align_corners=False)
+
+        # Interpolate the multiclass mask (B, 3, H, W)
         multiclass_mask = F.interpolate(multiclass_mask, size=(768, 1152), mode='bilinear', align_corners=False)
 
-        return multiclass_mask, intermediate_masks
+        return multiclass_mask, intermediate_masks, ar_mask, tc_mask
 

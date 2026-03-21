@@ -29,7 +29,7 @@ from evaluator import StreamSegMetrics
 
 
 from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug, setup_device_and_distributed, setup_optimizer_and_scheduler, worker_init_fn
-from loss_function import ClimateLoss, compute_climate_loss, compute_generator_loss
+from loss_function import ClimateLoss, compute_climate_loss, compute_generator_loss, calculate_generator_token_loss
 from parser_config import parse
 from climatesam import ClimateSAM
 from dataset.climatenet import ClimateDataset
@@ -75,35 +75,52 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
 
         # Only the prompter needs gradients
         with torch.amp.autocast('cuda'):
-            # Pass HF tokens from the ClimateSAM mask decoder for token gating
-            final_logit, interm_masks = prompter(
+            # Build MLP-refined tokens from the mask decoder (use no_grad to avoid updating mask decoder)
+            with torch.no_grad():
+                ar_refined = climatesam.mask_decoder.hf_mlp_ar(climatesam.mask_decoder.hf_token_ar.weight.to(device))
+                tc_refined = climatesam.mask_decoder.hf_mlp_tc(climatesam.mask_decoder.hf_token_tc.weight.to(device))
+
+            # Pass refined tokens into the prompt generator for gating
+            final_logit, interm_masks, ar_mask, tc_mask = prompter(
                 interm_features,
-                ar_token_weight=climatesam.mask_decoder.hf_token_ar.weight,
-                tc_token_weight=climatesam.mask_decoder.hf_token_tc.weight,
+                ar_token_weight=ar_refined,
+                tc_token_weight=tc_refined,
                 mode='AR'
             )
             
             softmax_final_logit = F.softmax(final_logit, dim=1)
             multiclass_mask = torch.argmax(softmax_final_logit, dim=1)
             
-            # Ground truth masks
+            # Ground truth masks (multiclass for generator loss)
             gt_masks = torch.stack(batch['gt_mask'], dim=0).to(device)  # B, H, W
             
-            # Compute generator loss (auxiliary predictions)
-            loss_gen = compute_generator_loss(
+            # Build prompts (must be done before computing any GT-based losses)
+            # Use detached multiclass_mask to avoid accidental gradient flow into prompt creation
+            prompt_dict = prompt_maker.make_prompts(multiclass_mask.detach(), enlarge_ratio=worker_args.prompt_enlarge_ratio)
+            prompt_dict = batch_to_cuda(prompt_dict, device)
+
+            # Compute combined generator + optional AR/TC binary loss via helper
+            ar_masks_pred = None
+            tc_masks_pred = None
+            if ar_mask is not None and tc_mask is not None:
+                b = ar_mask.shape[0]
+                ar_masks_pred = [ar_mask[i:i+1] for i in range(b)]
+                tc_masks_pred = [tc_mask[i:i+1] for i in range(b)]
+            
+            merged_loss = calculate_generator_token_loss(
                 multiclass_mask=final_logit,
                 interm_masks=interm_masks,
                 gt_masks=gt_masks,
                 device=device,
-                worker_args=worker_args
+                worker_args=worker_args,
+                ar_masks_pred=ar_masks_pred,
+                tc_masks_pred=tc_masks_pred,
+                ar_masks_gt=prompt_dict.get('ar_object_masks', None),
+                tc_masks_gt=prompt_dict.get('tc_object_masks', None)
             )
             
-
         # ClimateSAM forward also doesn't require gradients (we don't train it)
         with torch.no_grad():
-            prompt_dict = prompt_maker.make_prompts(multiclass_mask, enlarge_ratio=worker_args.prompt_enlarge_ratio)
-            prompt_dict = batch_to_cuda(prompt_dict, device)
-                        
             tc_pred_masks, ar_pred_masks, _ = climatesam.forward(
                 image_input=image_input,
                 image_embeddings=image_embeddings,
@@ -116,34 +133,17 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
                 ar_mask_prompts=prompt_dict['ar_mask_prompts'],
                 tc_mask_prompts=prompt_dict['tc_mask_prompts']
             )
-            
-            masks_ar_gt = prompt_dict['ar_object_masks']
-            masks_tc_gt = prompt_dict['tc_object_masks']
-            
-            
-            # # Compute model loss (final predictions)
-            # loss_model = compute_climate_loss(
-            #     ar_masks=ar_pred_masks,
-            #     tc_masks=tc_pred_masks,
-            #     ar_masks_gt=masks_ar_gt,
-            #     tc_masks_gt=masks_tc_gt,
-            #     device=device,
-            #     worker_args=worker_args
-            # )
-            
+        
         # Combine losses
         loss_dict = {}
-        loss_dict.update({f"gen_{k}": v for k, v in loss_gen.items()})
-        # loss_dict.update({f"model_{k}": v for k, v in loss_model.items()})
+        loss_dict.update({f"gen_{k}": v for k, v in merged_loss.items()})
         
-        # Total loss for backward
-        total_loss_gen = loss_gen.pop('total_loss_for_backward')
-        # total_loss_model = loss_model.pop('total_loss_for_backward')
-        total_loss = total_loss_gen # + total_loss_model
+        # Total loss for backward (already combined in merged_loss)
+        total_loss = merged_loss.pop('total_loss_for_backward')
         loss_dict['total_loss_for_backward'] = total_loss
-        
+
         # Scale loss by gradient accumulation steps
-        total_loss = total_loss / gradient_accumulation_steps
+        total_loss = loss_dict['total_loss_for_backward'] / gradient_accumulation_steps
         
         # Accumulate losses for epoch-level logging
         for key, value in loss_dict.items():
@@ -239,17 +239,48 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
             image_input = image_input.detach()
             
             
-            final_logit, interm_masks = prompter(interm_features)
-            interm_masks = [F.interpolate(mask, size=ori_img_size[0], mode='bilinear', align_corners=False) for mask in interm_masks]
-            
+            # final_logit, interm_masks = prompter(interm_features)
+            # interm_masks = [F.interpolate(mask, size=ori_img_size[0], mode='bilinear', align_corners=False) for mask in interm_masks]
+            # 
+            # softmax_final_logit = F.softmax(final_logit, dim=1) # B, 3, H, W
+            # multiclass_mask = torch.argmax(softmax_final_logit, dim=1) # B, H, W
+            # Use MLP-refined tokens from the mask decoder and pass them into the prompter
+            # so that the generator can produce class-specific binary masks (AR/TC)
+            ar_refined = climatesam.mask_decoder.hf_mlp_ar(climatesam.mask_decoder.hf_token_ar.weight.to(device))
+            tc_refined = climatesam.mask_decoder.hf_mlp_tc(climatesam.mask_decoder.hf_token_tc.weight.to(device))
+
+            final_logit, interm_masks, ar_mask, tc_mask = prompter(
+                interm_features,
+                ar_token_weight=ar_refined,
+                tc_token_weight=tc_refined,
+                mode='AR'
+            )
+
+            if interm_masks is not None:
+                interm_masks = [F.interpolate(mask, size=ori_img_size[0], mode='bilinear', align_corners=False) for mask in interm_masks]
+
             softmax_final_logit = F.softmax(final_logit, dim=1) # B, 3, H, W
             multiclass_mask = torch.argmax(softmax_final_logit, dim=1) # B, H, W
-            
-            # Ground truth masks
-            gt_masks = torch.stack(batch['gt_mask'], dim=0).to(device)  # B, H, W
 
+            # Build a multiclass mask for prompt generation using the AR/TC binary heads if available.
+            # Priority: AR overrides TC in case of overlap.
+            use_binary_heads = (ar_mask is not None) and (tc_mask is not None)
+            if use_binary_heads:
+                # ar_mask / tc_mask expected shape: (B, 1, H, W)
+                ar_prob = torch.sigmoid(ar_mask).squeeze(1)  # B, H, W
+                tc_prob = torch.sigmoid(tc_mask).squeeze(1)  # B, H, W
+
+                threshold = 0.5
+                pred_multiclass_for_prompts = torch.zeros_like(multiclass_mask, dtype=torch.long)
+                tc_pos = (tc_prob > threshold)
+                ar_pos = (ar_prob > threshold)
+                # set TC then AR to allow AR override
+                pred_multiclass_for_prompts[tc_pos] = 1
+                pred_multiclass_for_prompts[ar_pos] = 2
+            else:
+                pred_multiclass_for_prompts = multiclass_mask
             
-            prompt_dict = prompt_maker.make_prompts(multiclass_mask)
+            prompt_dict = prompt_maker.make_prompts(pred_multiclass_for_prompts, enlarge_ratio=worker_args.prompt_enlarge_ratio)
             prompt_dict = batch_to_cuda(prompt_dict, device)
             
             ar_point_prompts_copy = copy.deepcopy(prompt_dict['ar_point_prompts'])

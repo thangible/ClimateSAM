@@ -366,7 +366,7 @@ class GeneratorLoss(nn.Module):
             
             
 def compute_generator_loss(multiclass_mask, interm_masks, gt_masks, device, worker_args, 
-                          lambda_factors: list = None, num_blocks: int = 4) -> Dict[str, torch.Tensor]:
+                           lambda_factors: list = None, num_blocks: int = 4) -> Dict[str, torch.Tensor]:
     """
     Compute loss for generator (auxiliary predictions) with multi-level supervision using Tversky and BCE losses.
     
@@ -490,3 +490,88 @@ def compute_generator_loss(multiclass_mask, interm_masks, gt_masks, device, work
         'intermediate_tversky_sum': intermediate_tversky_sum.detach(),          # detached for logging
         'intermediate_bce_sum': intermediate_bce_sum.detach()                   # detached for logging
     }
+
+
+def calculate_generator_token_loss(
+    multiclass_mask,
+    interm_masks,
+    gt_masks,
+    device: torch.device,
+    worker_args,
+    ar_masks_pred=None,
+    tc_masks_pred=None,
+    ar_masks_gt=None,
+    tc_masks_gt=None,
+    lambda_factors: list = None,
+    num_blocks: int = 4
+):
+    """
+    Compute combined loss for the prompt generator tokens.
+
+    This function wraps `compute_generator_loss` (multiclass + intermediate supervision)
+    and optionally `compute_climate_loss` (AR/TC binary head supervision).
+
+    Args:
+        multiclass_mask: Final multiclass logits (B, C, H, W)
+        interm_masks: list of intermediate multiclass logits
+        gt_masks: ground-truth multiclass masks (B, H, W)
+        device: device
+        worker_args: training hyperparameters
+        ar_masks_pred: optional list or tensor of predicted AR binary masks (per-image tensors)
+        tc_masks_pred: optional list or tensor of predicted TC binary masks (per-image tensors)
+        ar_masks_gt: optional list of ground-truth AR object masks (from PromptMaker)
+        tc_masks_gt: optional list of ground-truth TC object masks (from PromptMaker)
+        lambda_factors, num_blocks: forwarded to compute_generator_loss
+
+    Returns:
+        merged loss dictionary containing generator and (optional) model losses, plus
+        a summed 'total_loss_for_backward' suitable for backprop.
+    """
+    # 1) Generator loss (multiclass + intermediate supervision)
+    gen_loss = compute_generator_loss(
+        multiclass_mask=multiclass_mask,
+        interm_masks=interm_masks,
+        gt_masks=gt_masks,
+        device=device,
+        worker_args=worker_args,
+        lambda_factors=lambda_factors,
+        num_blocks=num_blocks
+    )
+
+    merged = {f'gen_{k}': v for k, v in gen_loss.items()}
+
+    # 2) Optional AR/TC binary head loss using compute_climate_loss
+    model_loss = None
+    if ar_masks_pred is not None and tc_masks_pred is not None and ar_masks_gt is not None and tc_masks_gt is not None:
+        # Ensure predictions are lists of tensors per image
+        if isinstance(ar_masks_pred, torch.Tensor):
+            ar_masks_pred_list = [ar_masks_pred[i:i+1] for i in range(ar_masks_pred.shape[0])]
+        else:
+            ar_masks_pred_list = list(ar_masks_pred)
+
+        if isinstance(tc_masks_pred, torch.Tensor):
+            tc_masks_pred_list = [tc_masks_pred[i:i+1] for i in range(tc_masks_pred.shape[0])]
+        else:
+            tc_masks_pred_list = list(tc_masks_pred)
+
+        model_loss = compute_climate_loss(
+            ar_masks=ar_masks_pred_list,
+            tc_masks=tc_masks_pred_list,
+            ar_masks_gt=ar_masks_gt,
+            tc_masks_gt=tc_masks_gt,
+            device=device,
+            worker_args=worker_args
+        )
+
+        merged.update({f'model_{k}': v for k, v in model_loss.items()})
+
+    # 3) total loss for backward
+    total = gen_loss['total_loss_for_backward']
+    if model_loss is not None:
+        total = total + model_loss['total_loss_for_backward']
+
+    # Package combined values for logging. Keep detached total for easy logging and the backward total
+    merged['total_loss_for_backward'] = total
+    merged['total_loss'] = total.detach()
+
+    return merged
