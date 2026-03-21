@@ -186,27 +186,41 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
             step_count += 1
             epoch_loss_count += 1
 
-            step_loss_dict = {key: epoch_loss_dict[key] / epoch_loss_count for key in epoch_loss_dict.keys()}
+            # Compute averaged losses for this step from accumulated epoch_loss_dict
+            # (losses already scaled by gradient_accumulation_steps when accumulated)
+            if epoch_loss_count > 0:
+                step_loss_dict = {key: epoch_loss_dict[key] / epoch_loss_count for key in epoch_loss_dict.keys()}
+            else:
+                step_loss_dict = {key: 0.0 for key in epoch_loss_dict.keys()}
+
+            # Distributed reduction of step losses so main process logs aggregated values
+            if torch.distributed.is_initialized():
+                reduced_step_loss = {}
+                for key, val in step_loss_dict.items():
+                    tensor_loss = torch.tensor(val, device=device)
+                    torch.distributed.reduce(tensor_loss, dst=0, op=torch.distributed.ReduceOp.SUM)
+                    reduced_step_loss[key] = (tensor_loss / torch.distributed.get_world_size()).item()
+                step_loss_dict = reduced_step_loss
 
             # Log step-level losses to W&B (only from main process)
             if worker_args.wandb and local_rank == 0:
                 step_log = {}
-                # loss_dict contains the most recent losses (tensors)
-                for k, v in loss_dict.items():
-                    try:
-                        step_log[f"train/{k}"] = float(v.item())
-                    except Exception:
-                        try:
-                            step_log[f"train/{k}"] = float(v)
-                        except Exception:
-                            # skip non-scalar entries
-                            continue
+                # Use the reduced step_loss_dict (scalars) for logging
+                for k, v in step_loss_dict.items():
+                    step_log[f"train/{k}"] = float(v)
+
                 # compute a global step index for logging
                 global_step = (epoch - 1) * effective_steps + step_count
                 step_log['epoch'] = epoch
                 step_log['global_step'] = global_step
-                wandb.log(step_log, step=global_step)
+                # include learning rate for context
+                try:
+                    step_log['learning_rate'] = scheduler.get_last_lr()[0]
+                except Exception:
+                    pass
 
+                wandb.log(step_log, step=global_step)
+        
     if len(train_dataloader) % gradient_accumulation_steps != 0:
         scaler.step(optimizer)
         scaler.update()
