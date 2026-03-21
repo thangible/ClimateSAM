@@ -45,21 +45,32 @@ class PromptMaker:
         for i in range(batch_size):
             # If binary masks provided, use them directly (threshold at 0.5 if floats)
             if ar_mask is not None and tc_mask is not None:
-                # Ensure shape (1, H, W)
+                # Extract per-sample masks and ensure 2D arrays (H, W)
                 a = ar_mask[i]
                 t = tc_mask[i]
-                if a.dim() == 3:
-                    a = a.unsqueeze(0)
-                if t.dim() == 3:
-                    t = t.unsqueeze(0)
-                # Convert to CPU numpy binary masks
-                a_np = (a.squeeze(0).detach().cpu().numpy() > 0.5).astype(np.uint8)
-                t_np = (t.squeeze(0).detach().cpu().numpy() > 0.5).astype(np.uint8)
+                # a/t may have shape (1, H, W) or (H, W) or (1,1,H,W)
+                # squeeze all singleton dims to get (H, W)
+                if isinstance(a, torch.Tensor):
+                    a = a.squeeze().detach().cpu().numpy()
+                else:
+                    a = np.asarray(a).squeeze()
+                if isinstance(t, torch.Tensor):
+                    t = t.squeeze().detach().cpu().numpy()
+                else:
+                    t = np.asarray(t).squeeze()
+
+                # Convert to binary uint8 2D masks
+                a_np = (a > 0.5).astype(np.uint8)
+                t_np = (t > 0.5).astype(np.uint8)
                 ar_mask_np = a_np
                 tc_mask_np = t_np
             else:
                 # Backward-compatible: derive binary masks from multiclass mask
-                mask_np = multiclass_mask[i].squeeze(0).cpu().numpy()
+                m = multiclass_mask[i]
+                if isinstance(m, torch.Tensor):
+                    mask_np = m.squeeze().cpu().numpy()
+                else:
+                    mask_np = np.asarray(m).squeeze()
                 ar_mask_np = (mask_np == 2).astype(np.uint8)
                 tc_mask_np = (mask_np == 1).astype(np.uint8)
 
