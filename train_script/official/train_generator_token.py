@@ -699,12 +699,41 @@ def set_up_model(worker_args, device):
     ).to(device)
     
     if worker_args.load_pretrained:
-        generator_path = os.path.join(worker_args.exp_dir,'best_weights', f"best_generator_token_fuse_channels_{worker_args.fuse_channels}_sam_type_{worker_args.sam_type}_{worker_args.run_name}.pth")
-        if  os.path.exists(generator_path):
-            phase_2_checkpoint = torch.load(generator_path, map_location=device, weights_only=False)
-            print(f"Pretrained weights for prompt generator from phase 2 loaded from {generator_path}")
-            prompt_generator.load_state_dict(phase_2_checkpoint['prompt_generator'])
-            print(f"Prompt generator weights loaded from {generator_path}")
+        generator_path = os.path.join(worker_args.exp_dir, 'best_weights', f"best_generator_token_fuse_channels_{worker_args.fuse_channels}_sam_type_{worker_args.sam_type}_{worker_args.run_name}.pth")
+        if os.path.exists(generator_path):
+            try:
+                # torch.load does not accept weights_only; load checkpoint normally
+                phase_2_checkpoint = torch.load(generator_path, map_location=device)
+                print(f"Pretrained weights for prompt generator from phase 2 loaded from {generator_path}")
+
+                # Support several checkpoint layouts
+                if isinstance(phase_2_checkpoint, dict):
+                    if 'prompt_generator' in phase_2_checkpoint:
+                        state_dict = phase_2_checkpoint['prompt_generator']
+                    elif 'state_dict' in phase_2_checkpoint:
+                        state_dict = phase_2_checkpoint['state_dict']
+                    elif 'model' in phase_2_checkpoint:
+                        state_dict = phase_2_checkpoint['model']
+                    else:
+                        # assume the dict itself is a state dict
+                        state_dict = phase_2_checkpoint
+                else:
+                    state_dict = phase_2_checkpoint
+
+                try:
+                    prompt_generator.load_state_dict(state_dict)
+                    print(f"Prompt generator weights loaded from {generator_path}")
+                except RuntimeError as e:
+                    # Try non-strict load in case of key mismatches
+                    try:
+                        prompt_generator.load_state_dict(state_dict, strict=False)
+                        print(f"Prompt generator weights loaded with strict=False from {generator_path} (key mismatch)")
+                    except Exception as e2:
+                        print(f"Failed to load prompt generator state_dict: {e2}")
+            except Exception as e:
+                print(f"Error loading prompt generator checkpoint {generator_path}: {e}")
+        else:
+            print(f"Pretrained generator checkpoint not found at {generator_path}")
     
     for params in climatesam.parameters():
         params.requires_grad = False
@@ -742,6 +771,7 @@ def main_worker(worker_id, worker_args):
     best_miou_ar = 0
     best_miou_total = 0
     best_logit_miou = 0
+    best_average_miou_tc = 0
     ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     
@@ -761,6 +791,7 @@ def main_worker(worker_id, worker_args):
                 climatesam, prompt_generator, prompt_maker, device, 
                 max_epoch_num, worker_args
             )
+            average_miou = (miou_tc + miou_ar) / 2
             print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}, Logit mIoU: {logit_mean_iou:.2%}")
 
             if miou_tc > best_miou_tc:
@@ -771,9 +802,9 @@ def main_worker(worker_id, worker_args):
                 best_miou_ar = miou_ar
                 print(f'Best mIoU AR has been updated to {best_miou_ar:.2%}!')
                 
-            if logit_mean_iou > best_logit_miou:
-                best_logit_miou = logit_mean_iou
-                print(f'Best Logit mIoU has been updated to {best_logit_miou:.2%}!')
+            if best_average_miou_tc < average_miou:
+                best_average_miou_tc = average_miou
+                print(f'Best Average mIoU TC has been updated to {best_average_miou_tc:.2%}!')
                 # Save best model (including all components)
                 if worker_args.save_model and epoch > 4:
                     # Create best_weights directory if it doesn't exist
