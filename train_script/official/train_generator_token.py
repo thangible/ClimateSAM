@@ -94,8 +94,15 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
             gt_masks = torch.stack(batch['gt_mask'], dim=0).to(device)  # B, H, W
             
             # Build prompts (must be done before computing any GT-based losses)
-            # Use detached multiclass_mask to avoid accidental gradient flow into prompt creation
-            prompt_dict = prompt_maker.make_prompts(multiclass_mask.detach(), enlarge_ratio=worker_args.prompt_enlarge_ratio)
+            # Use AR/TC binary heads if available, otherwise fall back to multiclass mask
+            if ar_mask is not None and tc_mask is not None:
+                # pass sigmoid probabilities to PromptMaker
+                ar_mask_sig = torch.sigmoid(ar_mask.detach())
+                tc_mask_sig = torch.sigmoid(tc_mask.detach())
+                prompt_dict = prompt_maker.make_prompts(ar_mask=ar_mask_sig, tc_mask=tc_mask_sig, enlarge_ratio=worker_args.prompt_enlarge_ratio)
+            else:
+                # Use detached multiclass_mask to avoid accidental gradient flow into prompt creation
+                prompt_dict = prompt_maker.make_prompts(multiclass_mask.detach(), enlarge_ratio=worker_args.prompt_enlarge_ratio)
             prompt_dict = batch_to_cuda(prompt_dict, device)
 
             # Compute combined generator + optional AR/TC binary loss via helper
@@ -181,6 +188,25 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
 
             step_loss_dict = {key: epoch_loss_dict[key] / epoch_loss_count for key in epoch_loss_dict.keys()}
 
+            # Log step-level losses to W&B (only from main process)
+            if worker_args.wandb and local_rank == 0:
+                step_log = {}
+                # loss_dict contains the most recent losses (tensors)
+                for k, v in loss_dict.items():
+                    try:
+                        step_log[f"train/{k}"] = float(v.item())
+                    except Exception:
+                        try:
+                            step_log[f"train/{k}"] = float(v)
+                        except Exception:
+                            # skip non-scalar entries
+                            continue
+                # compute a global step index for logging
+                global_step = (epoch - 1) * effective_steps + step_count
+                step_log['epoch'] = epoch
+                step_log['global_step'] = global_step
+                wandb.log(step_log, step=global_step)
+
     if len(train_dataloader) % gradient_accumulation_steps != 0:
         scaler.step(optimizer)
         scaler.update()
@@ -188,6 +214,22 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
         step_count += 1
         epoch_loss_count += 1
         
+        # Log step-level losses for the final (non-accumulated) update
+        if worker_args.wandb and local_rank == 0:
+            step_log = {}
+            for k, v in loss_dict.items():
+                try:
+                    step_log[f"train/{k}"] = float(v.item())
+                except Exception:
+                    try:
+                        step_log[f"train/{k}"] = float(v)
+                    except Exception:
+                        continue
+            global_step = (epoch - 1) * effective_steps + step_count
+            step_log['epoch'] = epoch
+            step_log['global_step'] = global_step
+            wandb.log(step_log, step=global_step)
+    
     if epoch_loss_count > 0:
         avg_epoch_losses = {key: epoch_loss_dict[key] / epoch_loss_count for key in epoch_loss_dict.keys()}
         

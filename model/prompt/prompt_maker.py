@@ -19,65 +19,84 @@ class PromptMaker:
         self.negative_point_num = negative_point_num
 
     @torch.no_grad()
-    def make_prompts(self, masks: torch.Tensor, prompt_type = None, enlarge_ratio=0.2):
-        batch_size = len(masks)
+    def make_prompts(self, multiclass_mask: torch.Tensor = None, ar_mask: torch.Tensor = None, tc_mask: torch.Tensor = None, prompt_type = None, enlarge_ratio=0.2):
+        """
+        make_prompts now supports two calling conventions for backward compatibility:
+        - Pass a multiclass_mask tensor (B, H, W) or (B,1,H,W) where values are {0,1,2}
+        - OR pass ar_mask and tc_mask tensors (each B,1,H,W or B,H,W) with probabilities/logits or binary values.
+
+        The function will prefer ar_mask/tc_mask when both are provided.
+        """
+        # Determine batch size from available inputs
+        if ar_mask is not None and tc_mask is not None:
+            batch_size = ar_mask.shape[0]
+        elif multiclass_mask is not None:
+            batch_size = len(multiclass_mask)
+        else:
+            raise ValueError("make_prompts requires either multiclass_mask or both ar_mask and tc_mask")
+
         prompt_list = []
-        
-        
-        # #if prompt_type is a list, randomly choose one for each sample
-        # if isinstance(self.prompt_type, (list, tuple)):
-        #     if len(self.prompt_type) == 0:
-        #         raise ValueError("prompt_type list must be non-empty")
-        #     prompt_type = random.choice(self.prompt_type)
-        # else:
-        #     prompt_type = self.prompt_type
+
         if prompt_type is None:
             prompt_type = random.choice(['bbox'])
         else:
             prompt_type = prompt_type
-            
+
         for i in range(batch_size):
-            mask_np = masks[i].squeeze(0).cpu().numpy() 
-            # mask_np = distance_transform(mask_np, threshold=0.5)
-            ar_mask = (mask_np == 2).astype(np.uint8)
-            tc_mask = (mask_np == 1).astype(np.uint8)   
-            # if sum(tc_mask.flatten()) == 0:
-            #     import matplotlib.pyplot as plt
-            #     fig, ax = plt.subplots(figsize=(6, 6))
-            #     ax.imshow(mask_np, cmap='gray', vmin=0, vmax=2)
-            #     ax.set_title('Mask with No TC Objects Found')
+            # If binary masks provided, use them directly (threshold at 0.5 if floats)
+            if ar_mask is not None and tc_mask is not None:
+                # Ensure shape (1, H, W)
+                a = ar_mask[i]
+                t = tc_mask[i]
+                if a.dim() == 3:
+                    a = a.unsqueeze(0)
+                if t.dim() == 3:
+                    t = t.unsqueeze(0)
+                # Convert to CPU numpy binary masks
+                a_np = (a.squeeze(0).detach().cpu().numpy() > 0.5).astype(np.uint8)
+                t_np = (t.squeeze(0).detach().cpu().numpy() > 0.5).astype(np.uint8)
+                ar_mask_np = a_np
+                tc_mask_np = t_np
+            else:
+                # Backward-compatible: derive binary masks from multiclass mask
+                mask_np = multiclass_mask[i].squeeze(0).cpu().numpy()
+                ar_mask_np = (mask_np == 2).astype(np.uint8)
+                tc_mask_np = (mask_np == 1).astype(np.uint8)
+
             if prompt_type == 'point':
-                ar_point_prompts, ar_object_masks = make_point_prompts(ar_mask, connectivity=self.connectivity, threshold=self.threshold, num_positive_points=self.positive_point_num, num_negative_points=self.negative_point_num, erode_size= 5)
-                tc_point_prompts, tc_object_masks = make_point_prompts(tc_mask, connectivity= self.connectivity, threshold=self.threshold, num_positive_points=min(1, self.positive_point_num//3), num_negative_points=min(1, self.negative_point_num//3), erode_size=1)
+                ar_point_prompts, ar_object_masks = make_point_prompts(ar_mask_np, connectivity=self.connectivity, threshold=self.threshold, num_positive_points=self.positive_point_num, num_negative_points=self.negative_point_num, erode_size= 5)
+                tc_point_prompts, tc_object_masks = make_point_prompts(tc_mask_np, connectivity= self.connectivity, threshold=self.threshold, num_positive_points=min(1, self.positive_point_num//3), num_negative_points=min(1, self.negative_point_num//3), erode_size=1)
                 ar_bbox_prompts = None
                 tc_bbox_prompts = None
                 ar_noisy_masks = None
                 tc_noisy_masks = None
             elif prompt_type == 'bbox':
-                ar_bbox_prompts, ar_object_masks = make_bbox_prompts(ar_mask, self.connectivity, self.threshold, enlarge_ratio=enlarge_ratio)
-                tc_bbox_prompts, tc_object_masks = make_bbox_prompts(tc_mask, self.connectivity, self.threshold, enlarge_ratio=enlarge_ratio)
+                ar_bbox_prompts, ar_object_masks = make_bbox_prompts(ar_mask_np, self.connectivity, self.threshold, enlarge_ratio=enlarge_ratio)
+                tc_bbox_prompts, tc_object_masks = make_bbox_prompts(tc_mask_np, self.connectivity, self.threshold, enlarge_ratio=enlarge_ratio)
                 ar_point_prompts = (None, None)
                 tc_point_prompts = (None, None)
                 ar_noisy_masks = None
                 tc_noisy_masks = None
             elif prompt_type == 'mask':
-                ar_noisy_masks, ar_object_masks =  make_noisy_mask_on_objects(ar_mask, self.connectivity, self.threshold)
-                tc_noisy_masks, tc_object_masks =  make_noisy_mask_on_objects(tc_mask, self.connectivity, self.threshold)
+                ar_noisy_masks, ar_object_masks =  make_noisy_mask_on_objects(ar_mask_np, self.connectivity, self.threshold)
+                tc_noisy_masks, tc_object_masks =  make_noisy_mask_on_objects(tc_mask_np, self.connectivity, self.threshold)
                 ar_point_prompts = (None, None)
                 tc_point_prompts = (None, None)
                 ar_bbox_prompts = None
                 tc_bbox_prompts = None
+
             prompt_dict = {
-            'ar_point_prompts': ar_point_prompts,
-            'tc_point_prompts': tc_point_prompts,
-            'ar_bbox_prompts': ar_bbox_prompts,
-            'tc_bbox_prompts': tc_bbox_prompts,
-            'ar_mask_prompts': ar_noisy_masks,
-            'tc_mask_prompts': tc_noisy_masks,
-            'ar_object_masks': ar_object_masks,
-            'tc_object_masks': tc_object_masks,
-        }
+                'ar_point_prompts': ar_point_prompts,
+                'tc_point_prompts': tc_point_prompts,
+                'ar_bbox_prompts': ar_bbox_prompts,
+                'tc_bbox_prompts': tc_bbox_prompts,
+                'ar_mask_prompts': ar_noisy_masks,
+                'tc_mask_prompts': tc_noisy_masks,
+                'ar_object_masks': ar_object_masks,
+                'tc_object_masks': tc_object_masks,
+            }
             prompt_list.append(prompt_dict)
+
         prompt_dict = {key: [d[key] if d[key] is not None else None for d in prompt_list] for key in prompt_list[0]}
         return prompt_dict
                 
@@ -162,7 +181,6 @@ def make_point_prompts(binary_mask, connectivity, threshold=20, num_positive_poi
 
             
     
-            
             
 def make_negative_point_prompts(object_mask, object_centroid, num_points=5, dilate_size=15):
     #dilate it
