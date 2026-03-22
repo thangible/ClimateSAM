@@ -492,7 +492,7 @@ def compute_generator_loss(multiclass_mask, interm_masks, gt_masks, device, work
     }
 
 
-def calculate_generator_token_loss(
+def calculate_generator_token_loss_old(
     multiclass_mask,
     interm_masks,
     gt_masks,
@@ -574,4 +574,98 @@ def calculate_generator_token_loss(
     merged['total_loss_for_backward'] = total
     merged['total_loss'] = total.detach()
 
+    return merged
+
+
+def compute_centroid_heatmaps(
+    gt_centroids_list,
+    H,
+    W,
+    sigma=10,
+    device=None,
+    radius=None,
+    amplitude=1.0,
+    normalize_coords=False,
+    swap_xy=False,
+    clamp=True,
+):
+    """
+    Build target gaussian heatmaps (B,1,H,W) from a list of centroid tensors (or None).
+
+    New parameters:
+    - sigma: gaussian std (pixels)
+    - radius: optional pixel cutoff radius (None = no cutoff). If set, values outside radius are zeroed.
+    - amplitude: peak amplitude of each gaussian
+    - normalize_coords: if True and centroids are in [0,1], scale to pixel coords
+    - swap_xy: if True, interpret each centroid as (y,x) instead of (x,y)
+    - clamp: clamp centroid coords to [0, W-1]/[0, H-1]
+    """
+    if device is None:
+        device = torch.device('cpu')
+    y_range = torch.arange(H, device=device).float()
+    x_range = torch.arange(W, device=device).float()
+    grid_y, grid_x = torch.meshgrid(y_range, x_range, indexing='ij')
+
+    heatmaps = []
+    for b, centroids in enumerate(gt_centroids_list):
+        heatmap = torch.zeros((H, W), device=device)
+        if centroids is not None and isinstance(centroids, torch.Tensor) and centroids.numel() > 0:
+            centroids = centroids.to(device).float().clone()
+
+            # auto-scale normalized coords if requested or detected
+            if normalize_coords or (centroids.max() <= 1.0 and centroids.min() >= 0.0):
+                centroids[:, 0] = centroids[:, 0] * (W - 1)  # x
+                centroids[:, 1] = centroids[:, 1] * (H - 1)  # y
+
+            if swap_xy:
+                centroids = centroids[:, [1, 0]]
+
+            if clamp:
+                centroids[:, 0].clamp_(0, W - 1)
+                centroids[:, 1].clamp_(0, H - 1)
+
+            for i in range(centroids.shape[0]):
+                cx, cy = centroids[i, 0], centroids[i, 1]  # (x, y)
+                dist_sq = (grid_y - cy) ** 2 + (grid_x - cx) ** 2
+
+                if radius is not None:
+                    # mask out outside radius to limit influence / speed up
+                    mask = (dist_sq <= (float(radius) ** 2)).float()
+                else:
+                    mask = 1.0
+
+                peak = amplitude * torch.exp(-dist_sq / (2 * (float(sigma) ** 2)))
+                peak = peak * mask
+                heatmap = torch.max(heatmap, peak)
+        heatmaps.append(heatmap.unsqueeze(0))
+    heatmaps = torch.stack(heatmaps, dim=0).unsqueeze(1)  # B,1,H,W
+    return heatmaps
+
+def calculate_generator_token_loss(
+    multiclass_mask, interm_masks, gt_masks, device, worker_args,
+    ar_masks_pred, tc_masks_pred, ar_centroids, tc_centroids
+):
+    # 1. Keep your existing Multiclass + Multi-level Loss
+    merged = compute_generator_loss(multiclass_mask, interm_masks, gt_masks, device, worker_args)
+    
+    # 2. Generate Heatmaps using your new function
+    # Size from multiclass_mask: (B, 3, H, W) -> H, W = 768, 1152 [cite: 47]
+    H, W = multiclass_mask.shape[-2:]
+    ar_target_heatmap = compute_centroid_heatmaps(ar_centroids, H, W, sigma=5.0, device=device)
+    tc_target_heatmap = compute_centroid_heatmaps(tc_centroids, H, W, sigma=5.0, device=device)
+
+    # 3. Compute MSE Loss for Centroid Localization
+    # ar_masks_pred and tc_masks_pred are [B, 1, H, W] logits from the PromptGenerator
+    l_cent_ar = F.mse_loss(torch.sigmoid(ar_masks_pred), ar_target_heatmap)
+    l_cent_tc = F.mse_loss(torch.sigmoid(tc_masks_pred), tc_target_heatmap)
+
+    # 4. Merge (Applying weights for rare TCs) [cite: 56, 307]
+    theta_tc = getattr(worker_args, 'theta_tc', 5.0)
+    total_cent_loss = l_cent_ar + (theta_tc * l_cent_tc)
+    
+    merged['total_loss_for_backward'] += total_cent_loss
+    merged['gen_centroid_ar_loss'] = l_cent_ar.detach()
+    merged['gen_centroid_tc_loss'] = l_cent_tc.detach()
+    merged['gen_centroid_loss'] = total_cent_loss.detach()
+    
     return merged

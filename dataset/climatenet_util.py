@@ -22,10 +22,10 @@ def extract_point_and_bbox_prompts_from_climatenet_mask(mask: np.array, device =
     tc_mask = mask == 1
     
 
-    ar_object_masks, ar_positive_points, ar_bboxes, ar_noisy_masks = get_prompts_from_binary_mask(ar_mask, connectivity, threshold, centroid_ratio=centroid_ratio, prompt_type=prompt_type)
-    tc_object_masks, tc_positive_points, tc_bboxes, tc_noisy_masks = get_prompts_from_binary_mask(tc_mask, connectivity, threshold, centroid_ratio=centroid_ratio, prompt_type=prompt_type)
-    
-    # SQUEEZE 
+    ar_object_masks, ar_positive_points, ar_bboxes, ar_noisy_masks, ar_centroids = get_prompts_from_binary_mask(ar_mask, connectivity, threshold, centroid_ratio=centroid_ratio, prompt_type=prompt_type)
+    tc_object_masks, tc_positive_points, tc_bboxes, tc_noisy_masks, tc_centroids = get_prompts_from_binary_mask(tc_mask, connectivity, threshold, centroid_ratio=centroid_ratio, prompt_type=prompt_type)
+
+    # SQUEEZE
 
     ar_point_count = ar_positive_points.shape[0] if ar_positive_points is not None else 0
     tc_point_count = tc_positive_points.shape[0] if tc_positive_points is not None else 0
@@ -35,6 +35,7 @@ def extract_point_and_bbox_prompts_from_climatenet_mask(mask: np.array, device =
     
     ar_point_prompts = (ar_positive_points, ar_point_labels)
     tc_point_prompts = (tc_positive_points, tc_point_labels)
+    
     
     # print(f"ar_point_prompts shape: {ar_point_prompts[0].shape}") if ar_point_prompts[0] is not None else None
     # print(f"tc_point_prompts shape: {tc_point_prompts[0].shape}") if tc_point_prompts[0] is not None else None
@@ -55,6 +56,8 @@ def extract_point_and_bbox_prompts_from_climatenet_mask(mask: np.array, device =
         'tc_mask_prompts': tc_noisy_masks,
         'ar_object_masks': ar_object_masks,
         'tc_object_masks': tc_object_masks,
+        'ar_centroids': ar_centroids,
+        'tc_centroids': tc_centroids,
     }
     
     return prompt_dict
@@ -68,12 +71,13 @@ def get_prompts_from_binary_mask(binary_mask, connectivity = 8, threshold = 50, 
         image=masks.astype(np.uint8), connectivity=connectivity)
     
     if object_count - 1 == 0: # no objects found
-        return None, None, None, None
+        return None, None, None, None, None
     
     # Create a list to store the object masks
     object_masks = []
     bboxes = [] if prompt_type == 'bbox' else None
     points = [] if prompt_type == 'point' else None
+    centroid = []
     
     
     for obj_index in range(1, object_count): # loop through each object ignore background
@@ -85,6 +89,7 @@ def get_prompts_from_binary_mask(binary_mask, connectivity = 8, threshold = 50, 
         stats = per_object_stats[obj_index]
         area_in_pixels = stats[4]
         if area_in_pixels >= threshold:
+            centroid.append(per_label_centroids[obj_index])
             # Extract infos
             leftmost_pixel = stats[0]
             topmost_pixel = stats[1]
@@ -122,8 +127,12 @@ def get_prompts_from_binary_mask(binary_mask, connectivity = 8, threshold = 50, 
     noisy_masks = make_noisy_mask_on_objects(object_masks) if prompt_type == 'mask' else None
     points = torch.from_numpy(np.stack(points, axis = 0)).to(torch.float32) if prompt_type == 'point' else None
     bboxes = torch.from_numpy(np.stack(bboxes, axis = 0)).to(torch.float32) if prompt_type == 'bbox' else None
-    
-    return object_masks, points, bboxes, noisy_masks
+    if len(centroid) > 0:
+        centroids = torch.from_numpy(np.stack(centroid, axis = 0)).to(torch.float32) 
+    else:
+        centroids = None
+
+    return object_masks, points, bboxes, noisy_masks, centroids
 
 
 

@@ -126,10 +126,10 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
                 gt_masks=gt_masks,
                 device=device,
                 worker_args=worker_args,
-                ar_masks_pred=ar_masks_pred,
-                tc_masks_pred=tc_masks_pred,
-                ar_masks_gt=ar_masks_gt,
-                tc_masks_gt=tc_masks_gt
+                ar_masks_pred=ar_mask,    # Logits from your PromptGenerator
+                tc_masks_pred=tc_mask,    # Logits from your PromptGenerator
+                ar_centroids=batch['ar_centroids'],
+                tc_centroids=batch['tc_centroids']
             )
             
         # ClimateSAM forward also doesn't require gradients (we don't train it)

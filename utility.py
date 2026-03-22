@@ -837,7 +837,7 @@ def batch_to_cuda(batch, device):
             # batch[key] = torch.from_numpy(batch[key])
             batch[key] = batch[key].to(device=device, dtype=torch.float32)
         
-        elif key in ["gt_mask", "ar_object_masks", "tc_object_masks"]:
+        elif key in ["gt_mask", "ar_object_masks", "tc_object_masks", "ar_centroids", "tc_centroids"]:
             batch[key] = [
                 torch.from_numpy(item).to(device=device, dtype=torch.float32)
                 if isinstance(item, np.ndarray)

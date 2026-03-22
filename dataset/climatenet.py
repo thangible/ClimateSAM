@@ -118,7 +118,8 @@ class ClimateDataset(Dataset):
                 'ar_mask_prompts': None,
                 'tc_mask_prompts': None,
                 'ar_object_masks' : None,
-                'tc_object_masks' : None
+                'tc_object_masks' : None,
+                
             }
         # self.prompt_check(prompt_dict)
         
@@ -138,7 +139,9 @@ class ClimateDataset(Dataset):
             "tc_mask_prompts": prompt_dict['tc_mask_prompts'],
             
             "ar_object_masks" : prompt_dict['ar_object_masks'],
-            "tc_object_masks" : prompt_dict['tc_object_masks']
+            "tc_object_masks" : prompt_dict['tc_object_masks'],
+            "ar_centroids": prompt_dict['ar_centroids'],
+            "tc_centroids": prompt_dict['tc_centroids'],
         }
         
     # def z_normalize(self, data):

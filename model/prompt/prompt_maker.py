@@ -6,7 +6,7 @@ import torch.nn.functional as F
 
 
 class PromptMaker:
-    def __init__(self, device=None, connectivity=8, threshold=20, prompt_type='point', centroid_ratio=0.1, positive_point_num =5, negative_point_num =5):
+    def __init__(self, device=None, connectivity=8, threshold=20, prompt_type='point', centroid_ratio=0.1, positive_point_num =5, negative_point_num =1):
         """
         """
 
@@ -38,7 +38,7 @@ class PromptMaker:
         prompt_list = []
 
         if prompt_type is None:
-            prompt_type = random.choice(['bbox'])
+            prompt_type = self.prompt_type
         else:
             prompt_type = prompt_type
 
