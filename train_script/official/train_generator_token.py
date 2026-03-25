@@ -722,7 +722,7 @@ def main_worker(worker_id, worker_args):
     best_miou_ar = 0
     best_miou_total = 0
     best_logit_miou = 0
-    best_average_miou_tc = 0
+    best_average_miou = 0
     ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     
@@ -753,9 +753,9 @@ def main_worker(worker_id, worker_args):
                 best_miou_ar = miou_ar
                 print(f'Best mIoU AR has been updated to {best_miou_ar:.2%}!')
                 
-            if best_average_miou_tc < average_miou:
-                best_average_miou_tc = average_miou
-                print(f'Best Average mIoU TC has been updated to {best_average_miou_tc:.2%}!')
+            if best_average_miou < average_miou:
+                best_average_miou = average_miou
+                print(f'Best Average mIoU has been updated to {best_average_miou:.2%}!')
                 # Save best model (including all components)
                 if worker_args.save_model and epoch > 4:
                     # Create best_weights directory if it doesn't exist
