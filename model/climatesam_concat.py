@@ -112,6 +112,7 @@ import copy
 from torch import nn
 from model.mask_decoder import MaskDecoderHQ
 from model.prompt_generator import PromptGenerator
+from model.prompt_encoder import PromptEncoderWrapper
 from model.segment_anything_ext.build_sam import sam_model_registry
 from typing import Union, List, Tuple, Optional
 import torch.nn.functional as F
