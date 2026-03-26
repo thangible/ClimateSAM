@@ -217,6 +217,8 @@ class ClimateSAM(nn.Module):
                     c.eval()
                 else:
                     c.train(mode=mode)
+                    for p in c.parameters():
+                        p.requires_grad = True
             if verbose:
                 print("Training image_encoder")
                 
