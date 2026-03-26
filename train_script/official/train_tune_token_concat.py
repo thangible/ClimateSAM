@@ -487,6 +487,7 @@ def main_worker(worker_id, worker_args):
             if (miou_tc + miou_ar) / 2 > best_miou_total:
                 best_miou_total = (miou_tc + miou_ar) / 2
                 print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
+                
                 if worker_args.save_model and epoch > 4:
                     if worker_args.phase == 1:
                         save_path = os.path.join(worker_args.exp_dir, f"phase_1_weights_official_{worker_args.sam_type}_{worker_args.run_name}.pth")
