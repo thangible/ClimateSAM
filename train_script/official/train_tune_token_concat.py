@@ -449,15 +449,15 @@ def main_worker(worker_id, worker_args):
             model = model.to(device=device)
     
     # Load pretrained weights
-    # if worker_args.load_pretrained:
-    #     if worker_args.phase == 1:
-    #         image_encoder_path = os.path.join(worker_args.exp_dir,'best_weights', f"phase_2_weights_best_official.pth")
-    #         phase_1_checkpoint = torch.load(image_encoder_path, map_location=device)
-    #         print(f"Pretrained weights from phase 1 loaded from {image_encoder_path}")
-    #         model.image_encoder.load_state_dict(phase_1_checkpoint['image_encoder'])
-    #         print(f"Image encoder weights loaded from {image_encoder_path}")
-    #         model.mask_decoder.load_state_dict(phase_1_checkpoint['mask_decoder'])
-    #         print(f"Mask decoder weights loaded from {image_encoder_path}")
+    if worker_args.load_pretrained:
+        if worker_args.phase == 1:
+            image_encoder_path = os.path.join(worker_args.exp_dir,'best_weights', f"best_concat_phase_1.pth")
+            phase_1_checkpoint = torch.load(image_encoder_path, map_location=device)
+            print(f"Pretrained weights from phase 1 loaded from {image_encoder_path}")
+            model.image_encoder.load_state_dict(phase_1_checkpoint['image_encoder'])
+            print(f"Image encoder weights loaded from {image_encoder_path}")
+            model.mask_decoder.load_state_dict(phase_1_checkpoint['mask_decoder'])
+            print(f"Mask decoder weights loaded from {image_encoder_path}")
     
             
     # Optimizer and scheduler

@@ -212,7 +212,7 @@ class ClimateSAM(nn.Module):
         # Phase-specific training configurations
         if phase == 1:
             for n, c in self.named_children():
-                if n not in ['image_encoder', 'mask_decoder' ]:
+                if n not in ['image_encoder', 'mask_decoder', 'input_adapter']:
                     c.eval()
                 else:
                     c.train(mode=mode)
