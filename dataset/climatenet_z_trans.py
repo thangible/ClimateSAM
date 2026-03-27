@@ -35,7 +35,7 @@ class ClimateDataset(Dataset):
         #                           VerticalFlip(p = 0.5), 
         #                           RandomHorizontalRoll(p = 0.5, shift_limit=(0.5))]) if self.train_flag and self.augmented else None
         
-        self.transforms = None 
+        self.transforms = None
 
         # Store prompt generation parameters.
         self.prompt_kwargs = prompt_kwargs
@@ -61,6 +61,19 @@ class ClimateDataset(Dataset):
             "PSL": {"mean": 100814.414, "std": 1461.2227},
         }
         
+        # Load or compute mean/std for all variables (used for z-normalization + scaling)
+        if os.path.exists(self.mean_std_path) and not self.reset_flag:
+            self.mean_std_dict = np.load(self.mean_std_path, allow_pickle=True).item()
+        else:
+            self.mean_std_dict = self.calculate_stats()
+
+    # def get_cg_prompter(self, worker_args, device):
+    #     cg_prompter = CGNetPrompter(weights_path='pretrained/weights_cgnet.pth', device=device, worker_args=worker_args)
+    #     self.cg_prompter = cg_prompter
+    #     print("CGNet prompter initialized.")
+        
+        
+        
 
     def __getitem__(self, index):
         # Use filename as the unique index name.
@@ -80,7 +93,8 @@ class ClimateDataset(Dataset):
         
         # SAM INPUT
         sam_input = dataset.to_array().sel(variable=self.variables).values.squeeze()
-        sam_input = self.minmax_per_channel_to_image(sam_input)
+        # z-normalize per-channel using precomputed mean/std and scale to [0,255]
+        sam_input = self.z_normalize_and_scale(sam_input)
         mask = self.get_labels(dataset)  # see function below
         
         # Apply transforms (if any)
@@ -190,54 +204,110 @@ class ClimateDataset(Dataset):
             
         
         
-    # def calculate_stats(self):
-    #     """
-    #     Calculate the mean and std of the data across all the files.
-    #     """
-    #     if os.path.exists(self.mean_std_path) and self.reset_flag is False:
-            
-    #         stats = np.load(self.mean_std_path, allow_pickle=True).item()
-    #         if self.train_flag:
-    #             print(f"Loading mean/std from {self.mean_std_path}")
-    #             print(f"AR Ratio (negative/positive): {stats['ar_ratio']}, TC Ratio: {stats['tc_ratio']}")
-    #         return stats
+    def calculate_stats(self):
+        """
+        Calculate per-variable mean and std across all files and save to self.mean_std_path.
+        This is robust to datasets that include a time dimension.
+        Returns a dict with keys 'mean', 'std', 'norm_min', 'norm_max' (all arrays length = len(self.variables)).
+        """
+        # If file exists and reset_flag is False, load it
+        if os.path.exists(self.mean_std_path) and not self.reset_flag:
+            stats = np.load(self.mean_std_path, allow_pickle=True).item()
+            return stats
 
-    #     print("Calculating mean/std from scratch...")
-    #     means = []
-    #     stds = []
-    #     ar_ratios = []
-    #     tc_ratios = []
-        
-    #     for file in self.files:
-    #         dataset = xr.load_dataset(file)
-    #         data = dataset.to_array().sel(variable=self.variables).values.squeeze()
-    #         means.append(np.mean(data, axis=(1,2)))  # Mean for each of the 16 channels
-    #         stds.append(np.std(data, axis=(1,2)))    # Std for each of the 16 channels
-            
-    #         mask = dataset['LABELS'].values
-    #         ar_mask = mask == 2
-    #         tc_mask = mask == 1
-    #         ar_ones_count = np.sum(ar_mask == 1) + 1
-    #         tc_ones_count = np.sum(tc_mask == 1) + 1
-    #         ar_zeros_count = np.sum(ar_mask == 0)
-    #         tc_zeros_count = np.sum(tc_mask == 0)
-    #         ar_ratio = ar_zeros_count / (ar_ones_count)
-    #         tc_ratio = tc_zeros_count / (tc_ones_count)
-    #         ar_ratios.append(ar_ratio)
-    #         tc_ratios.append(tc_ratio)
-        
-    #     # Calculate the overall mean and std for each channel across all files
-    #     mean_dict = np.mean(means, axis=0)
-    #     std_dict = np.mean(stds, axis=0)
-    #     mean_ar_ratio = np.median(ar_ratios)
-    #     mean_tc_ratio = np.median(tc_ratios)
-        
-    #     result = {"mean": mean_dict, "std": std_dict, "ar_ratio": mean_ar_ratio, "tc_ratio": mean_tc_ratio}
-    #     np.save(self.mean_std_path, result)
-        
-    #     # Return a dictionary with channel-wise mean and std
-    #     return result
-    
+        means = []
+        stds = []
+
+        for file in self.files:
+            try:
+                ds = xr.load_dataset(file)
+                data = ds.to_array().sel(variable=self.variables).values.squeeze()
+
+                # Determine where the channel dimension is and compute per-channel mean/std
+                # Possible shapes: (channels, H, W) or (time, channels, H, W)
+                if data.ndim == 3 and data.shape[0] == len(self.variables):
+                    # (channels, H, W)
+                    per_channel_mean = np.mean(data, axis=(1, 2))
+                    per_channel_std = np.std(data, axis=(1, 2))
+                elif data.ndim == 4 and data.shape[1] == len(self.variables):
+                    # (time, channels, H, W) -> average over time and spatial dims
+                    per_channel_mean = np.mean(data, axis=(0, 2, 3))
+                    per_channel_std = np.std(data, axis=(0, 2, 3))
+                else:
+                    # Fallback: try to move channel axis to front if possible
+                    chan_axis = None
+                    for i, s in enumerate(data.shape):
+                        if s == len(self.variables):
+                            chan_axis = i
+                            break
+                    if chan_axis is None:
+                        raise ValueError(f"Unable to locate channel axis for file {file} with shape {data.shape}")
+                    data_moved = np.moveaxis(data, chan_axis, 0)
+                    per_channel_mean = np.mean(data_moved, axis=tuple(range(1, data_moved.ndim)))
+                    per_channel_std = np.std(data_moved, axis=tuple(range(1, data_moved.ndim)))
+
+                means.append(per_channel_mean)
+                stds.append(per_channel_std)
+            except Exception as e:
+                # Skip files that fail to load and continue
+                print(f"Warning: failed to process {file} for stats ({e}) - skipping")
+                continue
+
+        if len(means) == 0:
+            raise RuntimeError("No valid files found to compute mean/std")
+
+        mean_arr = np.mean(np.stack(means, axis=0), axis=0)
+        std_arr = np.mean(np.stack(stds, axis=0), axis=0)
+
+        # compute dataset-level normalized min/max (one extra pass)
+        eps = 1e-12
+        norm_mins = []
+        norm_maxs = []
+        for file in self.files:
+            try:
+                ds = xr.load_dataset(file)
+                data = ds.to_array().sel(variable=self.variables).values.squeeze()
+
+                # move channel axis to front so shape becomes (channels, ...)
+                if data.ndim == 3 and data.shape[0] == len(self.variables):
+                    data_moved = data
+                elif data.ndim == 4 and data.shape[1] == len(self.variables):
+                    # average over time first to reduce variability then keep channels,H,W
+                    data_moved = np.mean(data, axis=0)
+                else:
+                    chan_axis = None
+                    for i, s in enumerate(data.shape):
+                        if s == len(self.variables):
+                            chan_axis = i
+                            break
+                    if chan_axis is None:
+                        continue
+                    data_moved = np.moveaxis(data, chan_axis, 0)
+
+                mean_b = mean_arr[:, np.newaxis, np.newaxis]
+                std_b = std_arr[:, np.newaxis, np.newaxis] + eps
+                normalized = (data_moved - mean_b) / std_b
+
+                # per-channel min/max across remaining dims
+                mins = normalized.min(axis=tuple(range(1, normalized.ndim)))
+                maxs = normalized.max(axis=tuple(range(1, normalized.ndim)))
+                norm_mins.append(mins)
+                norm_maxs.append(maxs)
+            except Exception:
+                continue
+
+        if len(norm_mins) > 0:
+            norm_min_arr = np.min(np.stack(norm_mins, axis=0), axis=0)
+            norm_max_arr = np.max(np.stack(norm_maxs, axis=0), axis=0)
+        else:
+            # sensible default clipping range for z-scores
+            norm_min_arr = np.full_like(mean_arr, -3.0)
+            norm_max_arr = np.full_like(mean_arr, 3.0)
+
+        result = {"mean": mean_arr, "std": std_arr, "norm_min": norm_min_arr, "norm_max": norm_max_arr}
+        np.save(self.mean_std_path, result)
+        return result
+
     def z_normalize(self, data):
         """
         Normalize the data using Z-normalization: (X - mean) / std
@@ -252,25 +322,28 @@ class ClimateDataset(Dataset):
     
     def z_normalize_and_scale(self, data):
         """
-        Normalize the data using Z-normalization: (X - mean) / std, then scale it to [0, 255].
+        Z-normalize per-channel using dataset mean/std, then scale per-channel to [0,255]
+        using dataset-level normalized min/max for consistent mapping.
+        Input shape expected: (channels, H, W)
         """
-        # Z-normalize the data
+        eps = 1e-12
         mean = self.mean_std_dict["mean"][:, np.newaxis, np.newaxis]
-        std = self.mean_std_dict["std"][:, np.newaxis, np.newaxis]
-        normalized_data = (data - mean) / std
+        std = self.mean_std_dict["std"][:, np.newaxis, np.newaxis] + eps
+        normalized = (data - mean) / std
 
-        # Scale to [0, 255]
-        normalized_data_min = normalized_data.min(axis=(0, 1), keepdims=True)
-        normalized_data_max = normalized_data.max(axis=(0, 1), keepdims=True)
-        
-        # Clip values to ensure they stay within the range [0, 1] before multiplying by 255
-        epsilon = 1e-8  # Small value to prevent division by zero
-        scaled_data = np.clip((normalized_data - normalized_data_min) / (normalized_data_max - normalized_data_min + epsilon), 0, 1) * 255
-        
-        # Convert to uint8 for image representation
-        scaled_data = scaled_data.astype(np.uint8)
-        
-        return scaled_data
+        # Use stored dataset-level normalized min/max if available
+        norm_min = self.mean_std_dict.get("norm_min")
+        norm_max = self.mean_std_dict.get("norm_max")
+        if norm_min is not None and norm_max is not None:
+            norm_min_b = norm_min[:, np.newaxis, np.newaxis]
+            norm_max_b = norm_max[:, np.newaxis, np.newaxis]
+        else:
+            # fallback to per-sample min/max
+            norm_min_b = normalized.min(axis=(1, 2), keepdims=True)
+            norm_max_b = normalized.max(axis=(1, 2), keepdims=True)
+
+        scaled = np.clip((normalized - norm_min_b) / (norm_max_b - norm_min_b + eps), 0.0, 1.0) * 255.0
+        return scaled.astype(np.uint8)
 
     def __len__(self):
         return len(self.files)
