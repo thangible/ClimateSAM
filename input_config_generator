@@ -4,7 +4,7 @@ exp_dir = ./exp
 data_dir = '../data/climatenet'
 pretrained_name = 'best_model.pth'
 project_name = climate-sam
-run_name = HEATMAP
+run_name = Phase_1
 
 [BATCH CONFIG]
 num_workers = 4

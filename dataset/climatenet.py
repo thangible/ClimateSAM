@@ -31,11 +31,11 @@ class ClimateDataset(Dataset):
         self.augmented = augmented
         self.cg_prompter = None
         self.generate_prompt = generate_prompt
-        self.transforms = Compose([HorizontalFlip(p = 0.5), 
-                                  VerticalFlip(p = 0.5), 
-                                  RandomHorizontalRoll(p = 0.5, shift_limit=(0.5))]) if self.train_flag and self.augmented else None
+        # self.transforms = Compose([HorizontalFlip(p = 0.5), 
+        #                           VerticalFlip(p = 0.5), 
+        #                           RandomHorizontalRoll(p = 0.5, shift_limit=(0.5))]) if self.train_flag and self.augmented else None
         
-        # self.transforms = None
+        self.transforms = None
 
         # Store prompt generation parameters.
         self.prompt_kwargs = prompt_kwargs
