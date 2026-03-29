@@ -130,11 +130,11 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         batch = batch_to_cuda(batch, device)
 
         with torch.amp.autocast('cuda'):
-            image_embeddings, interm_features, image_input, ori_img_size = model.encode_images(batch['input'])
+            image_embeddings_tc, image_embeddings_ar, interm_embeddings_tc, interm_embeddings_ar, image_input, ori_img_size = model.encode_images(batch['input'])
             tc_mask, ar_mask, _ = model.forward(
                 image_input=image_input,
-                image_embeddings=image_embeddings,
-                interm_embeddings=interm_features,
+                image_embeddings=(image_embeddings_tc, image_embeddings_ar),
+                interm_embeddings=(interm_embeddings_tc, interm_embeddings_ar),
                 ori_img_size=ori_img_size,
                 ar_point_prompts=batch['ar_point_prompts'],
                 tc_point_prompts=batch['tc_point_prompts'],
