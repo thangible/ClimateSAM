@@ -12,7 +12,7 @@ gradient_accumulation_steps = 4
 train_bs = 8
 val_bs = 1
 ; weight_decay = 1e-4
-lr = 1e-4
+lr = 1e-3
 
 [PHASE]
 phase = 1
