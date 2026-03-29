@@ -561,6 +561,67 @@ class LoRAClimateSAMVanilla(nn.Module):
             masks.append(torch.clamp(r_m, max=1.0))
         return masks
 
+    def train(self, mode: bool = True, phase: int = 1, verbose: bool = False):
+        """Mirror ClimateSAM.train() so that the phase/verbose API is respected.
+
+        Phase 1: train image_encoder (LoRA adapters inside it) + mask decoders.
+        Phase 3: train prompt_generator only.
+        LoRA adapter parameters are always kept trainable.
+        """
+        super().train(mode)
+
+        # Freeze everything first
+        for param in self.parameters():
+            param.requires_grad = False
+
+        if phase == 1:
+            # Unfreeze image encoder LoRA adapters (already injected in-place)
+            for n, c in self.named_children():
+                if n in ['image_encoder', 'mask_decoder_tc', 'mask_decoder_ar', 'input_adapter']:
+                    c.train(mode=mode)
+                else:
+                    c.eval()
+            # Only LoRA adapter params should require grad
+            for blk in self.image_encoder.blocks:
+                if hasattr(blk, 'attn') and hasattr(blk.attn, 'qkv'):
+                    qkv = blk.attn.qkv
+                    # support both single-task and dual-task qkv wrappers
+                    if isinstance(qkv, (_LoRA_qkv, _LoRA_qkv_dual)):
+                        for p in qkv.parameters():
+                            if hasattr(p, 'is_lora') and p.is_lora:
+                                p.requires_grad = True
+            # also unfreeze input_adapter and mask decoders
+            for n, c in self.named_children():
+                if n in ['input_adapter', 'mask_decoder_tc', 'mask_decoder_ar']:
+                    for p in c.parameters():
+                        p.requires_grad = True
+            if verbose:
+                print("Phase 1: training LoRA adapters + input_adapter + mask decoders")
+
+        elif phase == 3:
+            if self.use_prompt_generator:
+                for n, c in self.named_children():
+                    if n == 'prompt_generator':
+                        c.train(mode=mode)
+                        for p in c.parameters():
+                            p.requires_grad = True
+                    else:
+                        c.eval()
+            if verbose:
+                print("Phase 3: training prompt_generator")
+
+        if verbose:
+            for n, c in self.named_children():
+                total = sum(p.numel() for p in c.parameters())
+                trainable = sum(p.numel() for p in c.parameters() if p.requires_grad)
+                if total > 0:
+                    print(f"{n.upper():<25} | train={str(c.training):<5} | {trainable:>9,}/{total:>12,} ({100*trainable/total:>5.2f}%)")
+            total = sum(p.numel() for p in self.parameters())
+            trainable = sum(p.numel() for p in self.parameters() if p.requires_grad)
+            print(f"Phase {phase}: trainable = {trainable:,} / {total:,}")
+
+        return self
+
 
 __all__ = [
     'LoRAClimateSAMVanilla',
