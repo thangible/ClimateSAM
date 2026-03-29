@@ -483,9 +483,9 @@ class LoRAClimateSAMVanilla(nn.Module):
         tc_post = self.assemble_raw_masks(tc_post)
         ar_post = self.assemble_raw_masks(ar_post)
 
-        # squeeze outputs to (H,W) per item
-        tc_post = [m.squeeze() if isinstance(m, torch.Tensor) else torch.tensor(m).squeeze() for m in tc_post]
-        ar_post = [m.squeeze() if isinstance(m, torch.Tensor) else torch.tensor(m).squeeze() for m in ar_post]
+        # # squeeze outputs to (H,W) per item
+        # tc_post = [m.squeeze() if isinstance(m, torch.Tensor) else torch.tensor(m).squeeze() for m in tc_post]
+        # ar_post = [m.squeeze() if isinstance(m, torch.Tensor) else torch.tensor(m).squeeze() for m in ar_post]
 
         return tc_post, ar_post
 

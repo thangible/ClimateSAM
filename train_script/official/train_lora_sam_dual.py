@@ -144,6 +144,22 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
                 tc_mask_prompts=batch['tc_mask_prompts']
             )
 
+            # Ensure predicted masks have shape [B, 1, H, W] before computing loss.
+            # Some model outputs may be [B, H, W] (missing channel dim) or lists of tensors.
+            def _ensure_mask_tensor(x):
+                if isinstance(x, torch.Tensor):
+                    if x.dim() == 3:
+                        return x.unsqueeze(1)
+                    if x.dim() == 2:
+                        return x.unsqueeze(0).unsqueeze(0)
+                    return x
+                if isinstance(x, (list, tuple)):
+                    return [ _ensure_mask_tensor(t) for t in x ]
+                return x
+            
+            tc_mask = _ensure_mask_tensor(tc_mask)
+            ar_mask = _ensure_mask_tensor(ar_mask)
+
             masks_ar_gt = batch['ar_object_masks']
             masks_tc_gt = batch['tc_object_masks']
 
