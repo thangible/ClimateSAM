@@ -29,8 +29,7 @@ from evaluator import StreamSegMetrics
 import copy
 import wandb
 
-# LoRA helpers (updated to match LoRA module names)
-# from model.lora_sam import LoRAClimateSAMVanilla, LoRA_Sam, LoRALinear
+# LoRA helpers (use dual LoRA implementation)
 from model.lora_sam_dual import LoRAClimateSAMVanilla, LoRA_Sam, LoRALinear
 
 
@@ -131,66 +130,19 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         batch = batch_to_cuda(batch, device)
 
         with torch.amp.autocast('cuda'):
-            # resolve base model if wrapped (DDP)
-            base = model.module if hasattr(model, 'module') else model
-
-            # Always compute dual task-specific embeddings via encode_images
-            image_embeddings_tc, image_embeddings_ar, interm_tc, interm_ar, image_input, ori_img_size = base.encode_images(batch['input'])
-
-            # prepare prompts (rescaled)
-            ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = base.preprocess_prompts(
-                ar_point_prompts=batch.get('ar_point_prompts'),
-                tc_point_prompts=batch.get('tc_point_prompts'),
-                ar_bbox_prompts=batch.get('ar_bbox_prompts'),
-                tc_bbox_prompts=batch.get('tc_bbox_prompts'),
-                ori_img_size=ori_img_size
+            image_embeddings, interm_features, image_input, ori_img_size = model.encode_images(batch['input'])
+            tc_mask, ar_mask, _ = model.forward(
+                image_input=image_input,
+                image_embeddings=image_embeddings,
+                interm_embeddings=interm_features,
+                ori_img_size=ori_img_size,
+                ar_point_prompts=batch['ar_point_prompts'],
+                tc_point_prompts=batch['tc_point_prompts'],
+                ar_bbox_prompts=batch['ar_bbox_prompts'],
+                tc_bbox_prompts=batch['tc_bbox_prompts'],
+                ar_mask_prompts=batch['ar_mask_prompts'],
+                tc_mask_prompts=batch['tc_mask_prompts']
             )
-
-            # encode prompts per image
-            tc_sparse_embeddings, tc_dense_embeddings = [], []
-            ar_sparse_embeddings, ar_dense_embeddings = [], []
-            batch_size = len(image_embeddings_tc)
-            for batch_idx in range(batch_size):
-                current_tc_sparse, current_tc_dense = base.prompt_encoder(
-                    points=tc_point_prompts[batch_idx] if tc_point_prompts is not None else None,
-                    boxes=tc_bbox_prompts[batch_idx] if tc_bbox_prompts is not None else None,
-                    masks=batch.get('tc_mask_prompts')[batch_idx] if batch.get('tc_mask_prompts') is not None else None,
-                )
-                current_ar_sparse, current_ar_dense = base.prompt_encoder(
-                    points=ar_point_prompts[batch_idx] if ar_point_prompts is not None else None,
-                    boxes=ar_bbox_prompts[batch_idx] if ar_bbox_prompts is not None else None,
-                    masks=batch.get('ar_mask_prompts')[batch_idx] if batch.get('ar_mask_prompts') is not None else None,
-                )
-                tc_sparse_embeddings.append(current_tc_sparse)
-                tc_dense_embeddings.append(current_tc_dense)
-                ar_sparse_embeddings.append(current_ar_sparse)
-                ar_dense_embeddings.append(current_ar_dense)
-
-            # decode masks per image with two separate decoders using task-specific embeddings
-            tc_pred_masks = []
-            ar_pred_masks = []
-            dense_pe = base.prompt_encoder.get_dense_pe()
-            for i in range(batch_size):
-                tc_masks_i, _ = base.mask_decoder_tc(
-                    image_embeddings=image_embeddings_tc[i:i+1],
-                    image_pe=dense_pe,
-                    sparse_prompt_embeddings=tc_sparse_embeddings[i],
-                    dense_prompt_embeddings=tc_dense_embeddings[i],
-                    multimask_output=False,
-                )
-                ar_masks_i, _ = base.mask_decoder_ar(
-                    image_embeddings=image_embeddings_ar[i:i+1],
-                    image_pe=dense_pe,
-                    sparse_prompt_embeddings=ar_sparse_embeddings[i],
-                    dense_prompt_embeddings=ar_dense_embeddings[i],
-                    multimask_output=False,
-                )
-                tc_pred_masks.append(tc_masks_i)
-                ar_pred_masks.append(ar_masks_i)
-
-            # postprocess masks to original sizes
-            tc_mask = [base.postprocess(m.clone(), ori_img_size[i]) for i, m in enumerate(tc_pred_masks)]
-            ar_mask = [base.postprocess(m.clone(), ori_img_size[i]) for i, m in enumerate(ar_pred_masks)]
 
             masks_ar_gt = batch['ar_object_masks']
             masks_tc_gt = batch['tc_object_masks']
@@ -271,65 +223,18 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
         ar_mask_prompts_copy = copy.deepcopy(batch.get('ar_mask_prompts'))
         tc_mask_prompts_copy = copy.deepcopy(batch.get('tc_mask_prompts'))
 
-        # resolve base model if wrapped
-        base = model.module if hasattr(model, 'module') else model
+        # Set inference images once
+        images = model.set_infer_img(batch['input'])
 
-        # Always compute dual task-specific embeddings via encode_images
-        image_embeddings_tc, image_embeddings_ar, interm_tc, interm_ar, images_input, ori_img_size = base.encode_images(batch['input'])
-
-        # prepare prompts
-        ar_point_prompts, tc_point_prompts, ar_bbox_prompts, tc_bbox_prompts = base.preprocess_prompts(
+        # Perform inference with original prompts (model may modify them in-place)
+        tc_masks, ar_masks = model.infer(
             ar_point_prompts=batch.get('ar_point_prompts'),
             tc_point_prompts=batch.get('tc_point_prompts'),
             ar_bbox_prompts=batch.get('ar_bbox_prompts'),
             tc_bbox_prompts=batch.get('tc_bbox_prompts'),
-            ori_img_size=ori_img_size
+            ar_mask_prompts=batch.get('ar_mask_prompts'),
+            tc_mask_prompts=batch.get('tc_mask_prompts')
         )
-
-        # encode prompts per image
-        tc_sparse_embeddings, tc_dense_embeddings = [], []
-        ar_sparse_embeddings, ar_dense_embeddings = [], []
-        batch_size = len(image_embeddings_tc)
-        for batch_idx in range(batch_size):
-            cur_tc_sparse, cur_tc_dense = base.prompt_encoder(
-                points=tc_point_prompts[batch_idx] if tc_point_prompts is not None else None,
-                boxes=tc_bbox_prompts[batch_idx] if tc_bbox_prompts is not None else None,
-                masks=batch.get('tc_mask_prompts')[batch_idx] if batch.get('tc_mask_prompts') is not None else None,
-            )
-            cur_ar_sparse, cur_ar_dense = base.prompt_encoder(
-                points=ar_point_prompts[batch_idx] if ar_point_prompts is not None else None,
-                boxes=ar_bbox_prompts[batch_idx] if ar_bbox_prompts is not None else None,
-                masks=batch.get('ar_mask_prompts')[batch_idx] if batch.get('ar_mask_prompts') is not None else None,
-            )
-            tc_sparse_embeddings.append(cur_tc_sparse)
-            tc_dense_embeddings.append(cur_tc_dense)
-            ar_sparse_embeddings.append(cur_ar_sparse)
-            ar_dense_embeddings.append(cur_ar_dense)
-
-        # decode masks
-        tc_pred_masks = []
-        ar_pred_masks = []
-        dense_pe = base.prompt_encoder.get_dense_pe()
-        for i in range(batch_size):
-            tc_masks_i, _ = base.mask_decoder_tc(
-                image_embeddings=image_embeddings_tc[i:i+1],
-                image_pe=dense_pe,
-                sparse_prompt_embeddings=tc_sparse_embeddings[i],
-                dense_prompt_embeddings=tc_dense_embeddings[i],
-                multimask_output=False,
-            )
-            ar_masks_i, _ = base.mask_decoder_ar(
-                image_embeddings=image_embeddings_ar[i:i+1],
-                image_pe=dense_pe,
-                sparse_prompt_embeddings=ar_sparse_embeddings[i],
-                dense_prompt_embeddings=ar_dense_embeddings[i],
-                multimask_output=False,
-            )
-            tc_pred_masks.append(tc_masks_i)
-            ar_pred_masks.append(ar_masks_i)
-
-        tc_masks = [base.postprocess(m.clone(), ori_img_size[i]) for i, m in enumerate(tc_pred_masks)]
-        ar_masks = [base.postprocess(m.clone(), ori_img_size[i]) for i, m in enumerate(ar_pred_masks)]
 
         masks_gt = batch['gt_mask']
         masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt]
@@ -466,18 +371,7 @@ def main_worker(worker_id, worker_args):
     freeze_base = getattr(worker_args, 'lora_freeze_base', True)
 
     # Use LoRAClimateSAMVanilla which applies LoRA to image_encoder and optionally freezes base
-    use_lora_task_specific = getattr(worker_args, 'lora_task_specific', True)
-    model = LoRAClimateSAMVanilla(
-        model_type=worker_args.sam_type,
-        r=lora_r,
-        lora_layers=None,
-        input_weights=None,
-        use_prompt_generator=False,
-        mlp_ratio=worker_args.image_encoder_mlp_ratio,
-        freeze_base=freeze_base,
-        enable_wandb_logging=getattr(worker_args, 'debugging', False),
-        lora_task_specific=use_lora_task_specific,
-    )
+    model = LoRAClimateSAMVanilla(model_type=worker_args.sam_type, r=lora_r, lora_layers=None, input_weights=None, use_prompt_generator=False, mlp_ratio=worker_args.image_encoder_mlp_ratio, freeze_base=freeze_base, enable_wandb_logging=getattr(worker_args, 'debugging', False))
     model = model.to(device=device)
 
     if torch.distributed.is_initialized():
