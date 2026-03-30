@@ -44,7 +44,7 @@ class CGNetPrompter:
                 aggregate_cm += get_cm(predictions, labels, 3)
 
                 # Pass backward
-                loss = dice_bce_loss(outputs, labels)
+                loss = jaccard_loss(outputs, labels)
                 epoch_loader.set_description(f'Loss: {loss.item()}')
                 loss.backward()
                 self.optimizer.step()
