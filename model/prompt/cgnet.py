@@ -7,6 +7,7 @@ import os
 import torch.nn.functional as F
 from .create_prompt_from_mask import extract_point_and_bbox_prompts_from_pred_masks
 from .prompt_maker import PromptMaker
+import wandb
 
 class CGNetPrompter:
     def __init__(self, weights_path, device, worker_args):
@@ -17,6 +18,9 @@ class CGNetPrompter:
         self.device = device
         self.optimizer = torch.optim.Adam(self.cgnet_model.parameters(), lr=1e-4)
         self.prompt_maker = PromptMaker(prompt_type=worker_args.prompt_type, positive_point_num=worker_args.positive_point_num, negative_point_num=worker_args.negative_point_num)
+        # WandB config passed from train script
+        self.wandb = getattr(worker_args, 'wandb', False)
+        self.run_name = getattr(worker_args, 'run_name', None)
 
     def train(self, dataloader, epochs):
         self.cgnet_model.train()
@@ -25,6 +29,8 @@ class CGNetPrompter:
             print(f'Epoch {epoch}:')
             epoch_loader = tqdm(dataloader)
             aggregate_cm = np.zeros((3,3))
+            epoch_loss_sum = 0.0
+            epoch_loss_count = 0
 
             for batch in epoch_loader:
                 
@@ -44,6 +50,15 @@ class CGNetPrompter:
                 self.optimizer.step()
                 self.optimizer.zero_grad() 
 
+                # accumulate loss for epoch logging
+                try:
+                    epoch_loss_sum += float(loss.item())
+                except:
+                    epoch_loss_sum += loss.detach().cpu().item()
+                epoch_loss_count += 1
+
+            avg_epoch_loss = epoch_loss_sum / epoch_loss_count if epoch_loss_count > 0 else 0.0
+
             if epoch % 5 == 1:
                 import matplotlib.pyplot as plt
                 fig, axes = plt.subplots(1, 2, figsize=(10, 5))
@@ -56,15 +71,44 @@ class CGNetPrompter:
                 fig.savefig(plot_path)
                 plt.close(fig)
                 print(f"Saved image at {plot_path}")
+
+                # Log example image to WandB
+                if self.wandb:
+                    try:
+                        wandb.log({"train/example_prediction": wandb.Image(plot_path)}, step=epoch)
+                    except Exception as e:
+                        print(f"WandB image log failed: {e}")
                 
                 
             print('Epoch stats:')
             print(aggregate_cm)
             ious = get_iou_perClass(aggregate_cm)[1:]
-            if ious.mean() > best_ious and epoch > 10:
-                best_ious = ious.mean()
+            mean_iou = ious.mean()
+            if mean_iou > best_ious and epoch > 10:
+                best_ious = mean_iou
                 self.save_model()
                 print(f"New best model saved with mean IoU: {best_ious}")
+                if self.wandb:
+                    try:
+                        save_path = os.path.join(self.exp_dir, f"cgnet_weight.pth")
+                        wandb.save(save_path)
+                    except Exception as e:
+                        print(f"WandB save failed: {e}")
+
+            # Log epoch scalars to WandB
+            if self.wandb:
+                log_dict = {
+                    "train/avg_loss": avg_epoch_loss,
+                    "train/mean_iou": float(mean_iou),
+                    "epoch": epoch,
+                    "train/iou_class_1": float(ious[0]),
+                    "train/iou_class_2": float(ious[1])
+                }
+                try:
+                    wandb.log(log_dict, step=epoch)
+                except Exception as e:
+                    print(f"WandB scalar log failed: {e}")
+
             print('IOUs: ', ious, ', mean: ', ious.mean())
             
     def save_model(self,):

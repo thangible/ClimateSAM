@@ -201,10 +201,10 @@ if __name__ == '__main__':
     print("Starting training process...")
     args = parse()
     
-    # if hasattr(args, 'wandb') and args.wandb:
-    #     project_name = args.project_name if hasattr(args, 'project_name') else "climate-sam"
-    #     run_name = args.run_name if hasattr(args, 'run_name') else None
-    #     wandb.init(project=project_name, name=run_name, config=vars(args))
+    if hasattr(args, 'wandb') and args.wandb:
+        project_name = args.project_name if hasattr(args, 'project_name') else "climate-sam-cgnet"
+        run_name = args.run_name if hasattr(args, 'run_name') else None
+        wandb.init(project=project_name, name=run_name, config=vars(args))
 
 
     if torch.cuda.is_available():
@@ -221,6 +221,6 @@ if __name__ == '__main__':
     if len(args.used_gpu) == 1:
         main_worker(worker_id=0, worker_args=args)
 
-    
-    
-    
+
+
+
