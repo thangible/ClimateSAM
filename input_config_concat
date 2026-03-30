@@ -9,7 +9,7 @@ run_name = ADAPTATION_OPTIMAL_1
 [BATCH CONFIG]
 num_workers = 4
 gradient_accumulation_steps = 4
-train_bs = 8
+train_bs = 32
 val_bs = 4
 ; weight_decay = 1e-4
 lr = 1e-3
@@ -63,7 +63,7 @@ image_encoder_mlp_ratio = 0.5
 [DEBUGGING]
 load_pretrained = False
 wandb = True
-save_model = True
+save_model = False
 debugging = False
 
 [VANILLA SAM CONFIG]
