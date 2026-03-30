@@ -12,7 +12,7 @@ gradient_accumulation_steps = 16
 train_bs = 32
 val_bs = 4
 ; weight_decay = 1e-4
-lr = 1e-4
+lr = 1e-3
 
 [PHASE]
 phase = 1
@@ -48,9 +48,9 @@ alpha_tc_tversky = 0.3
 beta_tc_tversky = 0.7
 
 [LOSS Weights]
-focal_weight = 0.0
+focal_weight = 10
 tversky_weight = 1.0
-bce_weight = 10
+bce_weight = 0
 [LOSS CONFIG COMMON]
 bce_weight_tc = 1
 bce_weight_ar = 1
@@ -68,4 +68,4 @@ debugging = False
 data_type = 'ar'
 
 [LORA]
-lora_r = 32
+lora_r = 16
