@@ -124,7 +124,8 @@ class ClimateDataset(Dataset):
                 'tc_mask_prompts': None,
                 'ar_object_masks' : None,
                 'tc_object_masks' : None,
-                
+                'ar_centroids': None,
+                'tc_centroids': None,
             }
         # self.prompt_check(prompt_dict)
         
