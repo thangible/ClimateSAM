@@ -55,20 +55,25 @@ class ClimateInputAdapter(nn.Module):
         self.initialize_weights()
 
     def initialize_weights(self):
-        # diagnostic variables: TMQ (0), U850 (1), V850 (2), PSL (7) 
+        # diagnostic variables: TMQ (0), U850 (1), V850 (2), PSL (7)
         diagnostic_indices = [0, 1, 2, 7] 
-        
+
         first_conv = self.input_adapt[0]
-        second_conv = self.input_adapt[2]
-        
+
         with torch.no_grad():
-            # Use Xavier/Kaiming for the hidden layer
-            nn.init.kaiming_normal_(first_conv.weight)
+            # Initialize with Kaiming Uniform to keep the signal variance stable
+            nn.init.kaiming_uniform_(first_conv.weight, nonlinearity='linear')
             
-            # Identity-style init for the final layer to preserve raw intensities
-            nn.init.zeros_(second_conv.weight)
-            for i in range(min(second_conv.weight.shape[0], second_conv.weight.shape[1])):
-                second_conv.weight[i, i, 0, 0] = 1.0
+            # Priority Injection
+            for out_ch in range(first_conv.weight.shape[0]):
+                # Set TMQ (Index 0) to a higher priority
+                first_conv.weight[out_ch, 0, 0, 0] = 1.0 
+                
+                # Set U850 and V850 (Indices 1 and 2) to 1.0
+                first_conv.weight[out_ch, 1, 0, 0] = 1.0
+                first_conv.weight[out_ch, 2, 0, 0] = 1.0
+                # Optional: Set PSL (Index 7) to 1.0 to help with TC centers
+                first_conv.weight[out_ch, 7, 0, 0] = 0.5
 
     def forward(self, x):
         # 1. Non-linear point-wise transformation
@@ -79,4 +84,4 @@ class ClimateInputAdapter(nn.Module):
         # This keeps the internal "subtle" changes from becoming 0 or 1.
         # x = x * 127.5 + 127.5
         
-        return torch.clamp(x, 0.0, 255.0)
+        return x
