@@ -3,45 +3,42 @@ import time
 import random
 
 def main():
-    # Configuration
     epoch_num = 15
     total_samples = 20
-    log_file = "hparam_search_log_part_2.txt"
+    log_file = "hparam_search_log_offical.txt"
 
-    # Search Space Refined for ClimateNet Imbalance
-    # TC: 0.5% pixels - Prioritize high Beta for Recall [cite: 68, 76]
-    tversky_pairs_tc = [(0.3, 0.7), (0.2, 0.8)] 
-    
-    # AR: 5.7% pixels - Balanced approach [cite: 68, 76]
-    tversky_pairs_ar = [(0.5, 0.5), (0.4, 0.6), (0.6, 0.4)]
-    
-    # Focal Configs: (Alpha, Gamma)
-    # TC: 257:1 Ratio - Requires high Alpha and Gamma 
-    focal_configs_tc = [(0.99, 5.0), (0.99, 3.0), (0.99, 2.0)]
-    
-    # AR: 17:1 Ratio - Moderate Alpha 
-    focal_configs_ar = [(0.90, 2.0), (0.90, 3.0), (0.90, 5.0)]
-    
-    fw_configs = [1, 10]  # Focal weights to test
+    # FIXED: Optimal Tversky pairs from Table 4.6 [cite: 687, 688]
+    atc_t, btc_t = 0.3, 0.7  # Fixed for high TC recall without instability
+    aar_t, bar_t = 0.5, 0.5  # Fixed for balanced AR detection
 
-    # Tracking executed combinations
+    # SEARCH: Testing Alpha sensitivity while keeping Gamma near optimal values
+    # TC: Testing if 0.99 is the ceiling or if 0.95/0.995 offers better balance
+    focal_configs_tc = [
+        (0.99, 5.0),   # Thesis Optimal [cite: 687]
+        (0.95, 5.0),   # Testing lower Alpha (more background weight)
+        (0.995, 4.0),   # Testing higher Alpha with slightly lower Gamma
+        (0.995, 6.0)    # Testing higher Alpha with slightly higher Gamma for precision
+    ]
+    
+    # AR: Testing if 0.90 is the ceiling or if 0.85/0.95 is better
+    focal_configs_ar = [
+        (0.90, 2.0),   # Thesis Optimal [cite: 687]
+        (0.85, 2.0),   # Testing lower Alpha
+        (0.95, 3.0),   # Testing higher Alpha/Gamma for precision
+        (0.80, 1.0)    # Testing much lower Alpha to see if it helps with recall
+    ]
+    
+    # FIXED: Focal weight 10 is the "sweet spot" for structural discovery 
+    fw = 10 
+
     executed = set()
-
-    print(f"Starting Random Search: {total_samples} iterations targeted.")
-
     count = 0
     while count < total_samples:
-        # Randomly sample from your refined lists
-        atc_t, btc_t = random.choice(tversky_pairs_tc)
-        aar_t, bar_t = random.choice(tversky_pairs_ar)
         aar_f, gar_f = random.choice(focal_configs_ar)
         atc_f, gtc_f = random.choice(focal_configs_tc)
-        fw = random.choice(fw_configs)
         
-        # Constant weights for loss stability in Adaptation Phase [cite: 212]
         tw, bcew = 1.0, 0.0
-
-        combo = (atc_t, btc_t, aar_t, bar_t, aar_f, gar_f, atc_f, gtc_f)
+        combo = (aar_f, gar_f, atc_f, gtc_f)
         
         if combo in executed:
             continue
@@ -55,23 +52,17 @@ def main():
             f"--alpha_tc_tversky {atc_t} --beta_tc_tversky {btc_t} "
             f"--alpha_ar {aar_f} --gamma_ar {gar_f} "
             f"--alpha_tc {atc_f} --gamma_tc {gtc_f} "
-            f"--focal_weight {fw} --tversky_weight {tw} --bce_weight {bcew} --max_epoch_num {epoch_num} --run_name hparam_search_{count}"
+            f"--focal_weight {fw} --tversky_weight {tw} --bce_weight {bcew} "
+            f"--max_epoch_num {epoch_num} --run_name hparam_search_{count}"
         )
 
         print(f"\n--- Running Iteration {count}/{total_samples} ---")
-        print(f"TC Tversky (a={atc_t}, b={btc_t}) | AR Focal (a={aar_f}, g={gar_f})")
+        print(f"Testing Focal: TC(a={atc_f}, g={gtc_f}) | AR(a={aar_f}, g={gar_f})")
         
-        # Log the specific attempt
         with open(log_file, "a") as f:
             f.write(f"Iter {count}: {cmd}\n")
 
-        # Execute training
-        exit_code = os.system(cmd)
-        
-        if exit_code != 0:
-            print(f"Warning: Iteration {count} failed with exit code {exit_code}")
-
-        # Short cooldown to ensure file handles/GPU memory are cleared
+        os.system(cmd)
         time.sleep(10)
 
 if __name__ == "__main__":

@@ -15,7 +15,7 @@ val_bs = 4
 lr = 1e-3
 
 [PHASE]
-phase = 1
+phase = 2
 augmented = False
 positive_point_num = 2
 negative_point_num = 2
@@ -37,10 +37,10 @@ valid_per_epochs = 5
 
 [LOSS CONFIG FOCAL]
 gamma_ar = 2
-alpha_ar = 1
+alpha_ar = 0.90
 
 gamma_tc = 5
-alpha_tc = 1
+alpha_tc = 0.995
 
 [LOSS CONFIG TVERSKY]
 alpha_ar_tversky = 0.3
