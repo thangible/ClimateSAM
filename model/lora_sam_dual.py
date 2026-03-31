@@ -585,6 +585,30 @@ class LoRAClimateSAMVanilla(nn.Module):
         if phase == 1:
             # Unfreeze image encoder LoRA adapters (already injected in-place)
             for n, c in self.named_children():
+                if n in ['image_encoder', 'mask_decoder_tc', 'mask_decoder_ar']:
+                    c.train(mode=mode)
+                else:
+                    c.eval()
+            # Only LoRA adapter params should require grad
+            for blk in self.image_encoder.blocks:
+                if hasattr(blk, 'attn') and hasattr(blk.attn, 'qkv'):
+                    qkv = blk.attn.qkv
+                    # support both single-task and dual-task qkv wrappers
+                    if isinstance(qkv, (_LoRA_qkv, _LoRA_qkv_dual)):
+                        for p in qkv.parameters():
+                            if hasattr(p, 'is_lora') and p.is_lora:
+                                p.requires_grad = True
+            # also unfreeze input_adapter and mask decoders
+            for n, c in self.named_children():
+                if n in [ 'mask_decoder_tc', 'mask_decoder_ar']:
+                    for p in c.parameters():
+                        p.requires_grad = True
+            if verbose:
+                print("Phase 1: training LoRA adapters + input_adapter + mask decoders")
+                
+        if phase == 2:
+            # Unfreeze image encoder LoRA adapters (already injected in-place)
+            for n, c in self.named_children():
                 if n in ['image_encoder', 'mask_decoder_tc', 'mask_decoder_ar', 'input_adapter']:
                     c.train(mode=mode)
                 else:
@@ -600,7 +624,7 @@ class LoRAClimateSAMVanilla(nn.Module):
                                 p.requires_grad = True
             # also unfreeze input_adapter and mask decoders
             for n, c in self.named_children():
-                if n in ['input_adapter', 'mask_decoder_tc', 'mask_decoder_ar']:
+                if n in [ 'mask_decoder_tc', 'mask_decoder_ar', 'input_adapter']:
                     for p in c.parameters():
                         p.requires_grad = True
             if verbose:
