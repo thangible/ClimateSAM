@@ -395,17 +395,17 @@ class ClimateSAM(nn.Module):
                                                     features_per_block=feature_per_block[model_type])
         self.prompt_encoder = PromptEncoderWrapper(ori_sam=self.ori_sam, fix=True)
         
-        #set weights for input adaptation:
-        with torch.no_grad():
-            torch.nn.init.normal_(self.input_adapter[0].weight, mean=0.0, std=0.02)
-            if input_weights is None:
-                # Default input_weights correspond to indices of specific climate variables
-                input_weights = [0, 1, 2] # for 'TMQ', 'U850', 'V850'
-            # For instance, set those weights to 1.0 for every output channel
-            for out_ch in range(self.input_adapter[0].weight.shape[0]):
-                for in_ch in input_weights:
-                    self.input_adapter[0].weight[out_ch, in_ch, 0, 0] = 1.0    
-        # self.input_adapter[0].weight.requires_grad = False # freeze the input adaptation layer
+        # #set weights for input adaptation:
+        # with torch.no_grad():
+        #     torch.nn.init.normal_(self.input_adapter[0].weight, mean=0.0, std=0.02)
+        #     if input_weights is None:
+        #         # Default input_weights correspond to indices of specific climate variables
+        #         input_weights = [0, 1, 2] # for 'TMQ', 'U850', 'V850'
+        #     # For instance, set those weights to 1.0 for every output channel
+        #     for out_ch in range(self.input_adapter[0].weight.shape[0]):
+        #         for in_ch in input_weights:
+        #             self.input_adapter[0].weight[out_ch, in_ch, 0, 0] = 1.0    
+        # # self.input_adapter[0].weight.requires_grad = False # freeze the input adaptation layer
                 
         del self.ori_sam.mask_decoder # remove the mask decoder in original SAM to avoid redundant params in model object
         

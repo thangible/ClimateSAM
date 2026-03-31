@@ -172,13 +172,13 @@ class LoRAClimateSAMVanilla(nn.Module):
         # input adapter 16->3 like ClimateSAM
         self.input_adapter = ClimateInputAdapter(in_channels=16, out_channels=3)
         # set initial weights focusing on selected input channels
-        with torch.no_grad():
-            nn.init.normal_(self.input_adapter[0].weight, mean=0.0, std=0.02)
-            if input_weights is None:
-                input_weights = [0, 1, 2]
-            for out_ch in range(self.input_adapter[0].weight.shape[0]):
-                for in_ch in input_weights:
-                    self.input_adapter[0].weight[out_ch, in_ch, 0, 0] = 1.0
+        # with torch.no_grad():
+        #     nn.init.normal_(self.input_adapter[0].weight, mean=0.0, std=0.02)
+        #     if input_weights is None:
+        #         input_weights = [0, 1, 2]
+        #     for out_ch in range(self.input_adapter[0].weight.shape[0]):
+        #         for in_ch in input_weights:
+        #             self.input_adapter[0].weight[out_ch, in_ch, 0, 0] = 1.0
 
         # duplicate mask_decoder into two independent heads so they can adapt separately
         self.mask_decoder_tc = copy.deepcopy(self.ori_sam.mask_decoder)

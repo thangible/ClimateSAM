@@ -74,18 +74,18 @@ class ClimateSAM(nn.Module):
         #set weights for input adaptation:
         # Zero out all weights 
         # Define the channels where you want high weights
-        with torch.no_grad():
-            torch.nn.init.normal_(self.input_adapter[0].weight, mean=0.0, std=0.02)
-            if input_weights is None:
-                # Default input_weights correspond to indices of specific climate variables:
-                # 'TMQ' (Total Precipitable Water Vapor), 'U850' (Zonal Wind at 850 hPa), 
-                # and 'V850' (Meridional Wind at 850 hPa).
-                input_weights = [0, 1, 2] # for 'TMQ', 'U850', 'V850'
-            # For instance, set those weights to 1.0 for every output channel
-            for out_ch in range(self.input_adapter[0].weight.shape[0]):
-                for in_ch in input_weights:
-                    self.input_adapter[0].weight[out_ch, in_ch, 0, 0] = 1.0    
-        # self.input_adapter[0].weight.requires_grad = False # freeze the input adaptation layer
+        # with torch.no_grad():
+        #     torch.nn.init.normal_(self.input_adapter[0].weight, mean=0.0, std=0.02)
+        #     if input_weights is None:
+        #         # Default input_weights correspond to indices of specific climate variables:
+        #         # 'TMQ' (Total Precipitable Water Vapor), 'U850' (Zonal Wind at 850 hPa), 
+        #         # and 'V850' (Meridional Wind at 850 hPa).
+        #         input_weights = [0, 1, 2] # for 'TMQ', 'U850', 'V850'
+        #     # For instance, set those weights to 1.0 for every output channel
+        #     for out_ch in range(self.input_adapter[0].weight.shape[0]):
+        #         for in_ch in input_weights:
+        #             self.input_adapter[0].weight[out_ch, in_ch, 0, 0] = 1.0    
+        # # self.input_adapter[0].weight.requires_grad = False # freeze the input adaptation layer
                 
         del self.ori_sam.mask_decoder # remove the mask decoder in original SAM to avoid redundant params in model object
         
