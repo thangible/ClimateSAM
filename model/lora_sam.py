@@ -9,7 +9,7 @@ import torch.nn.functional as F
 from model.segment_anything_ext.build_sam import sam_model_registry
 from model.prompt_encoder import PromptEncoderWrapper
 from model.prompt_generator import PromptGenerator
-
+from model.input_adapter import ClimateInputAdapter
 
 sam_ckpt_path_dict = dict(
     vit_b='./pretrained/sam_vit_b_01ec64.pth',
@@ -170,14 +170,7 @@ class LoRAClimateSAMVanilla(nn.Module):
         self.sam_img_size = (self.ori_sam.image_encoder.img_size, self.ori_sam.image_encoder.img_size)
 
         # input adapter 16->3 like ClimateSAM
-        self.input_adapter = nn.Sequential(
-            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.Conv2d(32, 16, kernel_size=1),
-            nn.ReLU(),
-            nn.Conv2d(16, 3, kernel_size=1),
-        )
+        self.input_adapter = ClimateInputAdapter(in_channels=16, out_channels=3)
         # set initial weights focusing on selected input channels
         with torch.no_grad():
             nn.init.normal_(self.input_adapter[0].weight, mean=0.0, std=0.02)

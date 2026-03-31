@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 
 from model.prompt_encoder import PromptEncoderWrapper
 from model.prompt_generator import PromptGenerator
+from model.input_adapter import ClimateInputAdapter
 
 # Local MaskDecoderHQ (single HQ token variant) and Image Encoder that use a shared token
 class MaskDecoderHQ(MaskDecoder):
@@ -346,14 +347,7 @@ class ClimateSAM(nn.Module):
         self.sam_img_size = (self.ori_sam.image_encoder.img_size, self.ori_sam.image_encoder.img_size)
         
         # ClimateSAM model
-        self.input_adapter = nn.Sequential(
-            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1), # Wider layer, spatial context
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.Conv2d(32, 16, kernel_size=1, stride=1, padding=0), # Bottleneck
-            nn.ReLU(),
-            nn.Conv2d(16, 3, kernel_size=1, stride=1, padding=0),
-            )
+        self.input_adapter = ClimateInputAdapter(in_channels=16, out_channels=3)
         
         # single mask decoder (shared for both TC and AR)
         self.mask_decoder = MaskDecoderHQ(

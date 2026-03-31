@@ -120,6 +120,7 @@ import numpy as np
 import torch.utils.checkpoint as checkpoint
 import wandb
 import matplotlib.pyplot as plt
+from model.input_adapter import ClimateInputAdapter
 
 sam_ckpt_path_dict = dict(
     vit_b='./pretrained/sam_vit_b_01ec64.pth',
@@ -147,15 +148,7 @@ class ClimateSAM(nn.Module):
         self.sam_img_size = (self.ori_sam.image_encoder.img_size, self.ori_sam.image_encoder.img_size)
         
         # ClimateSAM model
-        self.input_adapter = nn.Sequential(
-            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1), # Wider layer, spatial context
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.Conv2d(32, 16, kernel_size=1, stride=1, padding=0), # Bottleneck
-            nn.ReLU(),
-            nn.Conv2d(16, 3, kernel_size=1, stride=1, padding=0),
-            )
-        
+        self.input_adapter = ClimateInputAdapter(in_channels=16, out_channels=3)
         self.mask_decoder = MaskDecoderHQ(
             model_type, self.ori_sam.mask_decoder.state_dict()
         )
