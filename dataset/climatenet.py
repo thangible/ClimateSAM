@@ -11,7 +11,7 @@ from .climatenet_util import extract_point_and_bbox_prompts_from_climatenet_mask
 from model.prompt.cgnet import CGNetPrompter
 
 class ClimateDataset(Dataset):
-    def __init__(self, data_dir, train_flag=True, reset_flag=True, augmented=False, generate_prompt=False, **prompt_kwargs):
+    def __init__(self, data_dir, train_flag=True, reset_flag=False, augmented=False, generate_prompt=False, **prompt_kwargs):
         """
         Parameters:
             data_dir (str): Directory containing the .nc files.
@@ -94,7 +94,7 @@ class ClimateDataset(Dataset):
         # SAM INPUT
         sam_input = dataset.to_array().sel(variable=self.variables).values.squeeze()
         # z-normalize per-channel using precomputed mean/std and scale to [0,255]
-        sam_input = self.z_normalize(sam_input)
+        sam_input = self.minmax_per_channel_to_image(sam_input)
         mask = self.get_labels(dataset)  # see function below
         
         # Apply transforms (if any)

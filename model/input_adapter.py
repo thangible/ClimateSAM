@@ -75,7 +75,7 @@ class ClimateInputAdapter(nn.Module):
                 first_conv.weight[out_ch, 1, 0, 0] = 1.0
                 first_conv.weight[out_ch, 2, 0, 0] = 1.0
                 # Optional: Set PSL (Index 7) to 1.0 to help with TC centers
-                first_conv.weight[out_ch, 7, 0, 0] = 0.1
+                # first_conv.weight[out_ch, 7, 0, 0] = 0.0
 
     def forward(self, x):
         # 1. Non-linear point-wise transformation
