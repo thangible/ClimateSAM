@@ -270,7 +270,7 @@ class ClimateSAM(nn.Module):
         input = self.interpolate_input(input)  # from 16x768x1152 to 16x1024x1024
         imgs = input[:, :3, :, :] # from 16x1024x1024 to 3x1024x1024
         imgs = self.input_adapter(input)  # from 16x1024x1024 to 3x1024x1024
-        imgs = self.preprocess_images(imgs)  # normalize the input images
+        # imgs = self.preprocess_images(imgs)  # normalize the input images
         
         # Encode the images
         image_input = imgs.clone().detach()

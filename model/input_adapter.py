@@ -84,4 +84,4 @@ class ClimateInputAdapter(nn.Module):
         # This keeps the internal "subtle" changes from becoming 0 or 1.
         # x = x * 127.5 + 127.5
         
-        return torch.clamp(x, 0.0, 255.0)
+        return x

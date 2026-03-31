@@ -94,7 +94,7 @@ class ClimateDataset(Dataset):
         # SAM INPUT
         sam_input = dataset.to_array().sel(variable=self.variables).values.squeeze()
         # z-normalize per-channel using precomputed mean/std and scale to [0,255]
-        sam_input = self.z_normalize_and_scale(sam_input)
+        sam_input = self.z_normalize(sam_input)
         mask = self.get_labels(dataset)  # see function below
         
         # Apply transforms (if any)
