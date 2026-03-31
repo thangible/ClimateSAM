@@ -11,7 +11,7 @@ from .climatenet_util import extract_point_and_bbox_prompts_from_climatenet_mask
 from model.prompt.cgnet import CGNetPrompter
 
 class ClimateDataset(Dataset):
-    def __init__(self, data_dir, train_flag=True, reset_flag=False, augmented=False, generate_prompt=False, **prompt_kwargs):
+    def __init__(self, data_dir, train_flag=True, reset_flag=True, augmented=False, generate_prompt=False, **prompt_kwargs):
         """
         Parameters:
             data_dir (str): Directory containing the .nc files.
@@ -149,10 +149,57 @@ class ClimateDataset(Dataset):
             "ar_centroids": prompt_dict['ar_centroids'],
             "tc_centroids": prompt_dict['tc_centroids'],
         }
-            
-        
-        
+
     def calculate_stats(self):
+        """
+        Calculate the mean and std of the data across all the files.
+        """
+        if os.path.exists(self.mean_std_path) and self.reset_flag is False:
+            
+            stats = np.load(self.mean_std_path, allow_pickle=True).item()
+            if self.train_flag:
+                print(f"Loading mean/std from {self.mean_std_path}")
+                print(f"AR Ratio (negative/positive): {stats['ar_ratio']}, TC Ratio: {stats['tc_ratio']}")
+            return stats
+
+        print("Calculating mean/std from scratch...")
+        means = []
+        stds = []
+        ar_ratios = []
+        tc_ratios = []
+        
+        for file in self.files:
+            dataset = xr.load_dataset(file)
+            data = dataset.to_array().sel(variable=self.variables).values.squeeze()
+            means.append(np.mean(data, axis=(1,2)))  # Mean for each of the 16 channels
+            stds.append(np.std(data, axis=(1,2)))    # Std for each of the 16 channels
+            
+            mask = dataset['LABELS'].values
+            ar_mask = mask == 2
+            tc_mask = mask == 1
+            ar_ones_count = np.sum(ar_mask == 1) + 1
+            tc_ones_count = np.sum(tc_mask == 1) + 1
+            ar_zeros_count = np.sum(ar_mask == 0)
+            tc_zeros_count = np.sum(tc_mask == 0)
+            ar_ratio = ar_zeros_count / (ar_ones_count)
+            tc_ratio = tc_zeros_count / (tc_ones_count)
+            ar_ratios.append(ar_ratio)
+            tc_ratios.append(tc_ratio)
+        
+        # Calculate the overall mean and std for each channel across all files
+        mean_dict = np.mean(means, axis=0)
+        std_dict = np.mean(stds, axis=0)
+        mean_ar_ratio = np.median(ar_ratios)
+        mean_tc_ratio = np.median(tc_ratios)
+        
+        result = {"mean": mean_dict, "std": std_dict, "ar_ratio": mean_ar_ratio, "tc_ratio": mean_tc_ratio}
+        np.save(self.mean_std_path, result)
+        
+        # Return a dictionary with channel-wise mean and std
+        return result
+        
+        
+    def calculate_stats_old(self):
         """
         Calculate per-variable mean and std across all files and save to self.mean_std_path.
         This is robust to datasets that include a time dimension.
