@@ -411,7 +411,7 @@ class ClimateSAM(nn.Module):
         
         imgs = input[:, :3, :, :] # from 16x1024x1024 to 3x1024x1024
         imgs = self.input_adapter(input) # from 16x1024x1024 to 3x1024x1024
-        imgs = self.preprocess_images(imgs) # normalize the input images
+        # imgs = self.preprocess_images(imgs) # normalize the input images
         
         # encode the images
         image_input = imgs.clone().detach()
@@ -548,7 +548,7 @@ class ClimateSAM(nn.Module):
         # Preprocess images
         input = self.interpolate_input(torch.stack(input))
         imgs = input[:, :3, :, :]  # Take first 3 channels
-        imgs = self.preprocess_images(imgs)
+        # imgs = self.preprocess_images(imgs)
         
         # Store features for reuse
         self.img_features, self.interm_features = self.image_encoder(imgs)

@@ -62,7 +62,9 @@ class ClimateInputAdapter(nn.Module):
 
         with torch.no_grad():
             # Initialize with Kaiming Uniform to keep the signal variance stable
-            nn.init.kaiming_uniform_(first_conv.weight, nonlinearity='linear')
+            # nn.init.kaiming_uniform_(first_conv.weight, nonlinearity='linear')
+            nn.init.normal_(first_conv.weight, mean=0.0, std=0.05)
+            nn.init.constant_(first_conv.bias, 0.0)
             
             # Priority Injection
             for out_ch in range(first_conv.weight.shape[0]):
@@ -73,7 +75,7 @@ class ClimateInputAdapter(nn.Module):
                 first_conv.weight[out_ch, 1, 0, 0] = 1.0
                 first_conv.weight[out_ch, 2, 0, 0] = 1.0
                 # Optional: Set PSL (Index 7) to 1.0 to help with TC centers
-                first_conv.weight[out_ch, 7, 0, 0] = 0.5
+                first_conv.weight[out_ch, 7, 0, 0] = 0.1
 
     def forward(self, x):
         # 1. Non-linear point-wise transformation
