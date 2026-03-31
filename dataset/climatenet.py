@@ -307,8 +307,8 @@ class ClimateDataset(Dataset):
         """
         Normalize the data using Z-normalization: (X - mean) / std
         """
-        mean = self.mean_std_dict["mean"]
-        std = self.mean_std_dict["std"]
+        mean = self.mean_std_dict["mean"][:, np.newaxis, np.newaxis]
+        std = self.mean_std_dict["std"][:, np.newaxis, np.newaxis]
         
         # Z-normalization for each channel
         normalized_data = (data - mean) / std
