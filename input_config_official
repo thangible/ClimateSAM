@@ -72,7 +72,7 @@ data_type = 'ar'
 
 [SMOOTH LABEL CONFIG]
 smooth_label = False
-ar_kernel_size = 9
-tc_kernel_size = 5
-ar_sigma = 2.0
-tc_sigma = 1.0
+ar_kernel_size = 51
+tc_kernel_size = 21
+ar_sigma = 2
+tc_sigma = 10

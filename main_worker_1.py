@@ -21,30 +21,28 @@ def main():
     
     
     # INFUSED TEST MLP RATIO VIT B
-    os.system("python train_script/official/train_adaptation.py --config input_config_official --sam_type vit_b --image_encoder_mlp_ratio 1 --run_name infused_token_vit_b_mlp1")
+    # os.system("python train_script/official/train_adaptation.py --config input_config_official --sam_type vit_b --image_encoder_mlp_ratio 1 --run_name infused_token_vit_b_mlp1")
+    # time.sleep(15)
+    os.system("python train_script/official/train_adaptation.py --config input_config_official --sam_type vit_b --image_encoder_mlp_ratio 0.75 --run_name infused_token_vit_b_mlp075_smooth")
     time.sleep(15)
-    os.system("python train_script/official/train_adaptation.py --config input_config_official --sam_type vit_b --image_encoder_mlp_ratio 0.75 --run_name infused_token_vit_b_mlp075")
+    os.system("python train_script/official/train_adaptation.py --config input_config_official --sam_type vit_b --image_encoder_mlp_ratio 0.5 --run_name infused_token_vit_b_mlp05_smooth")
     time.sleep(15)
-    os.system("python train_script/official/train_adaptation.py --config input_config_official --sam_type vit_b --image_encoder_mlp_ratio 0.5 --run_name infused_token_vit_b_mlp05")
-    time.sleep(15)
-    
-    # LORA VIT B
     
     # LORA SINGLE VIT B
-    os.system("python train_script/official/train_lora_sam.py --config input_config_official --sam_type vit_b --lora_r 32 --run_name lora_single_vit_b_r32 --gradient_accumulation_steps 16")
+    os.system("python train_script/official/train_lora_sam.py --config input_config_official --sam_type vit_b --lora_r 64 --run_name lora_single_vit_b_r64_smooth --gradient_accumulation_steps 16")
     time.sleep(15)
-    os.system("python train_script/official/train_lora_sam.py --config input_config_official --sam_type vit_b --lora_r 16 --run_name lora_single_vit_b_r16 --gradient_accumulation_steps 16")
+    os.system("python train_script/official/train_lora_sam.py --config input_config_official --sam_type vit_b --lora_r 128 --run_name lora_single_vit_b_r128_smooth --gradient_accumulation_steps 16")
     time.sleep(15)
     
-    # LORA DUAL VIT L
-    os.system("python train_script/official/train_lora_sam.py --config input_config_official --sam_type vit_l --lora_r 32 --run_name lora_single_vit_l_r32 --gradient_accumulation_steps 16")
-    time.sleep(15)
-    os.system("python train_script/official/train_lora_sam.py --config input_config_official --sam_type vit_l --lora_r 16 --run_name lora_single_vit_l_r16 --gradient_accumulation_steps 16")
+    # # LORA DUAL VIT L
+    # os.system("python train_script/official/train_lora_sam.py --config input_config_official --sam_type vit_l --lora_r 32 --run_name lora_single_vit_l_r32 --gradient_accumulation_steps 16")
+    # time.sleep(15)
+    # os.system("python train_script/official/train_lora_sam.py --config input_config_official --sam_type vit_l --lora_r 16 --run_name lora_single_vit_l_r16 --gradient_accumulation_steps 16")
 
     # INFUSED TEST MLP RATIO VIT L
-    os.system("python train_script/official/train_adaptation.py --config input_config_official --sam_type vit_l --image_encoder_mlp_ratio 0.5 --run_name infused_token_vit_l_mlp05")
+    os.system("python train_script/official/train_adaptation.py --config input_config_official --sam_type vit_l --image_encoder_mlp_ratio 0.5 --run_name infused_token_vit_l_mlp05_smooth")
     time.sleep(15)
-    os.system("python train_script/official/train_adaptation.py --config input_config_official --sam_type vit_l --image_encoder_mlp_ratio 0.75  --run_name infused_token_vit_l_mlp075")
+    os.system("python train_script/official/train_adaptation.py --config input_config_official --sam_type vit_l --image_encoder_mlp_ratio 0.75  --run_name infused_token_vit_l_mlp075_smooth")
     time.sleep(15)
 
 

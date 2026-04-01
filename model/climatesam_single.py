@@ -427,6 +427,18 @@ class ClimateSAM(nn.Module):
             if verbose:
                 print("Training image_encoder")
                 
+        if phase == 2:
+            for n, c in self.named_children():
+                if n not in ['image_encoder', 'mask_decoder', 'input_adapter']:
+                    c.eval()
+                else:
+                    c.train(mode=mode)
+                    if n == 'input_adapter':
+                        for p in c.parameters():
+                            p.requires_grad = True
+            if verbose:
+                print("Training image_encoder ")
+                
         elif phase == 3:
             # Phase 3: Train only prompt_encoder
             self.enable_prompt_generator()
