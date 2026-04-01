@@ -24,15 +24,15 @@ def main():
     time.sleep(15)
 
     # LORA DUAL VIT B
-    os.system("python train_script/official/train_lora_sam_dual.py --config input_config_official --sam_type vit_b --lora_r 32 --run_name lora_dual_vit_b_r32")
+    os.system("python train_script/official/train_lora_sam_dual.py --config input_config_official --sam_type vit_b --lora_r 32 --run_name lora_dual_vit_b_r32 --gradient_accumulation_steps 16")
     time.sleep(15)
-    os.system("python train_script/official/train_lora_sam_dual.py --config input_config_official --sam_type vit_b --lora_r 16 --run_name lora_dual_vit_b_r64")
+    os.system("python train_script/official/train_lora_sam_dual.py --config input_config_official --sam_type vit_b --lora_r 16 --run_name lora_dual_vit_b_r64 --gradient_accumulation_steps 16")
     time.sleep(15)
 
     # LORA DUAL VIT L
-    os.system("python train_script/official/train_lora_sam_dual.py --config input_config_official --sam_type vit_l --lora_r 32 --run_name lora_dual_vit_l_r32")
+    os.system("python train_script/official/train_lora_sam_dual.py --config input_config_official --sam_type vit_l --lora_r 32 --run_name lora_dual_vit_l_r32 --gradient_accumulation_steps 16")
     time.sleep(15)
-    os.system("python train_script/official/train_lora_sam_dual.py --config input_config_official --sam_type vit_l --lora_r 16 --run_name lora_dual_vit_l_r16")
+    os.system("python train_script/official/train_lora_sam_dual.py --config input_config_official --sam_type vit_l --lora_r 16 --run_name lora_dual_vit_l_r16 --gradient_accumulation_steps 16")
     
     # TEST ML RATIO CONCAT VIT L
     

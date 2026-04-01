@@ -30,11 +30,11 @@ def main():
     
     # LORA VIT B
     
-    # # LORA SINGLE VIT B
-    # os.system("python train_script/official/train_lora_sam.py --config input_config_official --sam_type vit_b --lora_r 32 --run_name lora_single_vit_b_r32")
-    # time.sleep(15)
-    # os.system("python train_script/official/train_lora_sam.py --config input_config_official --sam_type vit_b --lora_r 16 --run_name lora_single_vit_b_r16")
-    # time.sleep(15)
+    # LORA SINGLE VIT B
+    os.system("python train_script/official/train_lora_sam.py --config input_config_official --sam_type vit_b --lora_r 32 --run_name lora_single_vit_b_r32 --gradient_accumulation_steps 16")
+    time.sleep(15)
+    os.system("python train_script/official/train_lora_sam.py --config input_config_official --sam_type vit_b --lora_r 16 --run_name lora_single_vit_b_r16 --gradient_accumulation_steps 16")
+    time.sleep(15)
     
     # LORA DUAL VIT L
     os.system("python train_script/official/train_lora_sam.py --config input_config_official --sam_type vit_l --lora_r 32 --run_name lora_single_vit_l_r32 --gradient_accumulation_steps 16")
