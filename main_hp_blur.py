@@ -46,7 +46,7 @@ def main():
 
         # Command builder with the new parameters
         cmd = (
-            f"python train_script/official/train_adaptation.py --config input_config_official --sam_type vit_b "
+            f"python train_script/official/train_adaptation.py --config hp_mode --sam_type vit_b "
             f"--alpha_ar_tversky {aar_t} --beta_ar_tversky {bar_t} "
             f"--alpha_tc_tversky {atc_t} --beta_tc_tversky {btc_t} "
             f"--alpha_ar {aar_f} --gamma_ar {gar_f} "
