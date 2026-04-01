@@ -23,7 +23,7 @@ from loss_function import ClimateLoss, compute_climate_loss
 from tqdm import tqdm
 from contextlib import nullcontext
 from parser_config import parse
-from climatesam import ClimateSAM
+from model.climatesam import ClimateSAM
 from dataset.climatenet import ClimateDataset
 from evaluator import StreamSegMetrics
 import copy

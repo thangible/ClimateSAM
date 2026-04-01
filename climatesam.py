@@ -8,10 +8,12 @@ from model.prompt_generator import PromptGenerator
 from model.segment_anything_ext.build_sam import sam_model_registry
 from typing import Union, List, Tuple, Optional
 import torch.nn.functional as F
+# from climatesam_util import extract_point_and_bbox_prompts_from_climatenet_mask
 import numpy as np
 import torch.utils.checkpoint as checkpoint
 import wandb
 import matplotlib.pyplot as plt
+from model.input_adapter import ClimateInputAdapter
 
 sam_ckpt_path_dict = dict(
     vit_b='./pretrained/sam_vit_b_01ec64.pth',
@@ -39,14 +41,7 @@ class ClimateSAM(nn.Module):
         self.sam_img_size = (self.ori_sam.image_encoder.img_size, self.ori_sam.image_encoder.img_size)
         
         # ClimateSAM model
-        self.input_adapter = nn.Sequential(
-            nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1), # Wider layer, spatial context
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.Conv2d(32, 16, kernel_size=1, stride=1, padding=0), # Bottleneck
-            nn.ReLU(),
-            nn.Conv2d(16, 3, kernel_size=1, stride=1, padding=0),
-            )
+        self.input_adapter = ClimateInputAdapter(in_channels=16, out_channels=3)
         
         self.mask_decoder = MaskDecoderHQ(
             model_type, self.ori_sam.mask_decoder.state_dict()
@@ -79,18 +74,18 @@ class ClimateSAM(nn.Module):
         #set weights for input adaptation:
         # Zero out all weights 
         # Define the channels where you want high weights
-        with torch.no_grad():
-            torch.nn.init.normal_(self.input_adapter[0].weight, mean=0.0, std=0.02)
-            if input_weights is None:
-                # Default input_weights correspond to indices of specific climate variables:
-                # 'TMQ' (Total Precipitable Water Vapor), 'U850' (Zonal Wind at 850 hPa), 
-                # and 'V850' (Meridional Wind at 850 hPa).
-                input_weights = [0, 1, 2] # for 'TMQ', 'U850', 'V850'
-            # For instance, set those weights to 1.0 for every output channel
-            for out_ch in range(self.input_adapter[0].weight.shape[0]):
-                for in_ch in input_weights:
-                    self.input_adapter[0].weight[out_ch, in_ch, 0, 0] = 1.0    
-        # self.input_adapter[0].weight.requires_grad = False # freeze the input adaptation layer
+        # with torch.no_grad():
+        #     torch.nn.init.normal_(self.input_adapter[0].weight, mean=0.0, std=0.02)
+        #     if input_weights is None:
+        #         # Default input_weights correspond to indices of specific climate variables:
+        #         # 'TMQ' (Total Precipitable Water Vapor), 'U850' (Zonal Wind at 850 hPa), 
+        #         # and 'V850' (Meridional Wind at 850 hPa).
+        #         input_weights = [0, 1, 2] # for 'TMQ', 'U850', 'V850'
+        #     # For instance, set those weights to 1.0 for every output channel
+        #     for out_ch in range(self.input_adapter[0].weight.shape[0]):
+        #         for in_ch in input_weights:
+        #             self.input_adapter[0].weight[out_ch, in_ch, 0, 0] = 1.0    
+        # # self.input_adapter[0].weight.requires_grad = False # freeze the input adaptation layer
                 
         del self.ori_sam.mask_decoder # remove the mask decoder in original SAM to avoid redundant params in model object
         
@@ -111,6 +106,18 @@ class ClimateSAM(nn.Module):
                     c.train(mode=mode)
             if verbose:
                 print("Training image_encoder")
+                
+        if phase == 2:
+            for n, c in self.named_children():
+                if n not in ['image_encoder', 'mask_decoder', 'input_adapter']:
+                    c.eval()
+                else:
+                    c.train(mode=mode)
+                    if n == 'input_adapter':
+                        for p in c.parameters():
+                            p.requires_grad = True
+            if verbose:
+                print("Training image_encoder ")
                 
         elif phase == 3:
             # Phase 3: Train only prompt_encoder
@@ -276,7 +283,8 @@ class ClimateSAM(nn.Module):
             tc_postprocess_masks_hq = self.assemble_raw_masks(tc_postprocess_masks_hq) 
             ar_postprocess_masks_hq = self.assemble_raw_masks(ar_postprocess_masks_hq)
         
-
+        # Clear unnecessary variables early
+        del imgs  # Delete after use
         torch.cuda.empty_cache()
         
         # Process embeddings in chunks if needed

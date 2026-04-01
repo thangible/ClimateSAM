@@ -256,6 +256,14 @@ class LoRAClimateSAMVanilla(nn.Module):
                         for p in qkv.parameters():
                             if hasattr(p, 'is_lora') and p.is_lora:
                                 p.requires_grad = True
+            # also unfreeze input_adapter and mask decoders
+            for n, c in self.named_children():
+                if n in ['mask_decoder_tc', 'mask_decoder_ar', 'input_adapter']:
+                    for p in c.parameters():
+                        p.requires_grad = True
+            if verbose:
+                print("Phase 1: training LoRA adapters + mask decoders")
+                
             if verbose:
                 print("Phase 2: training LoRA adapters + mask decoders + input_adapter")
 
