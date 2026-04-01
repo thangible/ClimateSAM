@@ -66,6 +66,7 @@ load_pretrained = False
 wandb = True
 save_model = False
 debugging = False
+hp_mode = True
 
 [VANILLA SAM CONFIG]
 data_type = 'ar'
