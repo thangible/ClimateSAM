@@ -10,12 +10,22 @@ class ClimateLoss:
                  theta_tc: float = 5.0, 
                  focal_weight: float = 1.0,
                  tversky_weight: float = 3.0,
-                 bce_weight: float = 1.0):
+                 bce_weight: float = 1.0,
+                 smooth_label: bool = False,
+                 ar_kernel_size: int = 9,
+                 tc_kernel_size: int = 5,
+                 ar_sigma: float = 2.0,
+                 tc_sigma: float = 1.0):
         self.device = device
         self.theta_tc = theta_tc
         self.focal_weight = focal_weight
         self.tversky_weight = tversky_weight
         self.bce_weight = bce_weight
+        self.smooth_label = smooth_label
+        self.ar_kernel_size = ar_kernel_size
+        self.tc_kernel_size = tc_kernel_size
+        self.ar_sigma = ar_sigma
+        self.tc_sigma = tc_sigma
 
     def compute_loss(
         self,
@@ -39,14 +49,16 @@ class ClimateLoss:
             Dictionary containing all computed losses
         """
         
-        # Compute individual losses
+        # Compute individual losses; pass smoothing kernel and sigma for each type
         tversky_loss_list_ar, focal_loss_list_ar, bce_loss_list_ar = self._compute_mask_losses(
             ar_masks, ar_masks_gt, 
             gamma_focal=worker_args.gamma_ar, 
             alpha_focal=worker_args.alpha_ar,
             alpha_tversky=worker_args.alpha_ar_tversky,
             beta_tversky=worker_args.beta_ar_tversky,
-            bce_weight=worker_args.bce_weight_ar
+            bce_weight=worker_args.bce_weight_ar,
+            kernel_size=self.ar_kernel_size,
+            sigma=self.ar_sigma
         )
         
         tversky_loss_list_tc, focal_loss_list_tc, bce_loss_list_tc = self._compute_mask_losses(
@@ -55,7 +67,9 @@ class ClimateLoss:
             alpha_focal=worker_args.alpha_tc,
             alpha_tversky=worker_args.alpha_tc_tversky,
             beta_tversky=worker_args.beta_tc_tversky,
-            bce_weight=worker_args.bce_weight_tc
+            bce_weight=worker_args.bce_weight_tc,
+            kernel_size=self.tc_kernel_size,
+            sigma=self.tc_sigma
         )
         
         # Aggregate losses
@@ -64,6 +78,33 @@ class ClimateLoss:
             tversky_loss_list_tc, focal_loss_list_tc, bce_loss_list_tc
         )
     
+    def _smooth_label_tensor(self, label: torch.Tensor, kernel_size: int, sigma: float) -> torch.Tensor:
+        """Apply 2D Gaussian smoothing to a label tensor.
+
+        label: expected shape (B,1,H,W) and float dtype
+        Returns tensor same shape and device
+        """
+        if (kernel_size is None) or (kernel_size <= 1) or (sigma is None) or (sigma <= 0):
+            return label
+
+        # Ensure odd kernel size
+        if kernel_size % 2 == 0:
+            kernel_size += 1
+
+        # Build Gaussian kernel
+        half = kernel_size // 2
+        coords = torch.arange(-half, half + 1, device=label.device, dtype=torch.float32)
+        x_grid, y_grid = torch.meshgrid(coords, coords, indexing='xy')
+        kernel = torch.exp(-(x_grid**2 + y_grid**2) / (2 * (sigma ** 2)))
+        kernel = kernel / kernel.sum()
+        kernel = kernel.view(1, 1, kernel_size, kernel_size)
+
+        # Convolve using groups to preserve channels
+        padding = kernel_size // 2
+        # Use F.conv2d; label has shape (B, C=1, H, W)
+        smoothed = F.conv2d(label, kernel.to(label.device), padding=padding)
+        return smoothed
+
     def _compute_mask_losses(
         self, 
         pred_masks: List[torch.Tensor], 
@@ -72,9 +113,11 @@ class ClimateLoss:
         alpha_focal: float,
         alpha_tversky: float = 0.7,
         beta_tversky: float = 0.3,
-        bce_weight: int = 10
+        bce_weight: int = 10,
+        kernel_size: Optional[int] = None,
+        sigma: Optional[float] = None
     ) -> tuple[List[torch.Tensor], List[torch.Tensor], List[torch.Tensor]]:
-        """Compute Tversky, focal, and BCE losses for a set of masks"""
+        """Compute Tversky, focal, and BCE losses for a set of masks with optional spatial smoothing of GT labels"""
         
         tversky_losses = []
         focal_losses = []
@@ -83,10 +126,61 @@ class ClimateLoss:
         for i in range(len(gt_masks)):
             if gt_masks[i] is not None:
                 pred, label = pred_masks[i], gt_masks[i]
+
+                # Ensure tensors are on same device
+                pred = pred.to(self.device)
+                label = label.to(self.device)
                 
                 # Binarize ground truth
-                label = torch.where(torch.gt(label, 0.), 1., 0.)
-                
+                label = torch.where(torch.gt(label, 0.), 1., 0.).float()
+
+                # If smoothing enabled, apply gaussian smoothing to label
+                if self.smooth_label and (kernel_size is not None) and (sigma is not None):
+                    # Make sure label has shape (B,1,H,W) for conv
+                    added_batch = False
+                    added_channel = False
+                    if label.dim() == 2:
+                        label = label.unsqueeze(0).unsqueeze(0)  # 1,1,H,W
+                        added_batch = True
+                        added_channel = True
+                    elif label.dim() == 3:
+                        # Could be (1,H,W) or (B,H,W)
+                        if label.size(0) == 1:
+                            label = label.unsqueeze(1)  # 1,1,H,W
+                            added_channel = True
+                        else:
+                            label = label.unsqueeze(1)  # B,1,H,W
+                    elif label.dim() == 4:
+                        # assume already B,1,H,W
+                        pass
+
+                    smoothed = self._smooth_label_tensor(label, kernel_size, sigma)
+
+                    # Remove added dims to match pred
+                    if added_batch and added_channel:
+                        smoothed = smoothed.squeeze(0).squeeze(0)
+                    elif added_channel and (not added_batch):
+                        smoothed = smoothed.squeeze(1)
+                    else:
+                        smoothed = smoothed
+
+                    label = smoothed
+
+                # Ensure label and pred shapes match
+                if pred.shape != label.shape:
+                    # try to expand/squeeze where appropriate
+                    try:
+                        # if pred: (1,H,W) and label: (H,W)
+                        if pred.dim() == 3 and label.dim() == 2:
+                            label = label.unsqueeze(0)
+                        elif pred.dim() == 3 and label.dim() == 4 and label.size(0) == 1:
+                            label = label.squeeze(0)
+                        elif pred.dim() == 2 and label.dim() == 3 and label.size(0) == 1:
+                            pred = pred.unsqueeze(0)
+                    except Exception:
+                        # fallback: reshape label to pred shape
+                        label = label.reshape(pred.shape)
+
                 # Tversky loss
                 tversky_loss = calculate_tversky_loss(pred, label, alpha=alpha_tversky, beta=beta_tversky)
 
@@ -179,7 +273,12 @@ def compute_climate_loss(
         theta_tc=theta_tc, 
         focal_weight=worker_args.focal_weight, 
         tversky_weight=worker_args.tversky_weight,
-        bce_weight= worker_args.bce_weight
+        bce_weight= worker_args.bce_weight,
+        smooth_label=worker_args.smooth_label,
+        ar_kernel_size=worker_args.ar_kernel_size,
+        tc_kernel_size=worker_args.tc_kernel_size,
+        ar_sigma=worker_args.ar_sigma,
+        tc_sigma=worker_args.tc_sigma
     )
     return loss_computer.compute_loss(ar_masks, tc_masks, ar_masks_gt, tc_masks_gt, worker_args)
 

@@ -206,6 +206,13 @@ def parse():
         help="Rank for LoRA finetuning. Default is 32."
     )
 
+    # Spatial label smoothing / blur parameters for ClimateLoss
+    parser.add_argument('--smooth_label', action='store_true', help='Enable spatial label smoothing')
+    parser.add_argument('--ar_kernel_size', type=int, default=9, help='Kernel size for AR blur')
+    parser.add_argument('--tc_kernel_size', type=int, default=5, help='Kernel size for TC blur')
+    parser.add_argument('--ar_sigma', type=float, default=2.0, help='Sigma for AR blur')
+    parser.add_argument('--tc_sigma', type=float, default=1.0, help='Sigma for TC blur')
+
     args = parser.parse_args()
 
     return args
