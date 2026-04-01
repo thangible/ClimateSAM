@@ -381,7 +381,7 @@ def main_worker(worker_id, worker_args):
         # Use 20% of the training set for hyperparameter tuning by default
         orig_train_len = len(train_dataset)
         # Allow override via worker_args.hp_size, otherwise use 20% (at least 1)
-        hp_size = getattr(worker_args, 'hp_size', max(1, int(orig_train_len * 0.2)))
+        hp_size = getattr(worker_args, 'hp_size', max(1, int(orig_train_len * 0.1)))
         hp_size = min(hp_size, orig_train_len)
         # Deterministic sampling for reproducibility; seed can be overridden with hp_seed
         rng = random.Random(getattr(worker_args, 'hp_seed', 3407))

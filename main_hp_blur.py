@@ -3,7 +3,7 @@ import time
 import itertools
 
 def main():
-    epoch_num = 15
+    epoch_num = 21
     log_file = "search_best_kernel_search_log_official.txt"
 
     # LOCKED OPTIMAL HYPERPARAMETERS
@@ -38,7 +38,7 @@ def main():
     print("PHASE 0: BASELINE (NO SMOOTHING)")
     print("="*40)
     
-    count += 1
+    # count = 0
     cmd_baseline = (
         f"python train_script/official/train_adaptation.py --config hp_mode --sam_type vit_b "
         f"--alpha_ar_tversky {aar_t} --beta_ar_tversky {bar_t} "
