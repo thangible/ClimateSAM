@@ -284,7 +284,7 @@ class ClimateSAM(nn.Module):
             ar_postprocess_masks_hq = self.assemble_raw_masks(ar_postprocess_masks_hq)
         
         # Clear unnecessary variables early
-        del imgs  # Delete after use
+        # del imgs  # Delete after use
         torch.cuda.empty_cache()
         
         # Process embeddings in chunks if needed
