@@ -13,7 +13,7 @@ def main():
     base_lrs = [1e-3, 5e-4, 1e-4]
     
     # Factor relative to base_lr (e.g., 1e-3 * 1.0 = 1e-3)
-    adapter_factors = [1.0, 0.1, 0.01] 
+    adapter_factors = [1e-3, 1e-4, 1e-5] 
     
     # Factor relative to base_lr (e.g., 1e-3 * 0.01 = 1e-5)
     encoder_factors = [1e-1, 1e-2, 1e-3, 1e-4]
@@ -42,8 +42,8 @@ def main():
         cmd = (
             f"python train_script/official/train_adaptation.py --config input_config_official_test --sam_type vit_b --image_encoder_mlp_ratio 1 --wandb "
             f"--lr {lr} "
-            f"--adapter_lr {actual_adapter_lr} "
-            f"--encoder_lr {actual_encoder_lr} "
+            f"--adapter_decay {actual_adapter_lr} "
+            f"--encoder_decay {actual_encoder_lr} "
             f"--max_epoch_num {epoch_num} --run_name {run_name} --hp_mode "
             f"--smooth_label"
         )
