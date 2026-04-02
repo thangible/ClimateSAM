@@ -127,12 +127,12 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
             epoch_loss_dict[key] += value.item() / gradient_accumulation_steps
 
         backward_context = nullcontext
-        if torch.distributed.is_initialized():
-            # Only sync gradients on the last accumulation step
-            if (train_step + 1) % gradient_accumulation_steps != 0:
-                backward_context = model.no_sync
-            else:
-                backward_context = nullcontext
+        # if torch.distributed.is_initialized():
+        #     # Only sync gradients on the last accumulation step
+        #     if (train_step + 1) % gradient_accumulation_steps != 0:
+        #         backward_context = model.no_sync
+        #     else:
+        #         backward_context = nullcontext
 
         with backward_context():
             scaler.scale(total_loss).backward()
@@ -150,6 +150,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         if (train_step + 1) % gradient_accumulation_steps == 0:
             scaler.step(optimizer)
             scaler.update()
+            scheduler.step()  # Step scheduler after optimizer step
             optimizer.zero_grad()
             
             # Calculate effective step for logging
@@ -157,15 +158,15 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
             epoch_loss_count += 1
             
             # Distributed reduction of losses for current step
-            if torch.distributed.is_initialized():
-                step_loss_dict = {}
-                for key in loss_dict.keys():
-                    step_loss_dict[key] = epoch_loss_dict[key] / epoch_loss_count
-                    tensor_loss = torch.tensor(step_loss_dict[key], device=device)
-                    torch.distributed.reduce(tensor_loss, dst=0, op=torch.distributed.ReduceOp.SUM)
-                    step_loss_dict[key] = (tensor_loss / torch.distributed.get_world_size()).item()
-            else:
-                step_loss_dict = {key: epoch_loss_dict[key] / epoch_loss_count for key in epoch_loss_dict.keys()}
+            # if torch.distributed.is_initialized():
+            #     step_loss_dict = {}
+            #     for key in loss_dict.keys():
+            #         step_loss_dict[key] = epoch_loss_dict[key] / epoch_loss_count
+            #         tensor_loss = torch.tensor(step_loss_dict[key], device=device)
+            #         torch.distributed.reduce(tensor_loss, dst=0, op=torch.distributed.ReduceOp.SUM)
+            #         step_loss_dict[key] = (tensor_loss / torch.distributed.get_world_size()).item()
+            # else:
+            step_loss_dict = {key: epoch_loss_dict[key] / epoch_loss_count for key in epoch_loss_dict.keys()}
             
                 
             step_count += 1
@@ -174,6 +175,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
     if len(train_dataloader) % gradient_accumulation_steps != 0:
         scaler.step(optimizer)
         scaler.update()
+        scheduler.step()  # Step scheduler after final optimizer step
         optimizer.zero_grad()
         step_count += 1
         epoch_loss_count += 1
@@ -185,11 +187,11 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         avg_epoch_losses = {key: epoch_loss_dict[key] / epoch_loss_count for key in epoch_loss_dict.keys()}
         
         # Final distributed reduction for epoch averages
-        if torch.distributed.is_initialized():
-            for key in avg_epoch_losses.keys():
-                tensor_loss = torch.tensor(avg_epoch_losses[key], device=device)
-                torch.distributed.reduce(tensor_loss, dst=0, op=torch.distributed.ReduceOp.SUM)
-                avg_epoch_losses[key] = (tensor_loss / torch.distributed.get_world_size()).item()
+        # if torch.distributed.is_initialized():
+        #     for key in avg_epoch_losses.keys():
+        #         tensor_loss = torch.tensor(avg_epoch_losses[key], device=device)
+        #         torch.distributed.reduce(tensor_loss, dst=0, op=torch.distributed.ReduceOp.SUM)
+        #         avg_epoch_losses[key] = (tensor_loss / torch.distributed.get_world_size()).item()
         
         # Log to wandb once per epoch
         if worker_args.wandb and local_rank == 0:
@@ -203,8 +205,6 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         batch_pbar.close()
     # if step_pbar:
     #     step_pbar.close()
-            
-    scheduler.step()
 
 @torch.no_grad()
 def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args):
@@ -395,8 +395,8 @@ def main_worker(worker_id, worker_args):
         print(f"Warning: gradient_accumulation_steps ({gradient_accumulation_steps}) is larger than train_bs ({train_bs}). Setting actual batch size to 1.")
     
     effective_batch_size = actual_train_bs * gradient_accumulation_steps
-    if torch.distributed.is_initialized():
-        effective_batch_size *= torch.distributed.get_world_size()
+    # if torch.distributed.is_initialized():
+    #     effective_batch_size *= torch.distributed.get_world_size()
     
     print(f"Effective batch size: {effective_batch_size} (actual_bs: {actual_train_bs}, accumulation: {gradient_accumulation_steps})")
     
@@ -406,9 +406,9 @@ def main_worker(worker_id, worker_args):
         train_workers, val_workers = worker_args.num_workers, worker_args.num_workers
         
     sampler = None
-    if torch.distributed.is_initialized():
-        sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
-        actual_train_bs = int(actual_train_bs / torch.distributed.get_world_size())
+    # if torch.distributed.is_initialized():
+    #     sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
+    #     actual_train_bs = int(actual_train_bs / torch.distributed.get_world_size())
         
     train_dataloader = DataLoader(
         dataset=train_dataset, batch_size=actual_train_bs, shuffle=sampler is None, num_workers=train_workers,
@@ -426,15 +426,15 @@ def main_worker(worker_id, worker_args):
         mlp_ratio=worker_args.image_encoder_mlp_ratio,
         enable_wandb_logging=getattr(worker_args, 'debugging', False)  # Only log if debugging=True
     ).to(device=device)
-    if torch.distributed.is_initialized():
-        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-        try:
-            model = torch.nn.parallel.DistributedDataParallel(
-                model, device_ids=[local_rank], output_device=local_rank, find_unused_parameters=False
-            )
-        except Exception as e:
-            print(f"Error initializing DistributedDataParallel: {e}")
-            model = model.to(device=device)
+    # if torch.distributed.is_initialized():
+    #     model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+    #     try:
+    #         model = torch.nn.parallel.DistributedDataParallel(
+    #             model, device_ids=[local_rank], output_device=local_rank, find_unused_parameters=False
+    #         )
+    #     except Exception as e:
+    #         print(f"Error initializing DistributedDataParallel: {e}")
+    #         model = model.to(device=device)
     
     # Load pretrained weights
     # if worker_args.load_pretrained:
