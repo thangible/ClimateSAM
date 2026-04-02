@@ -66,8 +66,8 @@ image_encoder_mlp_ratio = 0.75
 
 [DEBUGGING]
 load_pretrained = False
-wandb = True
-save_model = True
+wandb = False
+save_model = False
 debugging = False
 
 [VANILLA SAM CONFIG]
