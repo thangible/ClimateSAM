@@ -40,7 +40,7 @@ def main():
         # Construct the command
         # Note: Ensure your train_adaptation.py is updated to accept --adapter_lr and --encoder_lr
         cmd = (
-            f"python train_script/official/train_adaptation.py --config input_config_official_test --sam_type vit_b --image_encoder_mlp_ratio 1 --wandb"
+            f"python train_script/official/train_adaptation.py --config input_config_official_test --sam_type vit_b --image_encoder_mlp_ratio 1 --wandb "
             f"--lr {lr} "
             f"--adapter_lr {actual_adapter_lr} "
             f"--encoder_lr {actual_encoder_lr} "
