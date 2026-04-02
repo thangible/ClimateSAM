@@ -3,8 +3,8 @@ exp_dir = ./exp
 ; data_dir = '/home/aiworker2/thang/climateNet'
 data_dir = '../data/climatenet'
 pretrained_name = 'best_model.pth'
-project_name = climate-sam-offical
-run_name = Phase_1
+project_name = climate-sam-hp
+run_name = test_lr_llrd
 
 [BATCH CONFIG]
 num_workers = 4
