@@ -13,6 +13,9 @@ train_bs = 32
 val_bs = 4
 ; weight_decay = 1e-4
 lr = 1e-3
+use_llrd = True
+adapter_decay = 0.01
+encoder_decay = 1
 
 [PHASE]
 phase = 2
