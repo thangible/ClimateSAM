@@ -71,7 +71,7 @@ debugging = False
 data_type = 'ar'
 
 [SMOOTH LABEL CONFIG]
-smooth_label = False
+smooth_label = True
 ar_kernel_size = 51
 tc_kernel_size = 21
 ar_sigma = 2
