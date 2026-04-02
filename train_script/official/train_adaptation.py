@@ -57,7 +57,7 @@ def setup_device_and_distributed(worker_id, worker_args):
     return device, local_rank
 
     
-def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler):
+def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num):
     model.train(mode = True, phase = worker_args.phase, verbose = False)
     
     # Get gradient accumulation steps
@@ -134,7 +134,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         #         backward_context = nullcontext
 
         with backward_context():
-            scaler.scale(total_loss).backward()
+            total_loss.backward()
         
         # Update batch progress bar
         if batch_pbar:
@@ -145,10 +145,9 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
                 'loss': f"{total_loss.item():.4f}"
             })
         
-        # Only update optimizer every gradient_accumulation_steps
+        # Only step optimizer every gradient_accumulation_steps
         if (train_step + 1) % gradient_accumulation_steps == 0:
-            scaler.step(optimizer)
-            scaler.update()
+            optimizer.step()
             optimizer.zero_grad()
             
             # Calculate effective step for logging
@@ -171,8 +170,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
 
     # Handle any remaining gradients if the last batch doesn't complete a full accumulation
     if len(train_dataloader) % gradient_accumulation_steps != 0:
-        scaler.step(optimizer)
-        scaler.update()
+        optimizer.step()
         optimizer.zero_grad()
         step_count += 1
         epoch_loss_count += 1
@@ -458,7 +456,6 @@ def main_worker(worker_id, worker_args):
     ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     
-    scaler = torch.amp.GradScaler('cuda') 
     print(f"Validation will be performed every {worker_args.valid_per_epochs} epochs.")
     model.train(mode = True, phase = worker_args.phase, verbose=True)
     for epoch in range(1, max_epoch_num + 1):
@@ -487,7 +484,7 @@ def main_worker(worker_id, worker_args):
                         wandb.save(save_path)
                         print(f"Image encoder saved to wandb: {save_path}")
                 
-        train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler)
+        train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num)
         
 if __name__ == '__main__':
     print("Starting training process...")
