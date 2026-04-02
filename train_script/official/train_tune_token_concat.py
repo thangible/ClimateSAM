@@ -85,34 +85,33 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
     for train_step, batch in enumerate(train_dataloader):
         batch = batch_to_cuda(batch, device)
         
-        with torch.amp.autocast('cuda'):
-            image_embeddings, interm_features, image_input, ori_img_size = model.encode_images(batch['input'])
-            tc_mask, ar_mask, _ = model.forward(
-                image_input=image_input,
-                image_embeddings=image_embeddings,
-                interm_embeddings=interm_features,
-                ori_img_size=ori_img_size,
-                ar_point_prompts=batch['ar_point_prompts'],
-                tc_point_prompts=batch['tc_point_prompts'],
-                ar_bbox_prompts=batch['ar_bbox_prompts'],
-                tc_bbox_prompts=batch['tc_bbox_prompts'],
-                ar_mask_prompts=batch['ar_mask_prompts'],
-                tc_mask_prompts=batch['tc_mask_prompts']
-            )
-            
-            # prompt_debug(batch, 'Train Step {train_step}')
-            masks_ar_gt = batch['ar_object_masks']
-            masks_tc_gt = batch['tc_object_masks']
-            
-            # Compute loss using the new loss function
-            loss_dict = compute_climate_loss(
-                ar_masks=ar_mask,
-                tc_masks=tc_mask,
-                ar_masks_gt=masks_ar_gt,
-                tc_masks_gt=masks_tc_gt,
-                device=device,
-                worker_args=worker_args
-            )
+        image_embeddings, interm_features, image_input, ori_img_size = model.encode_images(batch['input'])
+        tc_mask, ar_mask, _ = model.forward(
+            image_input=image_input,
+            image_embeddings=image_embeddings,
+            interm_embeddings=interm_features,
+            ori_img_size=ori_img_size,
+            ar_point_prompts=batch['ar_point_prompts'],
+            tc_point_prompts=batch['tc_point_prompts'],
+            ar_bbox_prompts=batch['ar_bbox_prompts'],
+            tc_bbox_prompts=batch['tc_bbox_prompts'],
+            ar_mask_prompts=batch['ar_mask_prompts'],
+            tc_mask_prompts=batch['tc_mask_prompts']
+        )
+        
+        # prompt_debug(batch, 'Train Step {train_step}')
+        masks_ar_gt = batch['ar_object_masks']
+        masks_tc_gt = batch['tc_object_masks']
+        
+        # Compute loss using the new loss function
+        loss_dict = compute_climate_loss(
+            ar_masks=ar_mask,
+            tc_masks=tc_mask,
+            ar_masks_gt=masks_ar_gt,
+            tc_masks_gt=masks_tc_gt,
+            device=device,
+            worker_args=worker_args
+        )
         
         total_loss = loss_dict.pop('total_loss_for_backward')
         
