@@ -51,6 +51,19 @@ def parse():
         '--weight_decay', default=1e-4, type=float,
         help="Weight decay for the optimizer. Default is 1e-4."
     )
+    # Layer-wise learning rate decay (LLRD) / adapter controls
+    parser.add_argument(
+        '--use_llrd', action='store_true',
+        help="Enable layer-wise learning rate decay (separate lr for input adapter and image encoder). Default is False."
+    )
+    parser.add_argument(
+        '--adapter_decay', default=0.01, type=float,
+        help="Relative multiplier for the input-adapter learning rate when --use_llrd is enabled. lr_adapter = lr * adapter_decay. Default 0.01."
+    )
+    parser.add_argument(
+        '--encoder_decay', default=1, type=float,
+        help="Relative multiplier for the image-encoder learning rate when --use_llrd is enabled. lr_encoder = lr * encoder_decay. Default 1."
+    )
     parser.add_argument(
         '--save_model', action='store_true',
         help="Flag to save the best model. Default is False."

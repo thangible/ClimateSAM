@@ -18,7 +18,7 @@ import torch.multiprocessing as mp
 import torch.nn.functional as F
 from functools import partial
 from torch.utils.data import DataLoader
-from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug
+from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug, setup_optimizer_and_scheduler
 from loss_function import ClimateLoss, compute_climate_loss
 from tqdm import tqdm
 from contextlib import nullcontext
@@ -41,28 +41,7 @@ def worker_init_fn(worker_id: int, base_seed: int, same_worker_seed: bool = True
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
-    
-def setup_optimizer_and_scheduler(model, worker_args):
-    """
-    Sets up a joint optimizer and scheduler for CAT-SAM and U-Net models.
-    """
-    # Learning rate and weight decay with defaults
-    lr = worker_args.lr if hasattr(worker_args, 'lr') else 1e-3
-    weight_decay = worker_args.weight_decay if hasattr(worker_args, 'weight_decay') else 1e-4
 
-    # Combine parameters from both models
-    all_trainable_params = list(p for p in model.parameters() if p.requires_grad) 
-
-    optimizer = torch.optim.AdamW(
-        params=all_trainable_params, lr=lr, weight_decay=weight_decay
-    )
-
-    
-    # Cosine Annealing Learning Rate Scheduler
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer=optimizer, T_max=worker_args.max_epoch_num, eta_min=1e-5
-    )
-    return optimizer, scheduler
 
 def setup_device_and_distributed(worker_id, worker_args):
     gpu_num = len(worker_args.used_gpu)

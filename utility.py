@@ -904,29 +904,82 @@ def worker_init_fn(worker_id: int, base_seed: int, same_worker_seed: bool = True
     torch.cuda.manual_seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
 
-def setup_optimizer_and_scheduler(model, prompter, worker_args):
+def get_llrd_parameter_groups(model, base_lr, adapter_decay=0.01, encoder_decay=1):
     """
-    Sets up optimizer and scheduler for the prompt generator.
-    """
-    lr = getattr(worker_args, 'lr', 1e-4)
-    weight_decay = getattr(worker_args, 'weight_decay', 1e-4)
+    Groups parameters with different learning rates to stabilize the input bottleneck.
 
-    if model is None:
-        all_trainable_params = list(p for p in prompter.parameters() if p.requires_grad)
-    elif prompter is None:
-        all_trainable_params = list(p for p in model.parameters() if p.requires_grad)
+    Returns list of param groups:
+      - adapter: lr = base_lr * adapter_decay
+      - encoder: lr = base_lr * encoder_decay
+      - rest:    lr = base_lr
+    """
+    # Unwrap DistributedDataParallel wrappers
+    if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+        wrapped = model.module
     else:
-        all_trainable_params = list(p for p in model.parameters() if p.requires_grad) + list(p for p in prompter.parameters() if p.requires_grad)
-    
+        wrapped = model
 
-    optimizer = torch.optim.AdamW(
-        params=all_trainable_params, lr=lr, weight_decay=weight_decay
-    )
+    adapter_params = []
+    encoder_params = []
+    rest_params = []
 
+    for name, param in wrapped.named_parameters():
+        if not param.requires_grad:
+            continue
+        # match the common naming used in the project
+        if "input_adapter" in name:
+            adapter_params.append(param)
+        elif "image_encoder" in name:
+            encoder_params.append(param)
+        else:
+            rest_params.append(param)
+
+    groups = []
+    if adapter_params:
+        groups.append({"params": adapter_params, "lr": base_lr * adapter_decay, "name": "adapter"})
+    if encoder_params:
+        groups.append({"params": encoder_params, "lr": base_lr * encoder_decay, "name": "encoder"})
+    if rest_params:
+        groups.append({"params": rest_params, "lr": base_lr, "name": "rest"})
+
+    return groups
+
+
+def setup_optimizer_and_scheduler(model, worker_args):
+    """
+    Sets up a joint optimizer and scheduler for CAT-SAM and U-Net models.
+
+    If worker_args.use_llrd is True, use get_llrd_parameter_groups to create
+    parameter groups with layer-wise lr decay for adapter and encoder.
+    """
+    # Learning rate and weight decay with defaults
+    lr = worker_args.lr if hasattr(worker_args, 'lr') else 1e-3
+    weight_decay = worker_args.weight_decay if hasattr(worker_args, 'weight_decay') else 1e-4
+
+    use_llrd = getattr(worker_args, 'use_llrd', False)
+
+    if use_llrd:
+        adapter_decay = getattr(worker_args, 'adapter_decay', 0.01)
+        encoder_decay = getattr(worker_args, 'encoder_decay', 0.1)
+        param_groups = get_llrd_parameter_groups(model, lr, adapter_decay=adapter_decay, encoder_decay=encoder_decay)
+        # Fall back to all trainable params if grouping produced nothing
+        if not param_groups:
+            all_trainable_params = [p for p in model.parameters() if p.requires_grad]
+            optimizer = torch.optim.AdamW(params=all_trainable_params, lr=lr, weight_decay=weight_decay)
+        else:
+            optimizer = torch.optim.AdamW(params=param_groups, lr=lr, weight_decay=weight_decay)
+    else:
+        # Combine parameters from both models (default single-group)
+        all_trainable_params = [p for p in model.parameters() if p.requires_grad]
+        optimizer = torch.optim.AdamW(params=all_trainable_params, lr=lr, weight_decay=weight_decay)
+
+    # Cosine Annealing Learning Rate Scheduler
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer=optimizer, T_max=worker_args.max_epoch_num, eta_min=1e-5
     )
     return optimizer, scheduler
+
+
 
 def setup_device():
     """
