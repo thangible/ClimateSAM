@@ -974,8 +974,9 @@ def setup_optimizer_and_scheduler(model, worker_args):
         optimizer = torch.optim.AdamW(params=all_trainable_params, lr=lr, weight_decay=weight_decay)
 
     # Cosine Annealing Learning Rate Scheduler
+    # Set last_epoch=0 to avoid warning about stepping before optimizer.step()
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer=optimizer, T_max=worker_args.max_epoch_num, eta_min=1e-5
+        optimizer=optimizer, T_max=worker_args.max_epoch_num, eta_min=1e-5, last_epoch=-1
     )
     return optimizer, scheduler
 

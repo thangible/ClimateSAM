@@ -150,7 +150,6 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         if (train_step + 1) % gradient_accumulation_steps == 0:
             scaler.step(optimizer)
             scaler.update()
-            scheduler.step()  # Step scheduler after optimizer step
             optimizer.zero_grad()
             
             # Calculate effective step for logging
@@ -175,7 +174,6 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
     if len(train_dataloader) % gradient_accumulation_steps != 0:
         scaler.step(optimizer)
         scaler.update()
-        scheduler.step()  # Step scheduler after final optimizer step
         optimizer.zero_grad()
         step_count += 1
         epoch_loss_count += 1
@@ -205,6 +203,9 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         batch_pbar.close()
     # if step_pbar:
     #     step_pbar.close()
+    
+    # Step scheduler once per epoch after all optimizer steps have been completed
+    scheduler.step()
 
 @torch.no_grad()
 def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args):
