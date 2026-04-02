@@ -496,16 +496,15 @@ def main_worker(worker_id, worker_args):
                 best_miou_total = (miou_tc + miou_ar) / 2
                 print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
                 if worker_args.save_model and epoch > 4:
-                    if worker_args.phase == 1:
-                        save_path = os.path.join(worker_args.exp_dir, f"phase_1_weights_official_{worker_args.sam_type}_{worker_args.run_name}.pth")
-                        phase_1_weights = {
-                            'image_encoder': model.image_encoder.state_dict(),
-                            'mask_decoder': model.mask_decoder.state_dict(),
-                        }
-                        torch.save(phase_1_weights, save_path)
-                        print(f"Image encoder saved to {save_path}")
-                        wandb.save(save_path)
-                        print(f"Image encoder saved to wandb: {save_path}")
+                    save_path = os.path.join(worker_args.exp_dir, f"phase_1_weights_official_{worker_args.sam_type}_{worker_args.run_name}.pth")
+                    phase_1_weights = {
+                        'image_encoder': model.image_encoder.state_dict(),
+                        'mask_decoder': model.mask_decoder.state_dict(),
+                    }
+                    torch.save(phase_1_weights, save_path)
+                    print(f"Image encoder saved to {save_path}")
+                    wandb.save(save_path)
+                    print(f"Image encoder saved to wandb: {save_path}")
                
         train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler)
         

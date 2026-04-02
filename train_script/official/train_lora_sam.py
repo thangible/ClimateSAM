@@ -410,21 +410,20 @@ def main_worker(worker_id, worker_args):
                 best_miou_total = (miou_tc + miou_ar) / 2
                 print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
                 if getattr(worker_args, 'save_model', False) and epoch > 4:
-                    if getattr(worker_args, 'phase', None) == 1:
-                        os.makedirs(worker_args.exp_dir, exist_ok=True)
-                        base = model.module if hasattr(model, 'module') else model
-                        save_path = os.path.join(worker_args.exp_dir, f"LORA_phase_1_weights_official_{worker_args.sam_type}.pth")
-                        phase_1_weights = {
-                            'image_encoder': base.image_encoder.state_dict(),
-                            'input_adapter': base.input_adapter.state_dict(),
-                            'mask_decoder_tc': base.mask_decoder_tc.state_dict(),
-                            'mask_decoder_ar': base.mask_decoder_ar.state_dict(),
-                        }
-                        torch.save(phase_1_weights, save_path)
-                        print(f"LoRA checkpoint saved to {save_path}")
-                        if getattr(worker_args, 'wandb', False):
-                            wandb.save(save_path)
-                            print(f"LoRA checkpoint saved to wandb: {save_path}")
+                    os.makedirs(worker_args.exp_dir, exist_ok=True)
+                    base = model.module if hasattr(model, 'module') else model
+                    save_path = os.path.join(worker_args.exp_dir, f"LORA_phase_1_weights_official_{worker_args.sam_type}.pth")
+                    phase_1_weights = {
+                        'image_encoder': base.image_encoder.state_dict(),
+                        'input_adapter': base.input_adapter.state_dict(),
+                        'mask_decoder_tc': base.mask_decoder_tc.state_dict(),
+                        'mask_decoder_ar': base.mask_decoder_ar.state_dict(),
+                    }
+                    torch.save(phase_1_weights, save_path)
+                    print(f"LoRA checkpoint saved to {save_path}")
+                    if getattr(worker_args, 'wandb', False):
+                        wandb.save(save_path)
+                        print(f"LoRA checkpoint saved to wandb: {save_path}")
 
         train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler)
 
