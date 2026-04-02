@@ -465,28 +465,29 @@ def main_worker(worker_id, worker_args):
     for epoch in range(1, max_epoch_num + 1):
         
         if epoch % worker_args.valid_per_epochs == 1 or epoch == max_epoch_num:
-            miou_tc, miou_ar = validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args)
-            print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}")
-            if miou_tc > best_miou_tc:
-                best_miou_tc = miou_tc
-                print(f'Best mIoU TC has been updated to {best_miou_tc:.2%}!')
-            if miou_ar > best_miou_ar:
-                best_miou_ar = miou_ar
-                print(f'Best mIoU AR has been updated to {best_miou_ar:.2%}!')
-            if (miou_tc + miou_ar) / 2 > best_miou_total:
-                best_miou_total = (miou_tc + miou_ar) / 2
-                print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
-                if worker_args.save_model and epoch > 4:
-                    save_path = os.path.join(worker_args.exp_dir, f"phase_1_weights_official_{worker_args.sam_type}_{worker_args.run_name}.pth")
-                    phase_1_weights = {
-                        'image_encoder': model.image_encoder.state_dict(),
-                        'mask_decoder': model.mask_decoder.state_dict(),
-                    }
-                    torch.save(phase_1_weights, save_path)
-                    print(f"Image encoder saved to {save_path}")
-                    wandb.save(save_path)
-                    print(f"Image encoder saved to wandb: {save_path}")
-               
+            if worker_args.load_pretrained or epoch > 1:  # Skip validation for the first epoch if loading pretrained weights, otherwise we won't see any improvement
+                miou_tc, miou_ar = validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args)
+                print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}")
+                if miou_tc > best_miou_tc:
+                    best_miou_tc = miou_tc
+                    print(f'Best mIoU TC has been updated to {best_miou_tc:.2%}!')
+                if miou_ar > best_miou_ar:
+                    best_miou_ar = miou_ar
+                    print(f'Best mIoU AR has been updated to {best_miou_ar:.2%}!')
+                if (miou_tc + miou_ar) / 2 > best_miou_total:
+                    best_miou_total = (miou_tc + miou_ar) / 2
+                    print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
+                    if worker_args.save_model and epoch > 4:
+                        save_path = os.path.join(worker_args.exp_dir, f"phase_1_weights_official_{worker_args.sam_type}_{worker_args.run_name}.pth")
+                        phase_1_weights = {
+                            'image_encoder': model.image_encoder.state_dict(),
+                            'mask_decoder': model.mask_decoder.state_dict(),
+                        }
+                        torch.save(phase_1_weights, save_path)
+                        print(f"Image encoder saved to {save_path}")
+                        wandb.save(save_path)
+                        print(f"Image encoder saved to wandb: {save_path}")
+                
         train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler)
         
 if __name__ == '__main__':
