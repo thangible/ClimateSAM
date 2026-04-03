@@ -493,6 +493,7 @@ def main_worker(worker_id, worker_args):
 if __name__ == '__main__':
     print("Starting training process...")
     args = parse()
+    set_randomness()
     
     if hasattr(args, 'wandb') and args.wandb:
         project_name = args.project_name if hasattr(args, 'project_name') else "climate-sam"

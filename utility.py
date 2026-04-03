@@ -890,7 +890,7 @@ def set_randomness():
     torch.use_deterministic_algorithms(mode=True, warn_only=False)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    torch.set_float32_matmul_precision('medium')
+    torch.set_float32_matmul_precision('highest')
 
 def worker_init_fn(worker_id: int, base_seed: int, same_worker_seed: bool = True):
     """
