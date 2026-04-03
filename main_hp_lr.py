@@ -4,7 +4,7 @@ import itertools
 
 def main():
     # Basic training parameters
-    epoch_num = 20
+    epoch_num = 26
     log_file = "search_lr_decay_log.txt"
     run_name = "LR_Decay_Search"
     
@@ -59,6 +59,8 @@ def main():
         
         # Brief cooldown for GPU memory clearance
         time.sleep(5)
+        
+        
 
 if __name__ == "__main__":
     main()

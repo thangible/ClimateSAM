@@ -4,7 +4,7 @@ import random
 
 def main():
     epoch_num = 15
-    total_samples = 40 
+    total_samples = 100
     log_file = "hparam_search_log_official.txt"
 
     # SEARCH: Tversky TC
@@ -45,14 +45,6 @@ def main():
     # PRE-POPULATED: (atc_t, aar_t, atc_f, gtc_f, aar_f, gar_f, fw)
     # This prevents re-running the 16 combinations from the previous CSV
     executed = {
-        (0.3, 0.5, 0.995, 4.0, 0.95, 3.0, 10), (0.3, 0.5, 0.995, 6.0, 0.85, 2.0, 10),
-        (0.3, 0.5, 0.990, 5.0, 0.90, 2.0, 10), (0.3, 0.5, 0.990, 5.0, 0.85, 2.0, 10),
-        (0.3, 0.5, 0.995, 6.0, 0.95, 3.0, 10), (0.3, 0.5, 0.995, 4.0, 0.90, 2.0, 10),
-        (0.3, 0.5, 0.990, 5.0, 0.80, 1.0, 10), (0.3, 0.5, 0.990, 5.0, 0.95, 3.0, 10),
-        (0.3, 0.5, 0.995, 4.0, 0.80, 1.0, 10), (0.3, 0.5, 0.995, 6.0, 0.80, 1.0, 10),
-        (0.3, 0.5, 0.995, 6.0, 0.90, 2.0, 10), (0.3, 0.5, 0.995, 4.0, 0.85, 2.0, 10),
-        (0.3, 0.5, 0.950, 5.0, 0.95, 3.0, 10), (0.3, 0.5, 0.950, 5.0, 0.90, 2.0, 10),
-        (0.3, 0.5, 0.950, 5.0, 0.85, 2.0, 10), (0.3, 0.5, 0.950, 5.0, 0.80, 1.0, 10)
     }
 
     count = 0
@@ -79,7 +71,7 @@ def main():
             f"--alpha_ar {aar_f} --gamma_ar {gar_f} "
             f"--alpha_tc {atc_f} --gamma_tc {gtc_f} "
             f"--focal_weight {fw} --tversky_weight {tw} --bce_weight {bcew} "
-            f"--max_epoch_num {epoch_num} --run_name hparam_v3_{count}"
+            f"--max_epoch_num {epoch_num} --run_name hparam_v4_{count}"
         )
 
         is_bad = "STRESS_TEST" if (atc_t == 0.05 or gtc_f == 8.0 or gar_f == 5.0 or fw == 50) else "VALID_SEARCH"

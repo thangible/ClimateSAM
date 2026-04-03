@@ -3,7 +3,7 @@ import time
 import itertools
 
 def main():
-    epoch_num = 21
+    epoch_num = 26
     log_file = "search_best_kernel_search_log_official.txt"
 
     # LOCKED OPTIMAL HYPERPARAMETERS
@@ -128,6 +128,9 @@ def main():
 
         os.system(cmd)
         time.sleep(5)
+    
+    
 
 if __name__ == "__main__":
     main()
+    os.system("python main_hp_lr.py")
