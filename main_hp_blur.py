@@ -46,7 +46,7 @@ def main():
         f"--alpha_ar {aar_f} --gamma_ar {gar_f} "
         f"--alpha_tc {atc_f} --gamma_tc {gtc_f} "
         f"--focal_weight {fw} --tversky_weight {tw} --bce_weight {bcew} "
-        f"--max_epoch_num {epoch_num} --run_name hparam_smooth_BASELINE_0"
+        f"--max_epoch_num {epoch_num} --run_name 2_hparam_smooth_BASELINE_0"
     )
 
     print(f"\n--- Iteration {count}/{total_samples} [PHASE 0 | BASELINE] ---")
@@ -80,7 +80,7 @@ def main():
             f"--smooth_label "
             f"--tc_kernel_size {tc_k} --ar_kernel_size {ar_k} "
             f"--tc_sigma {tc_s} --ar_sigma {ar_s} "
-            f"--max_epoch_num {epoch_num} --run_name hparam_smooth_TC_{count}"
+            f"--max_epoch_num {epoch_num} --run_name 2_hparam_smooth_TC_{count}"
         )
 
         is_aggressive = "AGGRESSIVE_TC" if (tc_k >= 11 or tc_s >= 5.0) else "STANDARD"

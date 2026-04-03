@@ -23,7 +23,7 @@ def main():
     
     # Filter: Ensure Adapter LR > Encoder LR
     valid_combinations = [
-        (lr, af, ef) for lr, af, ef in all_combinations if af > ef
+        (lr, af, ef) for lr, af, ef in all_combinations if af < ef
     ]
 
     total_samples = len(valid_combinations)
@@ -32,24 +32,24 @@ def main():
 
     for count, (lr, af, ef) in enumerate(valid_combinations):
         # Calculate actual LRs for the name
-        actual_adapter_lr = lr * af
-        actual_encoder_lr = lr * ef
+        # actual_adapter_lr = lr * af
+        # actual_encoder_lr = lr * ef
         
-        run_name = f"LR_{lr}_Adap_{actual_adapter_lr}_Enc_{actual_encoder_lr}"
+        run_name = f"LR_{lr}_Adap_{af}_Enc_{ef}"
         
         # Construct the command
         # Note: Ensure your train_adaptation.py is updated to accept --adapter_lr and --encoder_lr
         cmd = (
-            f"python train_script/official/train_adaptation.py --config input_config_official_test --sam_type vit_b --image_encoder_mlp_ratio 1 --wandb "
+            f"python train_script/official/train_adaptation.py --config hp_mode --sam_type vit_b --image_encoder_mlp_ratio 1 --wandb "
             f"--lr {lr} "
-            f"--adapter_decay {actual_adapter_lr} "
-            f"--encoder_decay {actual_encoder_lr} "
+            f"--adapter_decay {af} "
+            f"--encoder_decay {ef} "
             f"--max_epoch_num {epoch_num} --run_name {run_name} --hp_mode "
             f"--smooth_label"
         )
 
         print(f"\n--- Iteration {count+1}/{total_samples} ---")
-        print(f"Base LR: {lr} | Adapter LR: {actual_adapter_lr} | Encoder LR: {actual_encoder_lr}")
+        print(f"Base LR: {lr} | Adapter LR: {af} | Encoder LR: {ef}")
         
         with open(log_file, "a") as f:
             f.write(f"Iter {count+1}: {cmd}\n")
