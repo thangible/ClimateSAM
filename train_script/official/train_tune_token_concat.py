@@ -203,8 +203,6 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
     # if step_pbar:
     #     step_pbar.close()
     
-    # Update scaler exactly once per epoch
-    scaler.update()
     scheduler.step()
 
 @torch.no_grad()
