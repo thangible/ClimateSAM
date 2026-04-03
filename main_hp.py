@@ -44,8 +44,7 @@ def main():
 
     # PRE-POPULATED: (atc_t, aar_t, atc_f, gtc_f, aar_f, gar_f, fw)
     # This prevents re-running the 16 combinations from the previous CSV
-    executed = {
-    }
+    executed = set()
 
     count = 0
     while count < total_samples:
