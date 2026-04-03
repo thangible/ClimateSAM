@@ -430,17 +430,30 @@ def main_worker(worker_id, worker_args):
             print(f"Error initializing DistributedDataParallel: {e}")
             model = model.to(device=device)
     
-    # Load pretrained weights
+# Load pretrained weights
     if worker_args.load_pretrained:
-        if worker_args.phase == 1:
-            image_encoder_path = os.path.join(worker_args.exp_dir,'best_weights', f"best_concat_phase_1.pth")
+        image_encoder_path = os.path.join(worker_args.exp_dir, f"concat_token_{worker_args.sam_type}_{worker_args.image_encoder_mlp_ratio}_{worker_args.run_name}.pth")
+        if not os.path.exists(image_encoder_path):
+            print(f"Pretrained weights not found at {image_encoder_path}. Please check the path and try again.")
+        else:
             phase_1_checkpoint = torch.load(image_encoder_path, map_location=device)
             print(f"Pretrained weights from phase 1 loaded from {image_encoder_path}")
-            model.image_encoder.load_state_dict(phase_1_checkpoint['image_encoder'])
-            print(f"Image encoder weights loaded from {image_encoder_path}")
-            model.mask_decoder.load_state_dict(phase_1_checkpoint['mask_decoder'])
-            print(f"Mask decoder weights loaded from {image_encoder_path}")
-    
+            if 'image_encoder' not in phase_1_checkpoint:
+                print(f"Image encoder weights not found in checkpoint.")
+            else:
+                model.image_encoder.load_state_dict(phase_1_checkpoint['image_encoder'])
+                print(f"Image encoder weights loaded from {image_encoder_path}")
+            if 'mask_decoder' not in phase_1_checkpoint:
+                print(f"Mask decoder weights not found in checkpoint.")
+            else:
+                model.mask_decoder.load_state_dict(phase_1_checkpoint['mask_decoder'])
+                print(f"Mask decoder weights loaded from {image_encoder_path}")
+            if 'input_adapter' not in phase_1_checkpoint:
+                print(f"Input adapter weights not found in checkpoint.")
+            else:
+                model.input_adapter.load_state_dict(phase_1_checkpoint['input_adapter'])
+                print(f"Input adapter weights loaded from {image_encoder_path}")
+        
             
     # Optimizer and scheduler
     optimizer, scheduler = setup_optimizer_and_scheduler(model, worker_args)
@@ -472,7 +485,7 @@ def main_worker(worker_id, worker_args):
                     print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
                     
                     if worker_args.save_model and epoch > 4:
-                        save_path = os.path.join(worker_args.exp_dir, f"phase_1_weights_official_{worker_args.sam_type}_{worker_args.run_name}.pth")
+                        save_path = os.path.join(worker_args.exp_dir, f"concat_token_{worker_args.sam_type}_{worker_args.image_encoder_mlp_ratio}_{worker_args.run_name}.pth")
                         phase_1_weights = {
                             'image_encoder': model.image_encoder.state_dict(),
                             'mask_decoder': model.mask_decoder.state_dict(),
