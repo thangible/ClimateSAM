@@ -347,14 +347,14 @@ class ClimateSAM(nn.Module):
             # bilinear will produce non-deterministic gradients during training. For exact reproduction, please
             # change the mode from bilinear to nearest
             output_masks = F.interpolate(
-                output_masks, ori_img_size, mode="bilinear", align_corners=False,
+                output_masks, ori_img_size, mode="nearest"
             )
         return output_masks
 
     def interpolate_input(self, input: torch.Tensor):
         # Check if input size matches self.sam_img_size
         if input.shape[-2:] != self.sam_img_size:
-            input = F.interpolate(input, size=self.sam_img_size, mode='bilinear', align_corners=False)
+            input = F.interpolate(input, size=self.sam_img_size, mode='nearest')
             
         # print(f"Input shape after preprocessing: {input.shape}")
         

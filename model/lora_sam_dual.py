@@ -508,12 +508,12 @@ class LoRAClimateSAMVanilla(nn.Module):
         if output_mask_size != ori_img_size:
             if len(output_masks.shape) == 3:
                 output_masks = output_masks.unsqueeze(1)
-            output_masks = F.interpolate(output_masks, ori_img_size, mode='bilinear', align_corners=False)
+            output_masks = F.interpolate(output_masks, ori_img_size, mode='nearest')
         return output_masks
 
     def interpolate_input(self, input: torch.Tensor):
         if input.shape[-2:] != self.sam_img_size:
-            input = F.interpolate(input, size=self.sam_img_size, mode='bilinear', align_corners=False)
+            input = F.interpolate(input, size=self.sam_img_size, mode='nearest' )
         return input
 
     def preprocess_images(self, input: torch.Tensor):
