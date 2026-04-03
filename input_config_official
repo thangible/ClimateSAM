@@ -31,7 +31,7 @@ sam_type = vit_b
 fuse_channels = 128
 
 [PROMPTS]
-prompt_enlarge_ratio = 0.2
+prompt_enlarge_ratio = 0.1
 
 [TRAINING LOOP]
 ; shot_num = 1
