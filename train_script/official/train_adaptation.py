@@ -361,7 +361,7 @@ def main_worker(worker_id, worker_args):
         # Use 20% of the training set for hyperparameter tuning by default
         orig_train_len = len(train_dataset)
         # Allow override via worker_args.hp_size, otherwise use 20% (at least 1)
-        hp_size = getattr(worker_args, 'hp_size', max(1, int(orig_train_len * 0.2)))
+        hp_size = getattr(worker_args, 'hp_size', max(1, int(orig_train_len * 0.1)))
         hp_size = min(hp_size, orig_train_len)
         # Deterministic sampling for reproducibility; seed can be overridden with hp_seed
         rng = random.Random(getattr(worker_args, 'hp_seed', 3407))
@@ -370,7 +370,7 @@ def main_worker(worker_id, worker_args):
         print(f"Hyperparameter mode enabled: using {hp_size}/{orig_train_len} training samples (~{hp_size / orig_train_len * 100:.2f}%).")
         
         orig_val_len = len(val_dataset)
-        hp_val_size = getattr(worker_args, 'hp_val_size', max(1, int(orig_val_len * 0.2)))
+        hp_val_size = getattr(worker_args, 'hp_val_size', max(1, int(orig_val_len * 0.1)))
         hp_val_size = min(hp_val_size, orig_val_len)
         rng_val = random.Random(getattr(worker_args, 'hp_seed', 3407))
         val_indices = rng_val.sample(range(orig_val_len), k=hp_val_size)
