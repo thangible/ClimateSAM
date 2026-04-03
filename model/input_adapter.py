@@ -50,7 +50,9 @@ class LinearClimateInputAdapter(ClimateInputAdapter):
             first_conv.weight[2, 2, 0, 0] = 1.0
 
     def forward(self, x):
-        return self.input_adapt(x)
+        x = self.input_adapt(x) * 255.0
+        x = torch.clamp(x, 0.0, 255.0)
+        return x
 
 
 class NonlinearClimateInputAdapter(ClimateInputAdapter):
