@@ -486,6 +486,7 @@ def main_worker(worker_id, worker_args):
                         phase_1_weights = {
                             'image_encoder': model.image_encoder.state_dict(),
                             'mask_decoder': model.mask_decoder.state_dict(),
+                            'input_adapter': model.input_adapter.state_dict(),
                         }
                         torch.save(phase_1_weights, save_path)
                         print(f"Image encoder saved to {save_path}")

@@ -24,15 +24,10 @@ class ClimateInputAdapter(nn.Module):
             nn.init.constant_(first_conv.bias, 0.0)
             
             # Priority Injection
-            for out_ch in range(first_conv.weight.shape[0]):
-                # Set TMQ (Index 0) to a higher priority
-                first_conv.weight[out_ch, 0, 0, 0] = 1.0 
-                
-                # Set U850 and V850 (Indices 1 and 2) to 1.0
-                first_conv.weight[out_ch, 1, 0, 0] = 1.0
-                first_conv.weight[out_ch, 2, 0, 0] = 1.0
-                # Optional: Set PSL (Index 7) to 1.0 to help with TC centers
-                # first_conv.weight[out_ch, 7, 0, 0] = 0.0
+            first_conv.weight[0, 0, 0, 0] = 1.0
+            # Set U850 and V850 (Indices 1 and 2) to 1.0
+            first_conv.weight[1, 1, 0, 0] = 1.0
+            first_conv.weight[2, 2, 0, 0] = 1.0
 
     def forward(self, x):
         # 1. Non-linear point-wise transformation
