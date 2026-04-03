@@ -161,6 +161,7 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
         # Only update optimizer every gradient_accumulation_steps
         if (train_step + 1) % gradient_accumulation_steps == 0:
             scaler.step(optimizer)
+            scaler.update()
             optimizer.zero_grad()
             
             step_count += 1
@@ -170,6 +171,7 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
 
     if len(train_dataloader) % gradient_accumulation_steps != 0:
         scaler.step(optimizer)
+        scaler.update()
         optimizer.zero_grad()
         step_count += 1
         epoch_loss_count += 1
@@ -195,9 +197,9 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
     if local_rank == 0 and batch_pbar:
         batch_pbar.close()
     
-    # Update scaler exactly once per epoch
-    scaler.update()
-    scheduler.step()
+    # # Update scaler exactly once per epoch
+    # scaler.update()
+    # scheduler.step()
             
     # Close progress bar
     if batch_pbar:

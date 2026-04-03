@@ -188,11 +188,13 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
 
         if (train_step + 1) % gradient_accumulation_steps == 0:
             scaler.step(optimizer)
+            scaler.update()
             optimizer.zero_grad()
             epoch_loss_count += 1
 
     if len(train_dataloader) % gradient_accumulation_steps != 0:
         scaler.step(optimizer)
+        scaler.update()
         optimizer.zero_grad()
         epoch_loss_count += 1
 
@@ -213,7 +215,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         batch_pbar.close()
     
     # Update scaler exactly once per epoch
-    scaler.update()
+    # scaler.update()
     scheduler.step()
 
 
