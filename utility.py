@@ -887,7 +887,7 @@ def set_randomness():
     # please refer to https://docs.nvidia.com/cuda/cublas/index.html#cublasApi_reproducibility
     if V(torch.version.cuda) >= V("10.2"):
         os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
-    torch.use_deterministic_algorithms(mode=True, warn_only=True)
+    torch.use_deterministic_algorithms(mode=True, warn_only=False)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     torch.set_float32_matmul_precision('medium')
