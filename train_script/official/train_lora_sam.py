@@ -171,13 +171,11 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
 
         if (train_step + 1) % gradient_accumulation_steps == 0:
             scaler.step(optimizer)
-            scaler.update()
             optimizer.zero_grad()
             epoch_loss_count += 1
 
     if len(train_dataloader) % gradient_accumulation_steps != 0:
         scaler.step(optimizer)
-        scaler.update()
         optimizer.zero_grad()
         epoch_loss_count += 1
 
@@ -196,6 +194,9 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
 
     if batch_pbar:
         batch_pbar.close()
+    
+    # Update scaler exactly once per epoch
+    scaler.update()
     scheduler.step()
 
 
@@ -351,8 +352,11 @@ def main_worker(worker_id, worker_args):
         sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
         actual_train_bs = int(actual_train_bs / torch.distributed.get_world_size())
 
-    train_dataloader = DataLoader(dataset=train_dataset, batch_size=actual_train_bs, shuffle=sampler is None, num_workers=train_workers, sampler=sampler, drop_last=False, collate_fn=train_collate_fn, worker_init_fn=partial(worker_init_fn, base_seed=3407))
-    val_dataloader = DataLoader(dataset=val_dataset, batch_size=val_bs, shuffle=False, num_workers=val_workers, drop_last=False, collate_fn=val_collate_fn, worker_init_fn=partial(worker_init_fn, base_seed=3407))
+    g = torch.Generator()
+    g.manual_seed(3407)
+
+    train_dataloader = DataLoader(dataset=train_dataset, batch_size=actual_train_bs, shuffle=sampler is None, num_workers=train_workers, sampler=sampler, drop_last=False, collate_fn=train_collate_fn, worker_init_fn=partial(worker_init_fn, base_seed=3407), generator=g)
+    val_dataloader = DataLoader(dataset=val_dataset, batch_size=val_bs, shuffle=False, num_workers=val_workers, drop_last=False, collate_fn=val_collate_fn, worker_init_fn=partial(worker_init_fn, base_seed=3407), generator=g)
 
     # SET UP MODEL
     base_model = ClimateSAM(model_type=worker_args.sam_type, mlp_ratio=worker_args.image_encoder_mlp_ratio, enable_wandb_logging=getattr(worker_args, 'debugging', False))
@@ -389,33 +393,34 @@ def main_worker(worker_id, worker_args):
 
     for epoch in range(1, max_epoch_num + 1):
         if epoch % worker_args.valid_per_epochs == 1 or epoch == max_epoch_num:
-            miou_tc, miou_ar = validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args)
-            print(f"Epoch {epoch} - mIoU TC: {miou_tc:.4f}, mIoU AR: {miou_ar:.4f}")
-            print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}")
-            if miou_tc > best_miou_tc:
-                best_miou_tc = miou_tc
-                print(f'Best mIoU TC has been updated to {best_miou_tc:.2%}!')
-            if miou_ar > best_miou_ar:
-                best_miou_ar = miou_ar
-                print(f'Best mIoU AR has been updated to {best_miou_ar:.2%}!')
-            if (miou_tc + miou_ar) / 2 > best_miou_total:
-                best_miou_total = (miou_tc + miou_ar) / 2
-                print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
-                if getattr(worker_args, 'save_model', False) and epoch > 4:
-                    os.makedirs(worker_args.exp_dir, exist_ok=True)
-                    base = model.module if hasattr(model, 'module') else model
-                    save_path = os.path.join(worker_args.exp_dir, f"LORA_phase_1_weights_official_{worker_args.sam_type}.pth")
-                    phase_1_weights = {
-                        'image_encoder': base.image_encoder.state_dict(),
-                        'input_adapter': base.input_adapter.state_dict(),
-                        'mask_decoder_tc': base.mask_decoder_tc.state_dict(),
-                        'mask_decoder_ar': base.mask_decoder_ar.state_dict(),
-                    }
-                    torch.save(phase_1_weights, save_path)
-                    print(f"LoRA checkpoint saved to {save_path}")
-                    if getattr(worker_args, 'wandb', False):
-                        wandb.save(save_path)
-                        print(f"LoRA checkpoint saved to wandb: {save_path}")
+            if worker_args.load_pretrained or epoch > 1: 
+                miou_tc, miou_ar = validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args)
+                print(f"Epoch {epoch} - mIoU TC: {miou_tc:.4f}, mIoU AR: {miou_ar:.4f}")
+                print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}")
+                if miou_tc > best_miou_tc:
+                    best_miou_tc = miou_tc
+                    print(f'Best mIoU TC has been updated to {best_miou_tc:.2%}!')
+                if miou_ar > best_miou_ar:
+                    best_miou_ar = miou_ar
+                    print(f'Best mIoU AR has been updated to {best_miou_ar:.2%}!')
+                if (miou_tc + miou_ar) / 2 > best_miou_total:
+                    best_miou_total = (miou_tc + miou_ar) / 2
+                    print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
+                    if getattr(worker_args, 'save_model', False) and epoch > 4:
+                        os.makedirs(worker_args.exp_dir, exist_ok=True)
+                        base = model.module if hasattr(model, 'module') else model
+                        save_path = os.path.join(worker_args.exp_dir, f"LORA_phase_1_weights_official_{worker_args.sam_type}.pth")
+                        phase_1_weights = {
+                            'image_encoder': base.image_encoder.state_dict(),
+                            'input_adapter': base.input_adapter.state_dict(),
+                            'mask_decoder_tc': base.mask_decoder_tc.state_dict(),
+                            'mask_decoder_ar': base.mask_decoder_ar.state_dict(),
+                        }
+                        torch.save(phase_1_weights, save_path)
+                        print(f"LoRA checkpoint saved to {save_path}")
+                        if getattr(worker_args, 'wandb', False):
+                            wandb.save(save_path)
+                            print(f"LoRA checkpoint saved to wandb: {save_path}")
 
         train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler)
 
@@ -423,6 +428,7 @@ def main_worker(worker_id, worker_args):
 if __name__ == '__main__':
     print("Starting LoRA training process...")
     args = parse()
+    set_randomness()
     if hasattr(args, 'wandb') and args.wandb:
         wandb.init(project=args.project_name if hasattr(args, 'project_name') else 'climate-sam', name=getattr(args, 'run_name', None), config=vars(args))
 

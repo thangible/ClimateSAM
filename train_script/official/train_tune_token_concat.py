@@ -148,7 +148,6 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         # Only update optimizer every gradient_accumulation_steps
         if (train_step + 1) % gradient_accumulation_steps == 0:
             scaler.step(optimizer)
-            scaler.update()
             optimizer.zero_grad()
             
             # Calculate effective step for logging
@@ -172,7 +171,6 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
     # Handle any remaining gradients if the last batch doesn't complete a full accumulation
     if len(train_dataloader) % gradient_accumulation_steps != 0:
         scaler.step(optimizer)
-        scaler.update()
         optimizer.zero_grad()
         step_count += 1
         epoch_loss_count += 1
@@ -202,7 +200,9 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         batch_pbar.close()
     # if step_pbar:
     #     step_pbar.close()
-            
+    
+    # Update scaler exactly once per epoch
+    scaler.update()
     scheduler.step()
 
 @torch.no_grad()
@@ -401,14 +401,17 @@ def main_worker(worker_id, worker_args):
         sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
         actual_train_bs = int(actual_train_bs / torch.distributed.get_world_size())
         
+    g = torch.Generator()
+    g.manual_seed(3407)
+        
     train_dataloader = DataLoader(
         dataset=train_dataset, batch_size=actual_train_bs, shuffle=sampler is None, num_workers=train_workers,
         sampler=sampler, drop_last=False, collate_fn=train_collate_fn,
-        worker_init_fn=partial(worker_init_fn, base_seed=3407)
+        worker_init_fn=partial(worker_init_fn, base_seed=3407), generator=g
     )
     val_dataloader = DataLoader(
         dataset=val_dataset, batch_size=val_bs, shuffle=False, num_workers=val_workers,
-        drop_last=False, collate_fn=val_collate_fn, worker_init_fn=partial(worker_init_fn, base_seed=3407)
+        drop_last=False, collate_fn=val_collate_fn, worker_init_fn=partial(worker_init_fn, base_seed=3407), generator=g
     )
     
     # SET UP MODEL - enable W&B logging only if debugging is True
@@ -455,34 +458,36 @@ def main_worker(worker_id, worker_args):
     for epoch in range(1, max_epoch_num + 1):
         
         if epoch % worker_args.valid_per_epochs == 1 or epoch == max_epoch_num:
-            miou_tc, miou_ar = validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args)
-            print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}")
-            if miou_tc > best_miou_tc:
-                best_miou_tc = miou_tc
-                print(f'Best mIoU TC has been updated to {best_miou_tc:.2%}!')
-            if miou_ar > best_miou_ar:
-                best_miou_ar = miou_ar
-                print(f'Best mIoU AR has been updated to {best_miou_ar:.2%}!')
-            if (miou_tc + miou_ar) / 2 > best_miou_total:
-                best_miou_total = (miou_tc + miou_ar) / 2
-                print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
-                
-                if worker_args.save_model and epoch > 4:
-                    save_path = os.path.join(worker_args.exp_dir, f"phase_1_weights_official_{worker_args.sam_type}_{worker_args.run_name}.pth")
-                    phase_1_weights = {
-                        'image_encoder': model.image_encoder.state_dict(),
-                        'mask_decoder': model.mask_decoder.state_dict(),
-                    }
-                    torch.save(phase_1_weights, save_path)
-                    print(f"Image encoder saved to {save_path}")
-                    wandb.save(save_path)
-                    print(f"Image encoder saved to wandb: {save_path}")
+            if worker_args.load_pretrained or epoch > 1: 
+                miou_tc, miou_ar = validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args)
+                print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}")
+                if miou_tc > best_miou_tc:
+                    best_miou_tc = miou_tc
+                    print(f'Best mIoU TC has been updated to {best_miou_tc:.2%}!')
+                if miou_ar > best_miou_ar:
+                    best_miou_ar = miou_ar
+                    print(f'Best mIoU AR has been updated to {best_miou_ar:.2%}!')
+                if (miou_tc + miou_ar) / 2 > best_miou_total:
+                    best_miou_total = (miou_tc + miou_ar) / 2
+                    print(f'Best mIoU Total has been updated to {best_miou_total:.2%}!')
+                    
+                    if worker_args.save_model and epoch > 4:
+                        save_path = os.path.join(worker_args.exp_dir, f"phase_1_weights_official_{worker_args.sam_type}_{worker_args.run_name}.pth")
+                        phase_1_weights = {
+                            'image_encoder': model.image_encoder.state_dict(),
+                            'mask_decoder': model.mask_decoder.state_dict(),
+                        }
+                        torch.save(phase_1_weights, save_path)
+                        print(f"Image encoder saved to {save_path}")
+                        wandb.save(save_path)
+                        print(f"Image encoder saved to wandb: {save_path}")
                
         train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler)
         
 if __name__ == '__main__':
     print("Starting training process...")
     args = parse()
+    set_randomness()
     
     if hasattr(args, 'wandb') and args.wandb:
         project_name = args.project_name if hasattr(args, 'project_name') else "climate-sam"

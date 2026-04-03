@@ -138,15 +138,20 @@ def main_worker(worker_id, worker_args):
         
     sampler = None
         
+            
+    g = torch.Generator()
+    g.manual_seed(3407)
+        
     train_dataloader = DataLoader(
-        dataset=train_dataset, batch_size=32, shuffle=sampler is None, num_workers=train_workers,
-        sampler=sampler, drop_last=False, collate_fn=train_collate_fn, 
-        worker_init_fn=partial(worker_init_fn, base_seed=3407)
+        dataset=train_dataset, batch_size=actual_train_bs, shuffle=sampler is None, num_workers=train_workers,
+        sampler=sampler, drop_last=False, collate_fn=train_collate_fn,
+        worker_init_fn=partial(worker_init_fn, base_seed=3407), generator=g
     )
     val_dataloader = DataLoader(
         dataset=val_dataset, batch_size=val_bs, shuffle=False, num_workers=val_workers,
-        drop_last=False, collate_fn=val_collate_fn, worker_init_fn=partial(worker_init_fn, base_seed=3407)
+        drop_last=False, collate_fn=val_collate_fn, worker_init_fn=partial(worker_init_fn, base_seed=3407), generator=g
     )
+    
 
     cgnetprompter = CGNetPrompter(weights_path='pretrained/exp_cgnet_weight.pth', device=device, worker_args=worker_args)
     # cgnetprompter.train(dataloader=train_dataloader, epochs=100)
