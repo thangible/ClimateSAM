@@ -412,7 +412,7 @@ def main_worker(worker_id, worker_args):
     
        # Load pretrained weights
     if worker_args.load_pretrained:
-        image_encoder_path = os.path.join(worker_args.exp_dir, f"lora_dual_{worker_args.sam_type}_{worker_args.lora_rank}_{worker_args.run_name}.pth")
+        image_encoder_path = os.path.join(worker_args.exp_dir, f"lora_dual_{worker_args.sam_type}_{worker_args.lora_r}_{worker_args.run_name}.pth")
         if not os.path.exists(image_encoder_path):
             print(f"Pretrained weights not found at {image_encoder_path}. Please check the path and try again.")
         else:
@@ -453,7 +453,7 @@ def main_worker(worker_id, worker_args):
                     if getattr(worker_args, 'save_model', False) and epoch > 4:
                         os.makedirs(worker_args.exp_dir, exist_ok=True)
                         base = model.module if hasattr(model, 'module') else model
-                        save_path = os.path.join(worker_args.exp_dir, f"lora_dual_{worker_args.sam_type}_{worker_args.lora_rank}_{worker_args.run_name}.pth")
+                        save_path = os.path.join(worker_args.exp_dir, f"lora_dual_{worker_args.sam_type}_{worker_args.lora_r}_{worker_args.run_name}.pth")
                         phase_1_weights = {
                             'image_encoder': base.image_encoder.state_dict(),
                             'input_adapter': base.input_adapter.state_dict(),
