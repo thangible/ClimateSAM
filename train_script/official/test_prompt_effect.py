@@ -46,6 +46,35 @@ import json
 from datetime import datetime
 
 
+def get_iou_perClass(confM):
+    """
+    Takes a confusion matrix confM and returns the IoU per class
+    Handles both 2x2 (binary) and 3x3 (multiclass) confusion matrices
+    """
+    n_classes = confM.shape[0]
+    unionPerClass = confM.sum(axis=0) + confM.sum(axis=1) - confM.diagonal()
+    iouPerClass = np.zeros(n_classes)
+    for i in range(n_classes):
+        if unionPerClass[i] == 0:
+            iouPerClass[i] = 1
+        else:
+            iouPerClass[i] = confM.diagonal()[i] / unionPerClass[i]
+    return iouPerClass
+        
+def get_cm(pred, gt, n_classes=3):
+    cm = np.zeros((n_classes, n_classes))
+    for i in range(len(pred)):
+        pred_tmp = pred[i].int()
+        gt_tmp = gt[i].int()
+
+        for actual in range(n_classes):
+            for predicted in range(n_classes):
+                is_actual = torch.eq(gt_tmp, actual)
+                is_pred = torch.eq(pred_tmp, predicted)
+                cm[actual][predicted] += len(torch.nonzero(is_actual & is_pred))
+            
+    return cm
+
 def freeze_model_parameters(model, trainable_modules=None):
     """
     Freeze all parameters in the model except those in trainable_modules.
@@ -851,31 +880,3 @@ if __name__ == '__main__':
         main_worker(worker_id=0, worker_args=args)
     else:
         print("Multi-GPU testing not yet implemented. Please use single GPU.")
-
-
-def get_iou_perClass(confM):
-    """
-    Takes a confusion matrix confM and returns the IoU per class
-    """
-    unionPerClass = confM.sum(axis=0) + confM.sum(axis=1) - confM.diagonal()
-    iouPerClass = np.zeros(3)
-    for i in range(0,3):
-        if unionPerClass[i] == 0:
-            iouPerClass[i] = 1
-        else:
-            iouPerClass[i] = confM.diagonal()[i] / unionPerClass[i]
-    return iouPerClass
-        
-def get_cm(pred, gt, n_classes=3):
-    cm = np.zeros((n_classes, n_classes))
-    for i in range(len(pred)):
-        pred_tmp = pred[i].int()
-        gt_tmp = gt[i].int()
-
-        for actual in range(n_classes):
-            for predicted in range(n_classes):
-                is_actual = torch.eq(gt_tmp, actual)
-                is_pred = torch.eq(pred_tmp, predicted)
-                cm[actual][predicted] += len(torch.nonzero(is_actual & is_pred))
-            
-    return cm
