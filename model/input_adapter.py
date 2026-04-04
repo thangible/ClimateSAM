@@ -51,7 +51,7 @@ class LinearClimateInputAdapter(ClimateInputAdapter):
 
     def forward(self, x):
         x = self.input_adapt(x)
-        x = torch.clamp(x, 0.0, 255.0)
+        # x = torch.clamp(x, 0.0, 255.0)
         return x
 
 
