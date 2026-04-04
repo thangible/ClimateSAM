@@ -436,7 +436,12 @@ def main_worker(worker_id, worker_args):
     
     # Load pretrained weights (if used). Handle DDP-wrapped model by accessing .module
     if worker_args.load_pretrained:
-        image_encoder_path = os.path.join(worker_args.exp_dir, f"single_sam_{worker_args.sam_type}_{worker_args.run_name}.pth")
+        if worker_args.pretrained_name is not None:
+            image_encoder_path = os.path.join(worker_args.exp_dir, f"{worker_args.pretrained_name}.pth") 
+        else:
+            image_encoder_path = os.path.join(worker_args.exp_dir, f"single_sam_{worker_args.sam_type}_{worker_args.run_name}.pth")
+            
+            
         if not os.path.exists(image_encoder_path):
             print(f"Pretrained weights not found at {image_encoder_path}. Please check the path and try again.")
         else:
