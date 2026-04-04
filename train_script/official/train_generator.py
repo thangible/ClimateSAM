@@ -28,10 +28,10 @@ from contextlib import nullcontext
 from evaluator import StreamSegMetrics
 
 
-from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug, setup_device_and_distributed, setup_optimizer_and_scheduler, worker_init_fn
+from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug, setup_device_and_distributed, setup_optimizer_and_scheduler_for_generator, worker_init_fn
 from loss_function import ClimateLoss, compute_climate_loss, compute_generator_loss
 from parser_config import parse
-from climatesam import ClimateSAM
+from model.climatesam import ClimateSAM
 from dataset.climatenet import ClimateDataset
 from model.prompt_generator import PromptGenerator
 from model.prompt.prompt_maker import PromptMaker
@@ -665,7 +665,7 @@ def main_worker(worker_id, worker_args):
     print(f"Worker {worker_id} initialized on device {device} with local_rank {local_rank}.")
 
     climatesam, prompt_generator = set_up_model(worker_args, device)
-    optimizer, scheduler = setup_optimizer_and_scheduler(climatesam, prompt_generator, worker_args)  
+    optimizer, scheduler = setup_optimizer_and_scheduler_for_generator(prompt_generator, worker_args)  
     
     prompt_maker = PromptMaker(prompt_type='point', positive_point_num=worker_args.positive_point_num, negative_point_num=worker_args.negative_point_num)
     

@@ -111,7 +111,7 @@ import torch
 import copy
 from torch import nn
 from model.mask_decoder import MaskDecoderHQ
-from model.prompt_generator import PromptGenerator
+# from model.prompt_generator import PromptGenerator
 from model.prompt_encoder import PromptEncoderWrapper
 from model.segment_anything_ext.build_sam import sam_model_registry
 from typing import Union, List, Tuple, Optional
@@ -173,8 +173,8 @@ class ClimateSAM(nn.Module):
                 'vit_l': 6,
                 'vit_h': 9  # Assuming ViT-H has 4 features per block
             }
-            self.prompt_generator = PromptGenerator(num_features=num_features_map[model_type],
-                                                    features_per_block=feature_per_block[model_type])
+            # self.prompt_generator = PromptGenerator(num_features=num_features_map[model_type],
+            #                                         features_per_block=feature_per_block[model_type])
         self.prompt_encoder = PromptEncoderWrapper(ori_sam=self.ori_sam, fix=True)
         
         # #set weights for input adaptation:
@@ -429,12 +429,12 @@ class ClimateSAM(nn.Module):
         print(f"Image embeddings saved to {save_path}")
 
 
-    def enable_prompt_generator(self):
-        if not hasattr(self, 'prompt_generator'):
-            self.prompt_generator = PromptGenerator(
-                in_channels=self.image_encoder.sam_img_encoder.num_features
-            )
-        self.use_prompt_generator = True
+    # def enable_prompt_generator(self):
+    #     if not hasattr(self, 'prompt_generator'):
+    #         self.prompt_generator = PromptGenerator(
+    #             in_channels=self.image_encoder.sam_img_encoder.num_features
+    #         )
+    #     self.use_prompt_generator = True
 
     def disable_prompt_generator(self):
         if hasattr(self, 'prompt_generator'):

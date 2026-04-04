@@ -8,7 +8,7 @@ import torch.nn.functional as F
 
 from model.segment_anything_ext.build_sam import sam_model_registry
 from model.prompt_encoder import PromptEncoderWrapper
-from model.prompt_generator import PromptGenerator
+# from model.prompt_generator import PromptGenerator
 from model.input_adapter import ClimateInputAdapter, LinearClimateInputAdapter
 
 sam_ckpt_path_dict = dict(
@@ -185,11 +185,11 @@ class LoRAClimateSAMVanilla(nn.Module):
         self.mask_decoder_ar = copy.deepcopy(self.ori_sam.mask_decoder)
 
         # optionally use PromptGenerator
-        if self.use_prompt_generator:
-            num_features_map = {'vit_b': 12, 'vit_l': 24, 'vit_h': 32}
-            features_per_block = {'vit_b': 3, 'vit_l': 6, 'vit_h': 9}
-            self.prompt_generator = PromptGenerator(num_features=num_features_map[model_type],
-                                                    features_per_block=features_per_block[model_type])
+        # if self.use_prompt_generator:
+        #     num_features_map = {'vit_b': 12, 'vit_l': 24, 'vit_h': 32}
+        #     features_per_block = {'vit_b': 3, 'vit_l': 6, 'vit_h': 9}
+        #     self.prompt_generator = PromptGenerator(num_features=num_features_map[model_type],
+        #                                             features_per_block=features_per_block[model_type])
 
         # prompt encoder wrapper from original SAM
         self.prompt_encoder = PromptEncoderWrapper(ori_sam=self.ori_sam, fix=True)

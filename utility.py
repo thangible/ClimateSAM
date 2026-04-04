@@ -979,6 +979,30 @@ def setup_optimizer_and_scheduler(model, worker_args):
     )
     return optimizer, scheduler
 
+def setup_optimizer_and_scheduler_for_generator(model, prompter, worker_args):
+    """
+    Sets up optimizer and scheduler for the prompt generator.
+    """
+    lr = getattr(worker_args, 'lr', 1e-4)
+    weight_decay = getattr(worker_args, 'weight_decay', 1e-4)
+
+    if model is None:
+        all_trainable_params = list(p for p in prompter.parameters() if p.requires_grad)
+    elif prompter is None:
+        all_trainable_params = list(p for p in model.parameters() if p.requires_grad)
+    else:
+        all_trainable_params = list(p for p in model.parameters() if p.requires_grad) + list(p for p in prompter.parameters() if p.requires_grad)
+    
+
+    optimizer = torch.optim.AdamW(
+        params=all_trainable_params, lr=lr, weight_decay=weight_decay
+    )
+
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer=optimizer, T_max=worker_args.max_epoch_num, eta_min=1e-5
+    )
+    return optimizer, scheduler
+
 
 
 def setup_device():
