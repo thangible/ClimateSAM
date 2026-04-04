@@ -3,6 +3,7 @@ exp_dir = ./exp
 ; data_dir = '/home/aiworker2/thang/climateNet'
 data_dir = '../data/climatenet'
 ; pretrained_name = 'best_model.pth'
+; encoder_weights_name
 project_name = climate-sam-optimal
 run_name = official
 
@@ -77,6 +78,6 @@ tc_sigma = 1
 
 [DEBUGGING]
 load_pretrained = False
-wandb = True
+wandb = False
 save_model = True
 debugging = False

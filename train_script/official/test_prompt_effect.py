@@ -8,6 +8,18 @@ Prompt configurations:
 3. Mask prompts: direct mask-based prompting
 """
 
+import sys
+import os 
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+TRAIN_SCRIPT_DIR = os.path.dirname(CURRENT_DIR)
+PROJECT_ROOT = os.path.dirname(TRAIN_SCRIPT_DIR)
+
+for p in (PROJECT_ROOT, TRAIN_SCRIPT_DIR):
+    if p not in sys.path:
+        sys.path.insert(0, p)
+        
+
 import random
 import numpy as np
 import torch
@@ -22,7 +34,7 @@ from loss_function import ClimateLoss, compute_climate_loss
 from tqdm import tqdm
 from contextlib import nullcontext
 from parser_config import parse
-from climatesam import ClimateSAM
+from model.climatesam import ClimateSAM
 from dataset.climatenet import ClimateDataset
 from evaluator import StreamSegMetrics
 import copy
@@ -100,7 +112,6 @@ def validate_with_prompt_config(
         prompt_type=prompt_type, 
         positive_point_num=positive_point_num, 
         negative_point_num=negative_point_num, 
-        enlarge_ratio=enlarge_ratio, 
         centroid_ratio=centroid_ratio
     )
     
@@ -115,7 +126,7 @@ def validate_with_prompt_config(
             
             # Generate prompts using CGNet
             features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
-            aux_mask = prompter(features)
+            aux_mask = prompter.get_aux_mask(features)
             
             prompt_dict = prompt_maker.make_prompts(
                 multiclass_mask=aux_mask,
