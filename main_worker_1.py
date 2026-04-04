@@ -21,25 +21,23 @@ def main():
     
     
     # INFUSED TEST MLP RATIO VIT B
-    os.system("python train_script/official/train_adaptation.py --config input_config_official  --sam_type vit_b --image_encoder_mlp_ratio 1 --run_name infused_token_vit_b_mlp1_CORRECTED --smooth_label")
+    os.system("python train_script/official/train_adaptation.py --config input_config_official  --sam_type vit_b --image_encoder_mlp_ratio 1 --run_name infused_token_vit_b_mlp1_nonlinear --smooth_label")
     time.sleep(15)
     
-    os.system("python train_script/official/train_adaptation.py --config input_config_official --sam_type vit_b --image_encoder_mlp_ratio 1 --run_name infused_token_vit_b_mlp1_CORRECTED_NOSMOOTH")
-    time.sleep(15)
     # os.system("python train_script/official/train_adaptation.py --config input_config_official --sam_type vit_b --image_encoder_mlp_ratio 0.75 --run_name infused_token_vit_b_mlp075")
     # time.sleep(15)
-    os.system("python train_script/official/train_adaptation.py --config input_config_official --sam_type vit_b --image_encoder_mlp_ratio 0.5 --run_name infused_token_vit_b_mlp05_CORRECTED --smooth_label")
+    os.system("python train_script/official/train_adaptation.py --config input_config_official --sam_type vit_b --image_encoder_mlp_ratio 0.5 --run_name infused_token_vit_b_mlp05_nonlinear --smooth_label")
     time.sleep(15)
     
         
     # SINGLE SAM VIT B
-    os.system("python train_script/official/train_sam_single.py --config input_config_official --sam_type vit_b --image_encoder_mlp_ratio 01 --run_name single_sam_vit_b_CORRECTED --smooth_label")
+    os.system("python train_script/official/train_sam_single.py --config input_config_official --sam_type vit_b --image_encoder_mlp_ratio 01 --run_name single_sam_vit_b_nonlinear --smooth_label")
 
     
     # LORA SINGLE VIT B
-    os.system("python train_script/official/train_lora_sam.py --config input_config_official --sam_type vit_b --lora_r 64 --run_name lora_single_vit_b_r64_CORRECTED --gradient_accumulation_steps 16 --smooth_label")
+    os.system("python train_script/official/train_lora_sam.py --config input_config_official --sam_type vit_b --lora_r 64 --run_name lora_single_vit_b_r64_nonlinear --gradient_accumulation_steps 16 --smooth_label")
     time.sleep(15)
-    os.system("python train_script/official/train_lora_sam.py --config input_config_official --sam_type vit_b --lora_r 32 --run_name lora_single_vit_b_r32_CORRECTED --gradient_accumulation_steps 16 --smooth_label")
+    os.system("python train_script/official/train_lora_sam.py --config input_config_official --sam_type vit_b --lora_r 32 --run_name lora_single_vit_b_r32_nonlinear --gradient_accumulation_steps 16 --smooth_label")
     time.sleep(15)
     
     # # LORA DUAL VIT L
