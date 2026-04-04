@@ -75,6 +75,106 @@ def freeze_model_parameters(model, trainable_modules=None):
     return frozen_count, trainable_count
 
 
+def validate_cgnet_baseline(val_dataloader, prompter, device, worker_args):
+    """
+    Validate CGNet auxiliary mask against ground truth as baseline.
+    
+    Args:
+        val_dataloader: Validation dataloader
+        prompter: CGNetPrompter instance
+        device: Device to use
+        worker_args: Worker arguments for W&B logging
+    
+    Returns:
+        Dictionary with baseline metrics
+    """
+    print("\n" + "="*60)
+    print("CGNET BASELINE VALIDATION")
+    print("="*60)
+    
+    cgnet_ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+    cgnet_tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+    
+    with torch.no_grad():
+        for baseline_step, batch in enumerate(val_dataloader):
+            batch = batch_to_cuda(batch, device)
+            
+            features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
+            aux_mask = prompter(features)
+            
+            # Extract ground truth masks
+            masks_gt = batch['gt_mask']
+            masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt]
+            masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt]
+            
+            # Convert aux_mask to AR and TC masks
+            aux_ar_masks = [(aux_mask == 2).to(torch.uint8) for _ in range(len(aux_mask))]
+            aux_tc_masks = [(aux_mask == 1).to(torch.uint8) for _ in range(len(aux_mask))]
+            
+            # Ensure correct shape for metrics
+            for masks in [masks_ar_gts, masks_tc_gts, aux_ar_masks, aux_tc_masks]:
+                for i in range(len(masks)):
+                    if len(masks[i].shape) == 2:
+                        masks[i] = masks[i][None, None, :]
+                    if len(masks[i].shape) == 3:
+                        masks[i] = masks[i][:, None, :]
+                    if len(masks[i].shape) != 4:
+                        raise RuntimeError(f"Unexpected mask shape: {masks[i].shape}")
+            
+            # Update metrics
+            cgnet_tc_metrics.update(aux_tc_masks, masks_tc_gts, batch['index_name'])
+            cgnet_ar_metrics.update(aux_ar_masks, masks_ar_gts, batch['index_name'])
+    
+    # Compute CGNet baseline metrics
+    cgnet_ar_dict, _ = cgnet_ar_metrics.compute()
+    cgnet_tc_dict, _ = cgnet_tc_metrics.compute()
+    
+    cgnet_miou_ar = cgnet_ar_dict['Mean Foreground IoU']
+    cgnet_miou_tc = cgnet_tc_dict['Mean Foreground IoU']
+    cgnet_mean_acc_ar = cgnet_ar_dict['Mean Acc']
+    cgnet_mean_acc_tc = cgnet_tc_dict['Mean Acc']
+    cgnet_overall_acc_ar = cgnet_ar_dict['Overall Acc']
+    cgnet_overall_acc_tc = cgnet_tc_dict['Overall Acc']
+    
+    baseline_results = {
+        'prompt_type': 'cgnet_baseline',
+        'positive_point_num': 0,
+        'negative_point_num': 0,
+        'enlarge_ratio': 0,
+        'centroid_ratio': 0,
+        'miou_ar': cgnet_miou_ar,
+        'miou_tc': cgnet_miou_tc,
+        'mean_acc_ar': cgnet_mean_acc_ar,
+        'mean_acc_tc': cgnet_mean_acc_tc,
+        'overall_acc_ar': cgnet_overall_acc_ar,
+        'overall_acc_tc': cgnet_overall_acc_tc,
+        'freqw_acc_ar': cgnet_ar_dict['FreqW Acc'],
+        'freqw_acc_tc': cgnet_tc_dict['FreqW Acc'],
+        'miou_including_bg_ar': cgnet_ar_dict['Mean IoU'],
+        'miou_including_bg_tc': cgnet_tc_dict['Mean IoU'],
+    }
+    
+    print(f"\nCGNet Baseline Results:")
+    print(f"  AR - mIoU: {cgnet_miou_ar:.4f}, Mean Acc: {cgnet_mean_acc_ar:.4f}, Overall Acc: {cgnet_overall_acc_ar:.4f}")
+    print(f"  TC - mIoU: {cgnet_miou_tc:.4f}, Mean Acc: {cgnet_mean_acc_tc:.4f}, Overall Acc: {cgnet_overall_acc_tc:.4f}")
+    print("="*60 + "\n")
+    
+    # Log baseline to W&B if enabled
+    if worker_args.wandb:
+        wandb.log({
+            'cgnet_baseline/miou_ar': cgnet_miou_ar,
+            'cgnet_baseline/miou_tc': cgnet_miou_tc,
+            'cgnet_baseline/mean_acc_ar': cgnet_mean_acc_ar,
+            'cgnet_baseline/mean_acc_tc': cgnet_mean_acc_tc,
+            'cgnet_baseline/overall_acc_ar': cgnet_overall_acc_ar,
+            'cgnet_baseline/overall_acc_tc': cgnet_overall_acc_tc,
+            'cgnet_baseline/freqw_acc_ar': cgnet_ar_dict['FreqW Acc'],
+            'cgnet_baseline/freqw_acc_tc': cgnet_tc_dict['FreqW Acc'],
+        })
+    
+    return baseline_results
+
+
 def validate_with_prompt_config(
     val_dataloader, 
     ar_metrics, 
@@ -100,72 +200,6 @@ def validate_with_prompt_config(
         Dictionary with metrics
     """
     model.eval()
-    
-    # ==================== CGNET BASELINE VALIDATION ====================
-    # First pass: Validate aux_mask against ground truth as CGNet baseline
-    if prompt_type == 'point' and positive_point_num == 10 and negative_point_num == 10:
-        print("\n" + "="*60)
-        print("CGNET BASELINE VALIDATION")
-        print("="*60)
-        cgnet_ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
-        cgnet_tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
-        
-        with torch.no_grad():
-            for baseline_step, batch in enumerate(val_dataloader):
-                batch = batch_to_cuda(batch, device)
-                
-                features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
-                aux_mask = prompter(features)
-                
-                # Extract ground truth masks
-                masks_gt = batch['gt_mask']
-                masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt]
-                masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt]
-                
-                # Convert aux_mask to AR and TC masks
-                aux_ar_masks = [(aux_mask == 2).to(torch.uint8) for _ in range(len(aux_mask))]
-                aux_tc_masks = [(aux_mask == 1).to(torch.uint8) for _ in range(len(aux_mask))]
-                
-                # Ensure correct shape for metrics
-                for masks in [masks_ar_gts, masks_tc_gts, aux_ar_masks, aux_tc_masks]:
-                    for i in range(len(masks)):
-                        if len(masks[i].shape) == 2:
-                            masks[i] = masks[i][None, None, :]
-                        if len(masks[i].shape) == 3:
-                            masks[i] = masks[i][:, None, :]
-                        if len(masks[i].shape) != 4:
-                            raise RuntimeError(f"Unexpected mask shape: {masks[i].shape}")
-                
-                # Update metrics
-                cgnet_tc_metrics.update(aux_tc_masks, masks_tc_gts, batch['index_name'])
-                cgnet_ar_metrics.update(aux_ar_masks, masks_ar_gts, batch['index_name'])
-        
-        # Compute CGNet baseline metrics
-        cgnet_ar_dict, _ = cgnet_ar_metrics.compute()
-        cgnet_tc_dict, _ = cgnet_tc_metrics.compute()
-        
-        cgnet_miou_ar = cgnet_ar_dict['Mean Foreground IoU']
-        cgnet_miou_tc = cgnet_tc_dict['Mean Foreground IoU']
-        cgnet_mean_acc_ar = cgnet_ar_dict['Mean Acc']
-        cgnet_mean_acc_tc = cgnet_tc_dict['Mean Acc']
-        cgnet_overall_acc_ar = cgnet_ar_dict['Overall Acc']
-        cgnet_overall_acc_tc = cgnet_tc_dict['Overall Acc']
-        
-        print(f"\nCGNet Baseline Results:")
-        print(f"  AR - mIoU: {cgnet_miou_ar:.4f}, Mean Acc: {cgnet_mean_acc_ar:.4f}, Overall Acc: {cgnet_overall_acc_ar:.4f}")
-        print(f"  TC - mIoU: {cgnet_miou_tc:.4f}, Mean Acc: {cgnet_mean_acc_tc:.4f}, Overall Acc: {cgnet_overall_acc_tc:.4f}")
-        print("="*60 + "\n")
-        
-        # Log baseline to W&B if enabled
-        if worker_args.wandb:
-            wandb.log({
-                'cgnet_baseline/miou_ar': cgnet_miou_ar,
-                'cgnet_baseline/miou_tc': cgnet_miou_tc,
-                'cgnet_baseline/mean_acc_ar': cgnet_mean_acc_ar,
-                'cgnet_baseline/mean_acc_tc': cgnet_mean_acc_tc,
-                'cgnet_baseline/overall_acc_ar': cgnet_overall_acc_ar,
-                'cgnet_baseline/overall_acc_tc': cgnet_overall_acc_tc,
-            })
     
     # ==================== PROMPT-BASED VALIDATION ====================
     total_samples = 0
@@ -382,6 +416,10 @@ def main_worker(worker_id, worker_args):
         worker_args=worker_args
     )
     
+    # ==================== VALIDATE CGNET BASELINE ====================
+    baseline_result = validate_cgnet_baseline(val_dataloader, prompter, device, worker_args)
+    all_results = [baseline_result]
+    
     # ==================== DEFINE PROMPT CONFIGURATIONS ====================
     print("\n" + "="*60)
     print("PROMPT TEST CONFIGURATIONS")
@@ -416,8 +454,6 @@ def main_worker(worker_id, worker_args):
     
     # Configuration 3: Mask prompt (single config)
     mask_configs = [{}]
-    
-    all_results = []
     
     # ==================== TEST POINT PROMPTS ====================
     print("\n" + "-"*60)
