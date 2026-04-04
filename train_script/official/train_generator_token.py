@@ -31,7 +31,7 @@ from evaluator import StreamSegMetrics
 from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug, setup_device_and_distributed, setup_optimizer_and_scheduler_for_generator, worker_init_fn
 from loss_function import ClimateLoss, compute_climate_loss, compute_generator_loss, calculate_generator_token_loss
 from parser_config import parse
-from climatesam import ClimateSAM
+from model.climatesam import ClimateSAM
 from dataset.climatenet import ClimateDataset
 from model.prompt_generator_token import PromptGenerator
 from model.prompt.prompt_maker import PromptMaker
@@ -575,7 +575,7 @@ def set_up_dataset(worker_args):
         print(f"Debug mode: Using only {len(val_dataset)} validation samples")
         
         max_epoch_num = 2
-        worker_args.valid_per_epochs = 1
+        worker_args.valid_per_epochs = 2
         print(f"Debug mode: Setting max_epoch_num to {max_epoch_num} and valid_per_epochs to {worker_args.valid_per_epochs}")
         
     # Adjust batch size for gradient accumulation
