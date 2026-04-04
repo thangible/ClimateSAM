@@ -92,49 +92,60 @@ def validate_cgnet_baseline(val_dataloader, prompter, device, worker_args):
     print("CGNET BASELINE VALIDATION")
     print("="*60)
     
-    cgnet_ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
-    cgnet_tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+    
+    aggregate_cm_ar = np.zeros((2, 2))  # For AR (class 2)
+    aggregate_cm_tc = np.zeros((2, 2))  # For TC (class 1)
     
     with torch.no_grad():
         for baseline_step, batch in enumerate(val_dataloader):
             batch = batch_to_cuda(batch, device)
             
             features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
-            aux_mask = prompter(features)
+            aux_mask = prompter.get_aux_mask(features)
             
             # Extract ground truth masks
             masks_gt = batch['gt_mask']
+            
+            # Extract AR (class 2) and TC (class 1) from multiclass mask
+            # Class 0: Background, Class 1: TC, Class 2: AR
             masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt]
             masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt]
             
-            # Convert aux_mask to AR and TC masks
+            # Extract predictions from aux_mask
             aux_ar_masks = [(aux_mask == 2).to(torch.uint8) for _ in range(len(aux_mask))]
             aux_tc_masks = [(aux_mask == 1).to(torch.uint8) for _ in range(len(aux_mask))]
             
-            # Ensure correct shape for metrics
-            for masks in [masks_ar_gts, masks_tc_gts, aux_ar_masks, aux_tc_masks]:
-                for i in range(len(masks)):
-                    if len(masks[i].shape) == 2:
-                        masks[i] = masks[i][None, None, :]
-                    if len(masks[i].shape) == 3:
-                        masks[i] = masks[i][:, None, :]
-                    if len(masks[i].shape) != 4:
-                        raise RuntimeError(f"Unexpected mask shape: {masks[i].shape}")
-            
-            # Update metrics
-            cgnet_tc_metrics.update(aux_tc_masks, masks_tc_gts, batch['index_name'])
-            cgnet_ar_metrics.update(aux_ar_masks, masks_ar_gts, batch['index_name'])
+            # Stack to get batch format [B, H, W]
+            for i in range(len(masks_gt)):
+                # For AR (class 2)
+                gt_ar = masks_ar_gts[i].cpu().numpy().astype(np.long)
+                pred_ar = aux_ar_masks[i].cpu().numpy().astype(np.long)
+                aggregate_cm_ar += get_cm(
+                    torch.from_numpy(pred_ar).to(device),
+                    torch.from_numpy(gt_ar).to(device),
+                    2
+                )
+                
+                # For TC (class 1)
+                gt_tc = masks_tc_gts[i].cpu().numpy().astype(np.long)
+                pred_tc = aux_tc_masks[i].cpu().numpy().astype(np.long)
+                aggregate_cm_tc += get_cm(
+                    torch.from_numpy(pred_tc).to(device),
+                    torch.from_numpy(gt_tc).to(device),
+                    2
+                )
     
-    # Compute CGNet baseline metrics
-    cgnet_ar_dict, _ = cgnet_ar_metrics.compute()
-    cgnet_tc_dict, _ = cgnet_tc_metrics.compute()
+    # Compute metrics from confusion matrices
+    ious_ar = get_iou_perClass(aggregate_cm_ar)
+    ious_tc = get_iou_perClass(aggregate_cm_tc)
     
-    cgnet_miou_ar = cgnet_ar_dict['Mean Foreground IoU']
-    cgnet_miou_tc = cgnet_tc_dict['Mean Foreground IoU']
-    cgnet_mean_acc_ar = cgnet_ar_dict['Mean Acc']
-    cgnet_mean_acc_tc = cgnet_tc_dict['Mean Acc']
-    cgnet_overall_acc_ar = cgnet_ar_dict['Overall Acc']
-    cgnet_overall_acc_tc = cgnet_tc_dict['Overall Acc']
+    # Extract foreground IoU (class 1 in binary classification)
+    cgnet_miou_ar = ious_ar[1] if len(ious_ar) > 1 else ious_ar[0]
+    cgnet_miou_tc = ious_tc[1] if len(ious_tc) > 1 else ious_tc[0]
+    
+    # Compute accuracy metrics
+    cgnet_acc_ar = np.trace(aggregate_cm_ar) / aggregate_cm_ar.sum()
+    cgnet_acc_tc = np.trace(aggregate_cm_tc) / aggregate_cm_tc.sum()
     
     baseline_results = {
         'prompt_type': 'cgnet_baseline',
@@ -142,34 +153,30 @@ def validate_cgnet_baseline(val_dataloader, prompter, device, worker_args):
         'negative_point_num': 0,
         'enlarge_ratio': 0,
         'centroid_ratio': 0,
-        'miou_ar': cgnet_miou_ar,
-        'miou_tc': cgnet_miou_tc,
-        'mean_acc_ar': cgnet_mean_acc_ar,
-        'mean_acc_tc': cgnet_mean_acc_tc,
-        'overall_acc_ar': cgnet_overall_acc_ar,
-        'overall_acc_tc': cgnet_overall_acc_tc,
-        'freqw_acc_ar': cgnet_ar_dict['FreqW Acc'],
-        'freqw_acc_tc': cgnet_tc_dict['FreqW Acc'],
-        'miou_including_bg_ar': cgnet_ar_dict['Mean IoU'],
-        'miou_including_bg_tc': cgnet_tc_dict['Mean IoU'],
+        'miou_ar': float(cgnet_miou_ar),
+        'miou_tc': float(cgnet_miou_tc),
+        'mean_acc_ar': float(cgnet_acc_ar),
+        'mean_acc_tc': float(cgnet_acc_tc),
+        'overall_acc_ar': float(cgnet_acc_ar),
+        'overall_acc_tc': float(cgnet_acc_tc),
+        'freqw_acc_ar': float(cgnet_acc_ar),
+        'freqw_acc_tc': float(cgnet_acc_tc),
+        'miou_including_bg_ar': float(ious_ar.mean()),
+        'miou_including_bg_tc': float(ious_tc.mean()),
     }
     
     print(f"\nCGNet Baseline Results:")
-    print(f"  AR - mIoU: {cgnet_miou_ar:.4f}, Mean Acc: {cgnet_mean_acc_ar:.4f}, Overall Acc: {cgnet_overall_acc_ar:.4f}")
-    print(f"  TC - mIoU: {cgnet_miou_tc:.4f}, Mean Acc: {cgnet_mean_acc_tc:.4f}, Overall Acc: {cgnet_overall_acc_tc:.4f}")
+    print(f"  AR - mIoU: {cgnet_miou_ar:.4f}, Accuracy: {cgnet_acc_ar:.4f}")
+    print(f"  TC - mIoU: {cgnet_miou_tc:.4f}, Accuracy: {cgnet_acc_tc:.4f}")
     print("="*60 + "\n")
     
     # Log baseline to W&B if enabled
-    if worker_args.wandb:
+    if hasattr(worker_args, 'wandb') and worker_args.wandb:
         wandb.log({
-            'cgnet_baseline/miou_ar': cgnet_miou_ar,
-            'cgnet_baseline/miou_tc': cgnet_miou_tc,
-            'cgnet_baseline/mean_acc_ar': cgnet_mean_acc_ar,
-            'cgnet_baseline/mean_acc_tc': cgnet_mean_acc_tc,
-            'cgnet_baseline/overall_acc_ar': cgnet_overall_acc_ar,
-            'cgnet_baseline/overall_acc_tc': cgnet_overall_acc_tc,
-            'cgnet_baseline/freqw_acc_ar': cgnet_ar_dict['FreqW Acc'],
-            'cgnet_baseline/freqw_acc_tc': cgnet_tc_dict['FreqW Acc'],
+            'cgnet_baseline/miou_ar': float(cgnet_miou_ar),
+            'cgnet_baseline/miou_tc': float(cgnet_miou_tc),
+            'cgnet_baseline/acc_ar': float(cgnet_acc_ar),
+            'cgnet_baseline/acc_tc': float(cgnet_acc_tc),
         })
     
     return baseline_results
@@ -844,3 +851,31 @@ if __name__ == '__main__':
         main_worker(worker_id=0, worker_args=args)
     else:
         print("Multi-GPU testing not yet implemented. Please use single GPU.")
+
+
+def get_iou_perClass(confM):
+    """
+    Takes a confusion matrix confM and returns the IoU per class
+    """
+    unionPerClass = confM.sum(axis=0) + confM.sum(axis=1) - confM.diagonal()
+    iouPerClass = np.zeros(3)
+    for i in range(0,3):
+        if unionPerClass[i] == 0:
+            iouPerClass[i] = 1
+        else:
+            iouPerClass[i] = confM.diagonal()[i] / unionPerClass[i]
+    return iouPerClass
+        
+def get_cm(pred, gt, n_classes=3):
+    cm = np.zeros((n_classes, n_classes))
+    for i in range(len(pred)):
+        pred_tmp = pred[i].int()
+        gt_tmp = gt[i].int()
+
+        for actual in range(n_classes):
+            for predicted in range(n_classes):
+                is_actual = torch.eq(gt_tmp, actual)
+                is_pred = torch.eq(pred_tmp, predicted)
+                cm[actual][predicted] += len(torch.nonzero(is_actual & is_pred))
+            
+    return cm
