@@ -2,7 +2,7 @@
 exp_dir = ./exp
 ; data_dir = '/home/aiworker2/thang/climateNet'
 data_dir = '../data/climatenet'
-pretrained_name = 'best_model.pth'
+; pretrained_name = 'best_model.pth'
 project_name = climate-sam-optimal
 run_name = official
 
