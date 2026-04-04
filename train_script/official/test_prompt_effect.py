@@ -322,13 +322,18 @@ def main_worker(worker_id, worker_args):
     
     # Configuration 1: Point prompts with different (pos, neg) pairs
     point_configs = [
-        {'positive_point_num': 1, 'negative_point_num': 1},
-        {'positive_point_num': 1, 'negative_point_num': 2},
-        {'positive_point_num': 2, 'negative_point_num': 2},
-        {'positive_point_num': 1, 'negative_point_num': 3},
-        {'positive_point_num': 5, 'negative_point_num': 5},
-        {'positive_point_num': 10, 'negative_point_num': 10},
-        {'positive_point_num': 5, 'negative_point_num': 10},
+        # {'positive_point_num': 1, 'negative_point_num': 1},
+        # {'positive_point_num': 1, 'negative_point_num': 2},
+        # {'positive_point_num': 2, 'negative_point_num': 2},
+        # {'positive_point_num': 1, 'negative_point_num': 3},
+        # {'positive_point_num': 5, 'negative_point_num': 5},
+        # {'positive_point_num': 10, 'negative_point_num': 10},
+        # {'positive_point_num': 5, 'negative_point_num': 10},
+        {'positive_point_num': 15, 'negative_point_num': 5},
+        {'positive_point_num': 10, 'negative_point_num': 5},
+        {'positive_point_num': 20, 'negative_point_num': 10},
+        {'positive_point_num': 20, 'negative_point_num': 5},
+        {'positive_point_num': 20, 'negative_point_num': 20},
     ]
     
     # Configuration 2: BBox prompts with different enlarge ratios
@@ -384,18 +389,118 @@ def main_worker(worker_id, worker_args):
                 'point_prompt/config': f"pos={config['positive_point_num']}_neg={config['negative_point_num']}"
             })
     
-    # ==================== TEST BBOX PROMPTS ====================
+    # # ==================== TEST BBOX PROMPTS ====================
+    # print("\n" + "-"*60)
+    # print("TESTING BBOX PROMPTS")
+    # print("-"*60)
+    
+    # for config in bbox_configs:
+    #     print(f"\nTesting BBox Prompt: enlarge_ratio={config['enlarge_ratio']}")
+        
+    #     ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+    #     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+        
+    #     results = validate_with_prompt_config(
+    #         val_dataloader=val_dataloader,
+    #         ar_metrics=ar_metrics,
+    #         tc_metrics=tc_metrics,
+    #         model=climatesam,
+    #         prompter=prompter,
+    #         device=device,
+    #         prompt_type='bbox',
+    #         positive_point_num=0,
+    #         negative_point_num=0,
+    #         enlarge_ratio=config['enlarge_ratio'],
+    #         centroid_ratio=0,
+    #         worker_args=worker_args,
+    #         max_samples=None
+    #     )
+        
+    #     all_results.append(results)
+    #     print(f"  mIoU TC: {results['miou_tc']:.4f}, mIoU AR: {results['miou_ar']:.4f}")
+        
+    #     if worker_args.wandb:
+    #         wandb.log({
+    #             'bbox_prompt/miou_tc': results['miou_tc'],
+    #             'bbox_prompt/miou_ar': results['miou_ar'],
+    #             'bbox_prompt/enlarge_ratio': config['enlarge_ratio']
+    #         })
+    
+    # # ==================== TEST MASK PROMPTS ====================
+    # print("\n" + "-"*60)
+    # print("TESTING MASK PROMPTS")
+    # print("-"*60)
+    
+    # for config in mask_configs:
+    #     print(f"\nTesting Mask Prompt")
+        
+    #     ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+    #     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+        
+    #     results = validate_with_prompt_config(
+    #         val_dataloader=val_dataloader,
+    #         ar_metrics=ar_metrics,
+    #         tc_metrics=tc_metrics,
+    #         model=climatesam,
+    #         prompter=prompter,
+    #         device=device,
+    #         prompt_type='mask',
+    #         positive_point_num=0,
+    #         negative_point_num=0,
+    #         enlarge_ratio=0,
+    #         centroid_ratio=0,
+    #         worker_args=worker_args,
+    #         max_samples=None
+    #     )
+        
+    #     all_results.append(results)
+    #     print(f"  mIoU TC: {results['miou_tc']:.4f}, mIoU AR: {results['miou_ar']:.4f}")
+        
+    #     if worker_args.wandb:
+    #         wandb.log({
+    #             'mask_prompt/miou_tc': results['miou_tc'],
+    #             'mask_prompt/miou_ar': results['miou_ar'],
+    #         })
+    
+    # ==================== TEST COMBINED POINT + BBOX PROMPTS ====================
     print("\n" + "-"*60)
-    print("TESTING BBOX PROMPTS")
+    print("TESTING COMBINED POINT + BBOX PROMPTS")
     print("-"*60)
     
-    for config in bbox_configs:
-        print(f"\nTesting BBox Prompt: enlarge_ratio={config['enlarge_ratio']}")
+    combined_point_bbox_configs = [
+        {'positive_point_num': 10, 'negative_point_num': 10, 'enlarge_ratio': 0},
+        {'positive_point_num': 15, 'negative_point_num': 10, 'enlarge_ratio': 0},
+        {'positive_point_num': 20, 'negative_point_num': 20, 'enlarge_ratio': 0},
+    ]
+    
+    for config in combined_point_bbox_configs:
+        print(f"\nTesting Combined Point+BBox: pos={config['positive_point_num']}, neg={config['negative_point_num']}, enlarge={config['enlarge_ratio']}")
         
         ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
         tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
         
-        results = validate_with_prompt_config(
+        # First pass: Point prompt
+        results_point = validate_with_prompt_config(
+            val_dataloader=val_dataloader,
+            ar_metrics=ar_metrics,
+            tc_metrics=tc_metrics,
+            model=climatesam,
+            prompter=prompter,
+            device=device,
+            prompt_type='point',
+            positive_point_num=config['positive_point_num'],
+            negative_point_num=config['negative_point_num'],
+            enlarge_ratio=0,
+            centroid_ratio=0,
+            worker_args=worker_args,
+            max_samples=None
+        )
+        
+        # Second pass: BBox prompt
+        ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+        tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+        
+        results_bbox = validate_with_prompt_config(
             val_dataloader=val_dataloader,
             ar_metrics=ar_metrics,
             tc_metrics=tc_metrics,
@@ -411,28 +516,94 @@ def main_worker(worker_id, worker_args):
             max_samples=None
         )
         
-        all_results.append(results)
-        print(f"  mIoU TC: {results['miou_tc']:.4f}, mIoU AR: {results['miou_ar']:.4f}")
+        # Combine results
+        combined_result = {
+            'prompt_type': f"point+bbox",
+            'positive_point_num': config['positive_point_num'],
+            'negative_point_num': config['negative_point_num'],
+            'enlarge_ratio': config['enlarge_ratio'],
+            'centroid_ratio': 0,
+            'miou_ar': (results_point['miou_ar'] + results_bbox['miou_ar']) / 2,
+            'miou_tc': (results_point['miou_tc'] + results_bbox['miou_tc']) / 2,
+            'mean_acc_ar': (results_point['mean_acc_ar'] + results_bbox['mean_acc_ar']) / 2,
+            'mean_acc_tc': (results_point['mean_acc_tc'] + results_bbox['mean_acc_tc']) / 2,
+            'overall_acc_ar': (results_point['overall_acc_ar'] + results_bbox['overall_acc_ar']) / 2,
+            'overall_acc_tc': (results_point['overall_acc_tc'] + results_bbox['overall_acc_tc']) / 2,
+            'freqw_acc_ar': (results_point['freqw_acc_ar'] + results_bbox['freqw_acc_ar']) / 2,
+            'freqw_acc_tc': (results_point['freqw_acc_tc'] + results_bbox['freqw_acc_tc']) / 2,
+            'miou_including_bg_ar': (results_point['miou_including_bg_ar'] + results_bbox['miou_including_bg_ar']) / 2,
+            'miou_including_bg_tc': (results_point['miou_including_bg_tc'] + results_bbox['miou_including_bg_tc']) / 2,
+        }
+        
+        all_results.append(combined_result)
+        print(f"  Avg mIoU TC: {combined_result['miou_tc']:.4f}, Avg mIoU AR: {combined_result['miou_ar']:.4f}")
+        print(f"    Point mIoU TC: {results_point['miou_tc']:.4f}, Point mIoU AR: {results_point['miou_ar']:.4f}")
+        print(f"    BBox mIoU TC: {results_bbox['miou_tc']:.4f}, BBox mIoU AR: {results_bbox['miou_ar']:.4f}")
         
         if worker_args.wandb:
             wandb.log({
-                'bbox_prompt/miou_tc': results['miou_tc'],
-                'bbox_prompt/miou_ar': results['miou_ar'],
-                'bbox_prompt/enlarge_ratio': config['enlarge_ratio']
+                'combined_point_bbox/miou_tc': combined_result['miou_tc'],
+                'combined_point_bbox/miou_ar': combined_result['miou_ar'],
+                'combined_point_bbox/config': f"pos={config['positive_point_num']}_neg={config['negative_point_num']}_enlarge={config['enlarge_ratio']}"
             })
     
-    # ==================== TEST MASK PROMPTS ====================
+    # ==================== TEST COMBINED POINT + BBOX + MASK PROMPTS ====================
     print("\n" + "-"*60)
-    print("TESTING MASK PROMPTS")
+    print("TESTING COMBINED POINT + BBOX + MASK PROMPTS")
     print("-"*60)
     
-    for config in mask_configs:
-        print(f"\nTesting Mask Prompt")
+    combined_all_configs = [
+        {'positive_point_num': 10, 'negative_point_num': 10, 'enlarge_ratio': 0},
+    ]
+    
+    for config in combined_all_configs:
+        print(f"\nTesting Combined Point+BBox+Mask: pos={config['positive_point_num']}, neg={config['negative_point_num']}, enlarge={config['enlarge_ratio']}")
         
+        # First pass: Point prompt
         ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
         tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
         
-        results = validate_with_prompt_config(
+        results_point = validate_with_prompt_config(
+            val_dataloader=val_dataloader,
+            ar_metrics=ar_metrics,
+            tc_metrics=tc_metrics,
+            model=climatesam,
+            prompter=prompter,
+            device=device,
+            prompt_type='point',
+            positive_point_num=config['positive_point_num'],
+            negative_point_num=config['negative_point_num'],
+            enlarge_ratio=0,
+            centroid_ratio=0,
+            worker_args=worker_args,
+            max_samples=None
+        )
+        
+        # Second pass: BBox prompt
+        ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+        tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+        
+        results_bbox = validate_with_prompt_config(
+            val_dataloader=val_dataloader,
+            ar_metrics=ar_metrics,
+            tc_metrics=tc_metrics,
+            model=climatesam,
+            prompter=prompter,
+            device=device,
+            prompt_type='bbox',
+            positive_point_num=0,
+            negative_point_num=0,
+            enlarge_ratio=config['enlarge_ratio'],
+            centroid_ratio=0,
+            worker_args=worker_args,
+            max_samples=None
+        )
+        
+        # Third pass: Mask prompt
+        ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+        tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+        
+        results_mask = validate_with_prompt_config(
             val_dataloader=val_dataloader,
             ar_metrics=ar_metrics,
             tc_metrics=tc_metrics,
@@ -448,13 +619,36 @@ def main_worker(worker_id, worker_args):
             max_samples=None
         )
         
-        all_results.append(results)
-        print(f"  mIoU TC: {results['miou_tc']:.4f}, mIoU AR: {results['miou_ar']:.4f}")
+        # Combine results
+        combined_result = {
+            'prompt_type': f"point+bbox+mask",
+            'positive_point_num': config['positive_point_num'],
+            'negative_point_num': config['negative_point_num'],
+            'enlarge_ratio': config['enlarge_ratio'],
+            'centroid_ratio': 0,
+            'miou_ar': (results_point['miou_ar'] + results_bbox['miou_ar'] + results_mask['miou_ar']) / 3,
+            'miou_tc': (results_point['miou_tc'] + results_bbox['miou_tc'] + results_mask['miou_tc']) / 3,
+            'mean_acc_ar': (results_point['mean_acc_ar'] + results_bbox['mean_acc_ar'] + results_mask['mean_acc_ar']) / 3,
+            'mean_acc_tc': (results_point['mean_acc_tc'] + results_bbox['mean_acc_tc'] + results_mask['mean_acc_tc']) / 3,
+            'overall_acc_ar': (results_point['overall_acc_ar'] + results_bbox['overall_acc_ar'] + results_mask['overall_acc_ar']) / 3,
+            'overall_acc_tc': (results_point['overall_acc_tc'] + results_bbox['overall_acc_tc'] + results_mask['overall_acc_tc']) / 3,
+            'freqw_acc_ar': (results_point['freqw_acc_ar'] + results_bbox['freqw_acc_ar'] + results_mask['freqw_acc_ar']) / 3,
+            'freqw_acc_tc': (results_point['freqw_acc_tc'] + results_bbox['freqw_acc_tc'] + results_mask['freqw_acc_tc']) / 3,
+            'miou_including_bg_ar': (results_point['miou_including_bg_ar'] + results_bbox['miou_including_bg_ar'] + results_mask['miou_including_bg_ar']) / 3,
+            'miou_including_bg_tc': (results_point['miou_including_bg_tc'] + results_bbox['miou_including_bg_tc'] + results_mask['miou_including_bg_tc']) / 3,
+        }
+        
+        all_results.append(combined_result)
+        print(f"  Avg mIoU TC: {combined_result['miou_tc']:.4f}, Avg mIoU AR: {combined_result['miou_ar']:.4f}")
+        print(f"    Point mIoU TC: {results_point['miou_tc']:.4f}, Point mIoU AR: {results_point['miou_ar']:.4f}")
+        print(f"    BBox mIoU TC: {results_bbox['miou_tc']:.4f}, BBox mIoU AR: {results_bbox['miou_ar']:.4f}")
+        print(f"    Mask mIoU TC: {results_mask['miou_tc']:.4f}, Mask mIoU AR: {results_mask['miou_ar']:.4f}")
         
         if worker_args.wandb:
             wandb.log({
-                'mask_prompt/miou_tc': results['miou_tc'],
-                'mask_prompt/miou_ar': results['miou_ar'],
+                'combined_point_bbox_mask/miou_tc': combined_result['miou_tc'],
+                'combined_point_bbox_mask/miou_ar': combined_result['miou_ar'],
+                'combined_point_bbox_mask/config': f"pos={config['positive_point_num']}_neg={config['negative_point_num']}_enlarge={config['enlarge_ratio']}"
             })
     
     # ==================== SAVE RESULTS ====================

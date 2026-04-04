@@ -83,7 +83,7 @@ class PromptMaker:
 
             if prompt_type == 'point':
                 ar_point_prompts, ar_object_masks = make_point_prompts(ar_mask_np, connectivity=self.connectivity, threshold=self.threshold, num_positive_points=self.positive_point_num, num_negative_points=self.negative_point_num, erode_size= 5)
-                tc_point_prompts, tc_object_masks = make_point_prompts(tc_mask_np, connectivity= self.connectivity, threshold=self.threshold, num_positive_points=min(1, self.positive_point_num//3), num_negative_points=min(1, self.negative_point_num//3), erode_size=1)
+                tc_point_prompts, tc_object_masks = make_point_prompts(tc_mask_np, connectivity= self.connectivity, threshold=self.threshold, num_positive_points=min(3, self.positive_point_num//3), num_negative_points=min(3, self.negative_point_num//3), erode_size=1)
                 ar_bbox_prompts = None
                 tc_bbox_prompts = None
                 ar_noisy_masks = None
