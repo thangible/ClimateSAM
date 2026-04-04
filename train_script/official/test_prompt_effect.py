@@ -46,169 +46,141 @@ import json
 from datetime import datetime
 
 
-def get_iou_perClass(confM):
-    """
-    Takes a confusion matrix confM and returns the IoU per class
-    Handles both 2x2 (binary) and 3x3 (multiclass) confusion matrices
-    """
-    n_classes = confM.shape[0]
-    unionPerClass = confM.sum(axis=0) + confM.sum(axis=1) - confM.diagonal()
-    iouPerClass = np.zeros(n_classes)
-    for i in range(n_classes):
-        if unionPerClass[i] == 0:
-            iouPerClass[i] = 1
-        else:
-            iouPerClass[i] = confM.diagonal()[i] / unionPerClass[i]
-    return iouPerClass
-        
-def get_cm(pred, gt, n_classes=3):
-    cm = np.zeros((n_classes, n_classes))
-    for i in range(len(pred)):
-        pred_tmp = pred[i].int()
-        gt_tmp = gt[i].int()
-
-        for actual in range(n_classes):
-            for predicted in range(n_classes):
-                is_actual = torch.eq(gt_tmp, actual)
-                is_pred = torch.eq(pred_tmp, predicted)
-                cm[actual][predicted] += len(torch.nonzero(is_actual & is_pred))
-            
-    return cm
 
 def freeze_model_parameters(model, trainable_modules=None):
     """
-    Freeze all parameters in the model except those in trainable_modules.
+    Freeze all model parameters except those in trainable_modules.
     
     Args:
-        model: The model to freeze
-        trainable_modules: List of module names to keep trainable (e.g., ['adapter', 'lora'])
+        model: PyTorch model to freeze
+        trainable_modules: List of module names to keep trainable (e.g., ['image_encoder', 'mask_decoder'])
+                          If None or empty, all parameters are frozen.
     """
-    trainable_modules = trainable_modules or []
-    
-    frozen_count = 0
-    trainable_count = 0
+    if trainable_modules is None:
+        trainable_modules = []
     
     for name, param in model.named_parameters():
         # Check if this parameter belongs to a trainable module
-        is_trainable = any(module in name for module in trainable_modules)
-        
-        if is_trainable:
-            param.requires_grad = True
-            trainable_count += 1
-        else:
-            param.requires_grad = False
-            frozen_count += 1
+        is_trainable = any(module_name in name for module_name in trainable_modules)
+        param.requires_grad = is_trainable
     
-    print(f"Frozen parameters: {frozen_count}")
-    print(f"Trainable parameters: {trainable_count}")
-    return frozen_count, trainable_count
+    print(f"Trainable modules: {trainable_modules if trainable_modules else 'None (all frozen)'}")
 
 
+@torch.no_grad()
 def validate_cgnet_baseline(val_dataloader, prompter, device, worker_args):
     """
-    Validate CGNet auxiliary mask against ground truth as baseline.
+    Validate CGNet baseline by calculating IoU metrics from auxiliary mask predictions.
     
     Args:
-        val_dataloader: Validation dataloader
-        prompter: CGNetPrompter instance
-        device: Device to use
-        worker_args: Worker arguments for W&B logging
+        val_dataloader: Validation data loader
+        prompter: CGNetPrompter instance for generating auxiliary masks
+        device: Device to run on
+        worker_args: Worker arguments containing configuration
     
     Returns:
         Dictionary with baseline metrics
     """
-    print("\n" + "="*60)
-    print("CGNET BASELINE VALIDATION")
-    print("="*60)
+    print("\n" + "-"*60)
+    print("VALIDATING CGNET BASELINE")
+    print("-"*60)
     
+    # Initialize metrics for baseline (using CGNet aux_mask directly)
+    ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+    tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     
-    aggregate_cm_ar = np.zeros((2, 2))  # For AR (class 2)
-    aggregate_cm_tc = np.zeros((2, 2))  # For TC (class 1)
+    valid_pbar = tqdm(
+        total=len(val_dataloader),
+        desc='CGNet Baseline Validation',
+        leave=False
+    )
     
     with torch.no_grad():
-        for baseline_step, batch in enumerate(val_dataloader):
+        for val_step, batch in enumerate(val_dataloader):
             batch = batch_to_cuda(batch, device)
             
+            # Generate auxiliary mask using CGNet (baseline prediction)
             features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
-            aux_mask = prompter.get_aux_mask(features)
+            aux_mask = prompter.get_aux_mask(features)  # B, 3, H, W with channels [BG, TC, AR]
+            
+            # Extract AR and TC predictions from aux_mask
+            # aux_mask channels: [Background, TC, AR]
+            ar_pred_mask = aux_mask[:, 2, :, :].unsqueeze(1).unsqueeze(1)  # B, H, W -> B, 1, 1, H, W
+            tc_pred_mask = aux_mask[:, 1, :, :].unsqueeze(1).unsqueeze(1)  # B, H, W -> B, 1, 1, H, W
+            
+            # Ensure proper shape for metric computation: B, 1, H, W
+            ar_pred_mask = ar_pred_mask.squeeze(2)  # B, 1, H, W
+            tc_pred_mask = tc_pred_mask.squeeze(2)  # B, 1, H, W
             
             # Extract ground truth masks
-            masks_gt = batch['gt_mask']
+            masks_gt = batch['gt_mask']  # List of B tensors with shape [H, W]
+            masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt]  # AR is class 2
+            masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt]  # TC is class 1
             
-            # Extract AR (class 2) and TC (class 1) from multiclass mask
-            # Class 0: Background, Class 1: TC, Class 2: AR
-            masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt]
-            masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt]
+            # Convert to list format expected by metrics.update()
+            ar_masks = [ar_pred_mask[i:i+1] for i in range(ar_pred_mask.shape[0])]
+            tc_masks = [tc_pred_mask[i:i+1] for i in range(tc_pred_mask.shape[0])]
             
-            # Extract predictions from aux_mask
-            aux_ar_masks = [(aux_mask == 2).to(torch.uint8) for _ in range(len(aux_mask))]
-            aux_tc_masks = [(aux_mask == 1).to(torch.uint8) for _ in range(len(aux_mask))]
+            # Ensure correct shape for metrics: B, 1, 1, H, W
+            for masks in [masks_ar_gts, masks_tc_gts, ar_masks, tc_masks]:
+                for i in range(len(masks)):
+                    if len(masks[i].shape) == 2:
+                        masks[i] = masks[i][None, None, :]
+                    if len(masks[i].shape) == 3:
+                        masks[i] = masks[i][:, None, :]
+                    if len(masks[i].shape) != 4:
+                        raise RuntimeError(f"Unexpected mask shape: {masks[i].shape}")
             
-            # Stack to get batch format [B, H, W]
-            for i in range(len(masks_gt)):
-                # For AR (class 2)
-                gt_ar = masks_ar_gts[i].cpu().numpy().astype(np.long)
-                pred_ar = aux_ar_masks[i].cpu().numpy().astype(np.long)
-                aggregate_cm_ar += get_cm(
-                    torch.from_numpy(pred_ar).to(device),
-                    torch.from_numpy(gt_ar).to(device),
-                    2
-                )
-                
-                # For TC (class 1)
-                gt_tc = masks_tc_gts[i].cpu().numpy().astype(np.long)
-                pred_tc = aux_tc_masks[i].cpu().numpy().astype(np.long)
-                aggregate_cm_tc += get_cm(
-                    torch.from_numpy(pred_tc).to(device),
-                    torch.from_numpy(gt_tc).to(device),
-                    2
-                )
+            # Update metrics
+            tc_metrics.update(tc_masks, masks_tc_gts, batch['index_name'])
+            ar_metrics.update(ar_masks, masks_ar_gts, batch['index_name'])
+            
+            valid_pbar.update(1)
     
-    # Compute metrics from confusion matrices
-    ious_ar = get_iou_perClass(aggregate_cm_ar)
-    ious_tc = get_iou_perClass(aggregate_cm_tc)
+    valid_pbar.close()
     
-    # Extract foreground IoU (class 1 in binary classification)
-    cgnet_miou_ar = ious_ar[1] if len(ious_ar) > 1 else ious_ar[0]
-    cgnet_miou_tc = ious_tc[1] if len(ious_tc) > 1 else ious_tc[0]
+    # Compute metrics
+    ar_metric_dict, _ = ar_metrics.compute()
+    tc_metric_dict, _ = tc_metrics.compute()
     
-    # Compute accuracy metrics
-    cgnet_acc_ar = np.trace(aggregate_cm_ar) / aggregate_cm_ar.sum()
-    cgnet_acc_tc = np.trace(aggregate_cm_tc) / aggregate_cm_tc.sum()
+    # Extract metrics
+    miou_ar = ar_metric_dict['Mean Foreground IoU']
+    miou_tc = tc_metric_dict['Mean Foreground IoU']
+    mean_acc_ar = ar_metric_dict['Mean Acc']
+    mean_acc_tc = tc_metric_dict['Mean Acc']
+    overall_acc_ar = ar_metric_dict['Overall Acc']
+    overall_acc_tc = tc_metric_dict['Overall Acc']
+    freqw_acc_ar = ar_metric_dict['FreqW Acc']
+    freqw_acc_tc = tc_metric_dict['FreqW Acc']
+    miou_including_bg_ar = ar_metric_dict['Mean IoU']
+    miou_including_bg_tc = tc_metric_dict['Mean IoU']
     
-    baseline_results = {
+    # Create baseline result dictionary
+    baseline_result = {
         'prompt_type': 'cgnet_baseline',
         'positive_point_num': 0,
         'negative_point_num': 0,
         'enlarge_ratio': 0,
         'centroid_ratio': 0,
-        'miou_ar': float(cgnet_miou_ar),
-        'miou_tc': float(cgnet_miou_tc),
-        'mean_acc_ar': float(cgnet_acc_ar),
-        'mean_acc_tc': float(cgnet_acc_tc),
-        'overall_acc_ar': float(cgnet_acc_ar),
-        'overall_acc_tc': float(cgnet_acc_tc),
-        'freqw_acc_ar': float(cgnet_acc_ar),
-        'freqw_acc_tc': float(cgnet_acc_tc),
-        'miou_including_bg_ar': float(ious_ar.mean()),
-        'miou_including_bg_tc': float(ious_tc.mean()),
+        'miou_ar': miou_ar,
+        'miou_tc': miou_tc,
+        'mean_acc_ar': mean_acc_ar,
+        'mean_acc_tc': mean_acc_tc,
+        'overall_acc_ar': overall_acc_ar,
+        'overall_acc_tc': overall_acc_tc,
+        'freqw_acc_ar': freqw_acc_ar,
+        'freqw_acc_tc': freqw_acc_tc,
+        'miou_including_bg_ar': miou_including_bg_ar,
+        'miou_including_bg_tc': miou_including_bg_tc,
     }
     
-    print(f"\nCGNet Baseline Results:")
-    print(f"  AR - mIoU: {cgnet_miou_ar:.4f}, Accuracy: {cgnet_acc_ar:.4f}")
-    print(f"  TC - mIoU: {cgnet_miou_tc:.4f}, Accuracy: {cgnet_acc_tc:.4f}")
-    print("="*60 + "\n")
+    # Print baseline results
+    print(f"\n✓ CGNet Baseline Results:")
+    print(f"  mIoU TC: {miou_tc:.4f}, mIoU AR: {miou_ar:.4f}")
+    print(f"  Mean Acc TC: {mean_acc_tc:.4f}, Mean Acc AR: {mean_acc_ar:.4f}")
+    print(f"  Overall Acc TC: {overall_acc_tc:.4f}, Overall Acc AR: {overall_acc_ar:.4f}")
     
-    # Log baseline to W&B if enabled
-    if hasattr(worker_args, 'wandb') and worker_args.wandb:
-        wandb.log({
-            'cgnet_baseline/miou_ar': float(cgnet_miou_ar),
-            'cgnet_baseline/miou_tc': float(cgnet_miou_tc),
-            'cgnet_baseline/acc_ar': float(cgnet_acc_ar),
-            'cgnet_baseline/acc_tc': float(cgnet_acc_tc),
-        })
-    
-    return baseline_results
+    return baseline_result
 
 
 def validate_with_prompt_config(
