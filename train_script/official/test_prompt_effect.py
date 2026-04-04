@@ -781,7 +781,7 @@ def main_worker(worker_id, worker_args):
             'enlarge_ratio': 0.0,
         },
         {
-            'prompt_types': ['point', 'bbox', 'mask'],
+            'prompt_types': ['point', 'bbox'],
             'positive_point_num': 10,
             'negative_point_num': 5,
             'enlarge_ratio': 0.0,
