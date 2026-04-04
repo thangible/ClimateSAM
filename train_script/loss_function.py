@@ -591,7 +591,7 @@ def compute_generator_loss(multiclass_mask, interm_masks, gt_masks, device, work
     }
 
 
-def calculate_generator_token_loss_old(
+def calculate_generator_token_loss(
     multiclass_mask,
     interm_masks,
     gt_masks,
@@ -740,7 +740,7 @@ def compute_centroid_heatmaps(
     heatmaps = torch.stack(heatmaps, dim=0).unsqueeze(1)  # B,1,H,W
     return heatmaps
 
-def calculate_generator_token_loss(
+def calculate_generator_token_centroid_loss(
     multiclass_mask, interm_masks, gt_masks, device, worker_args,
     ar_masks_pred, tc_masks_pred, ar_centroids, tc_centroids
 ):

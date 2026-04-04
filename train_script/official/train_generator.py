@@ -572,16 +572,34 @@ def set_up_model(worker_args, device):
     ).to(device)
     
     # Load pretrained weights
-    if worker_args.load_pretrained:
-        if worker_args.phase == 1:
-            image_encoder_path = os.path.join(worker_args.exp_dir,'best_weights', f"phase_2_weights_best.pth")
-            phase_1_checkpoint = torch.load(image_encoder_path, map_location=device)
-            print(f"Pretrained weights from phase 1 loaded from {image_encoder_path}")
-            climatesam.image_encoder.load_state_dict(phase_1_checkpoint['image_encoder'])
-            print(f"Image encoder weights loaded from {image_encoder_path}")
-            climatesam.mask_decoder.load_state_dict(phase_1_checkpoint['mask_decoder'])
-            print(f"Mask decoder weights loaded from {image_encoder_path}")
+    image_encoder_path = os.path.join(worker_args.exp_dir, f"{worker_args.encoder_weights_name}.pth") 
+    if not os.path.exists(image_encoder_path):
+        raise FileNotFoundError(f"Pretrained weights not found at {image_encoder_path}. Please check the path and try again.")
+    phase_1_checkpoint = torch.load(image_encoder_path, map_location=device)
+    print(f"Pretrained weights from phase 1 loaded from {image_encoder_path}")
+    # ENCODRER WEIGHTS
+    if 'image_encoder' not in phase_1_checkpoint:
+        raise ValueError(f"Image encoder weights not found in checkpoint.")
+    else:
+        climatesam.image_encoder.load_state_dict(phase_1_checkpoint['image_encoder'])
+        print(f"Image encoder weights loaded from {image_encoder_path}")
+        
+    # MASK DECODER WEIGHTS
+    if 'mask_decoder' not in phase_1_checkpoint:
+        raise ValueError(f"Mask decoder weights not found in checkpoint.")
+    else:
+        climatesam.mask_decoder.load_state_dict(phase_1_checkpoint['mask_decoder'])
+        print(f"Mask decoder weights loaded from {image_encoder_path}")
     
+    # INPUT ADAPTER WEIGHTS
+    if 'input_adapter' not in phase_1_checkpoint:
+        raise ValueError(f"Input adapter weights not found in checkpoint.")
+    else:
+        climatesam.input_adapter.load_state_dict(phase_1_checkpoint['input_adapter'])
+        print(f"Input adapter weights loaded from {image_encoder_path}")
+
+
+
     
     ###################################################
     num_features_map = {
@@ -608,13 +626,6 @@ def set_up_model(worker_args, device):
         features_per_block=features_per_block[worker_args.sam_type]
     ).to(device)
     
-    if worker_args.load_pretrained:
-        generator_path = os.path.join(worker_args.exp_dir,'best_weights', f"best_generator_fuse_channels_{worker_args.fuse_channels}_sam_type_{worker_args.sam_type}.pth")
-        phase_2_checkpoint = torch.load(generator_path, map_location=device, weights_only=False)
-        print(f"Pretrained weights for prompt generator from phase 2 loaded from {generator_path}")
-        prompt_generator.load_state_dict(phase_2_checkpoint['prompt_generator'])
-        print(f"Prompt generator weights loaded from {generator_path}")
-    
     for params in climatesam.parameters():
         params.requires_grad = False
     # for params in climatesam.image_encoder.parameters():
@@ -624,7 +635,18 @@ def set_up_model(worker_args, device):
         
     for params in prompt_generator.parameters():
         params.requires_grad = True
-        
+    
+    
+    if worker_args.load_pretrained:
+        generator_path = os.path.join(worker_args.exp_dir, worker_args.pretrained_name)
+        if not os.path.exists(generator_path):
+            print(f"Pretrained weights for prompt generator not found at {generator_path}. Starting training from scratch.")
+            return climatesam, prompt_generator
+        else:
+            phase_2_checkpoint = torch.load(generator_path, map_location=device, weights_only=False)
+            print(f"Pretrained weights for prompt generator from phase 2 loaded from {generator_path}")
+            prompt_generator.load_state_dict(phase_2_checkpoint['prompt_generator'])
+            print(f"Prompt generator weights loaded from {generator_path}")
 
     return climatesam, prompt_generator
 
@@ -688,18 +710,13 @@ def main_worker(worker_id, worker_args):
                     if worker_args.save_model and epoch > 4:
                         # Create best_weights directory if it doesn't exist
                         best_weights_dir = os.path.join(worker_args.exp_dir, 'best_weights')
-                        os.makedirs(best_weights_dir, exist_ok=True)
+                        os.makedirs(best_weights_dir, exist_ok=True) 
 
-                        save_path = os.path.join(best_weights_dir, f"best_generator_fuse_channels_{worker_args.fuse_channels}_sam_type_{worker_args.sam_type}_{worker_args.run_name}.pth")
+                        save_path = os.path.join(best_weights_dir, f"best_generator_{worker_args.sam_type}_{worker_args.fuse_channels}_{worker_args.run_name}.pth")
                         complete_model_weights = {
                             # 'image_encoder': climatesam.image_encoder.state_dict(),
                             # 'mask_decoder': climatesam.mask_decoder.state_dict(),
                             'prompt_generator': prompt_generator.state_dict(),
-                            'epoch': epoch,
-                            # 'best_miou_tc': best_miou_tc,
-                            # 'best_miou_ar': best_miou_ar,
-                            # 'best_miou_total': best_miou_total,
-                            'best_logit_miou': best_logit_miou,
                         }
                         
                         

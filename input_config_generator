@@ -3,6 +3,7 @@ exp_dir = ./exp
 ; data_dir = '/home/aiworker2/thang/climateNet'
 data_dir = '../data/climatenet'
 ; pretrained_name = 'best_model.pth'
+encoder_weights_name = 'encoder_weights'
 project_name = climate-sam-generator
 run_name = official
 

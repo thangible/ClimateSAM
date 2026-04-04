@@ -100,6 +100,11 @@ def parse():
     )
     
     parser.add_argument(
+        '--encoder_weights_name', type=str, 
+        help="Name of the encoder weights file."
+    )
+
+    parser.add_argument(
         '--bce_weight_ar', default=10, type=float,
         help="Weight for the BCE loss for AR. Default is 1.0."
     )
