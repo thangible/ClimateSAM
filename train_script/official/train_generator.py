@@ -682,6 +682,21 @@ def main_worker(worker_id, worker_args):
     # Set gradient accumulation steps
     gradient_accumulation_steps = getattr(worker_args, 'gradient_accumulation_steps', 1)
     
+    # Print parameter counts for each module (only from main process)
+    print("Model parameter breakdown:")
+    def _print_param_stats(module, phase):
+        for n, c in module.named_children():
+            total = sum(p.numel() for p in c.parameters())
+            trainable = sum(p.numel() for p in c.parameters() if p.requires_grad)
+            if total > 0:
+                print(f"{n.upper():<25} | train={str(c.training):<5} | {trainable:>9,}/{total:>12,} ({100*trainable/total:>5.2f}%)")
+        total = sum(p.numel() for p in module.parameters())
+        trainable = sum(p.numel() for p in module.parameters() if p.requires_grad)
+        print(f"Phase {phase}: trainable = {trainable:,} / {total:,}\n")
+
+    _print_param_stats(climatesam, 1)
+    _print_param_stats(prompt_generator, 2)
+        
     # Training loop
     for epoch in range(1, max_epoch_num + 1):
         

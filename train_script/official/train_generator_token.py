@@ -28,7 +28,7 @@ from contextlib import nullcontext
 from evaluator import StreamSegMetrics
 
 
-from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug, setup_device_and_distributed, setup_optimizer_and_scheduler, worker_init_fn
+from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug, setup_device_and_distributed, setup_optimizer_and_scheduler_for_generator, worker_init_fn
 from loss_function import ClimateLoss, compute_climate_loss, compute_generator_loss, calculate_generator_token_loss
 from parser_config import parse
 from climatesam import ClimateSAM
@@ -126,10 +126,10 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
                 gt_masks=gt_masks,
                 device=device,
                 worker_args=worker_args,
-                ar_masks_pred=ar_mask,    # Logits from your PromptGenerator
-                tc_masks_pred=tc_mask,    # Logits from your PromptGenerator
-                ar_centroids=batch['ar_centroids'],
-                tc_centroids=batch['tc_centroids']
+                ar_masks_pred=ar_masks_pred,    # Logits from your PromptGenerator
+                tc_masks_pred=tc_masks_pred,    # Logits from your PromptGenerator
+                ar_masks_gt=ar_masks_gt,
+                tc_masks_gt=tc_masks_gt
             )
             
         # ClimateSAM forward also doesn't require gradients (we don't train it)
@@ -717,7 +717,7 @@ def main_worker(worker_id, worker_args):
     print(f"Worker {worker_id} initialized on device {device} with local_rank {local_rank}.")
 
     climatesam, prompt_generator = set_up_model(worker_args, device)
-    optimizer, scheduler = setup_optimizer_and_scheduler(climatesam, prompt_generator, worker_args)  
+    optimizer, scheduler = setup_optimizer_and_scheduler_for_generator(climatesam, prompt_generator, worker_args)  
     
     prompt_maker = PromptMaker(prompt_type='point', positive_point_num=worker_args.positive_point_num, negative_point_num=worker_args.negative_point_num)
     
