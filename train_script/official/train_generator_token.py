@@ -543,7 +543,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
         }, step=epoch)
     
     valid_pbar.close()
-    return miou_tc, miou_ar, logit_mean_iou
+    return miou_tc, miou_ar, logit_mean_iou, logit_tc_iou, logit_ar_iou
 
 #-----------------------------------------------------------
 # DATA
@@ -728,6 +728,21 @@ def main_worker(worker_id, worker_args):
     
     # Set gradient accumulation steps
     gradient_accumulation_steps = getattr(worker_args, 'gradient_accumulation_steps', 1)
+    # Print parameter counts for each module (only from main process)
+    
+    print("Model parameter breakdown:")
+    def _print_param_stats(module, phase):
+        for n, c in module.named_children():
+            total = sum(p.numel() for p in c.parameters())
+            trainable = sum(p.numel() for p in c.parameters() if p.requires_grad)
+            if total > 0:
+                print(f"{n.upper():<25} | train={str(c.training):<5} | {trainable:>9,}/{total:>12,} ({100*trainable/total:>5.2f}%)")
+        total = sum(p.numel() for p in module.parameters())
+        trainable = sum(p.numel() for p in module.parameters() if p.requires_grad)
+        print(f"Phase {phase}: trainable = {trainable:,} / {total:,}\n")
+
+    _print_param_stats(climatesam, 1)
+    _print_param_stats(prompt_generator, 2)
     
     # Training loop
     for epoch in range(1, max_epoch_num + 1):
@@ -735,13 +750,13 @@ def main_worker(worker_id, worker_args):
         # Validation
         if epoch % worker_args.valid_per_epochs == 1 or epoch == max_epoch_num:
             if worker_args.load_pretrained or epoch > 1: 
-                miou_tc, miou_ar, logit_mean_iou = validate_one_epoch(
+                miou_tc, miou_ar, logit_mean_iou, logit_tc_iou, logit_ar_iou = validate_one_epoch(
                     epoch, val_dataloader, ar_metrics, tc_metrics, 
                     climatesam, prompt_generator, prompt_maker, device, 
                     max_epoch_num, worker_args
                 )
                 average_miou = (miou_tc + miou_ar) / 2
-                print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}, Logit mIoU: {logit_mean_iou:.2%}")
+                print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}, Logit mIoU: {logit_mean_iou:.2%}, Logit TC IoU: {logit_tc_iou:.2%}, Logit AR IoU: {logit_ar_iou:.2%}")
 
                 if miou_tc > best_miou_tc:
                     best_miou_tc = miou_tc
