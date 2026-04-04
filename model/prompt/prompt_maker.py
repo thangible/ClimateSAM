@@ -19,7 +19,7 @@ class PromptMaker:
         self.negative_point_num = negative_point_num
 
     @torch.no_grad()
-    def make_prompts(self, multiclass_mask: torch.Tensor = None, ar_mask: torch.Tensor = None, tc_mask: torch.Tensor = None, prompt_type = None, enlarge_ratio=0.2):
+    def make_prompts(self, multiclass_mask: torch.Tensor = None, ar_mask: torch.Tensor = None, tc_mask: torch.Tensor = None, prompt_type = None, enlarge_ratio=0.1, positive_point_num=None, negative_point_num=None, centroid_ratio=None):
         """
         make_prompts now supports two calling conventions for backward compatibility:
         - Pass a multiclass_mask tensor (B, H, W) or (B,1,H,W) where values are {0,1,2}
@@ -27,6 +27,13 @@ class PromptMaker:
 
         The function will prefer ar_mask/tc_mask when both are provided.
         """
+        if positive_point_num is not None:
+            self.positive_point_num = positive_point_num
+        if negative_point_num is not None:
+            self.negative_point_num = negative_point_num
+        if centroid_ratio is not None:
+            self.centroid_ratio = centroid_ratio
+        
         # Determine batch size from available inputs
         if ar_mask is not None and tc_mask is not None:
             batch_size = ar_mask.shape[0]

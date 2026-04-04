@@ -34,11 +34,11 @@ class PromptGenerator(nn.Module):
             nn.Sigmoid()
         )
 
-        # Final binary heads for automated prompt generation [cite: 367, 369]
+        # Final binary heads for automated prompt generation 
         self.ar_head = nn.Conv2d(fused_channels, 1, kernel_size=1)
         self.tc_head = nn.Conv2d(fused_channels, 1, kernel_size=1)
         
-        # Encoder blocks for multi-scale fusion [cite: 323, 480]
+        # Encoder blocks for multi-scale fusion
         self.input_reduction = nn.ModuleList()
         self.block_feature_upsamplers = nn.ModuleList()
         self.block_fuse_convs = nn.ModuleList()
