@@ -766,7 +766,7 @@ def main_worker(worker_id, worker_args):
                         best_weights_dir = os.path.join(worker_args.exp_dir, 'best_weights')
                         os.makedirs(best_weights_dir, exist_ok=True)
 
-                        save_path = os.path.join(best_weights_dir, f"best_generator_token_fuse_channels_{worker_args.fuse_channels}_sam_type_{worker_args.sam_type}_{worker_args.run_name}.pth")
+                        save_path = os.path.join(best_weights_dir, f"best_generator_token_{worker_args.sam_type}_{worker_args.fuse_channels}_{worker_args.run_name}.pth")
                         complete_model_weights = {
                             # 'image_encoder': climatesam.image_encoder.state_dict(),
                             # 'mask_decoder': climatesam.mask_decoder.state_dict(),

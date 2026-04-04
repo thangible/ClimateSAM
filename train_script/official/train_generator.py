@@ -496,7 +496,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
         }, step=epoch)
     
     valid_pbar.close()
-    return miou_tc, miou_ar, logit_mean_iou
+    return miou_tc, miou_ar, logit_mean_iou, logit_tc_iou, logit_ar_iou
 
 #-----------------------------------------------------------
 # DATA
@@ -688,12 +688,12 @@ def main_worker(worker_id, worker_args):
         # Validation
         if epoch % worker_args.valid_per_epochs == 1 or epoch == max_epoch_num:
             if worker_args.load_pretrained or epoch > 1: 
-                miou_tc, miou_ar, logit_mean_iou = validate_one_epoch(
+                miou_tc, miou_ar, logit_mean_iou, logit_tc_iou, logit_ar_iou = validate_one_epoch(
                     epoch, val_dataloader, ar_metrics, tc_metrics, 
                     climatesam, prompt_generator, prompt_maker, device, 
                     max_epoch_num, worker_args
                 )
-                print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}, Logit mIoU: {logit_mean_iou:.2%}")
+                print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}, Logit mIoU: {logit_mean_iou:.2%}, Logit TC IoU: {logit_tc_iou:.2%}, Logit AR IoU: {logit_ar_iou:.2%}")
 
                 if miou_tc > best_miou_tc:
                     best_miou_tc = miou_tc
