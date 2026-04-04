@@ -528,7 +528,7 @@ def set_up_dataset(worker_args):
         print(f"Debug mode: Using only {len(val_dataset)} validation samples")
         
         max_epoch_num = 2
-        worker_args.valid_per_epochs = 1
+        worker_args.valid_per_epochs = 2
         print(f"Debug mode: Setting max_epoch_num to {max_epoch_num} and valid_per_epochs to {worker_args.valid_per_epochs}")
         
     # Adjust batch size for gradient accumulation
