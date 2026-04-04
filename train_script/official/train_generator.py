@@ -665,7 +665,7 @@ def main_worker(worker_id, worker_args):
     print(f"Worker {worker_id} initialized on device {device} with local_rank {local_rank}.")
 
     climatesam, prompt_generator = set_up_model(worker_args, device)
-    optimizer, scheduler = setup_optimizer_and_scheduler_for_generator(prompt_generator, worker_args)  
+    optimizer, scheduler = setup_optimizer_and_scheduler_for_generator(climatesam, prompt_generator, worker_args)  
     
     prompt_maker = PromptMaker(prompt_type='point', positive_point_num=worker_args.positive_point_num, negative_point_num=worker_args.negative_point_num)
     

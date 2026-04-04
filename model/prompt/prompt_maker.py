@@ -227,6 +227,10 @@ def make_positive_point_prompts(object_mask, object_centroid, num_points=5, erod
     else:
         
         object_points = np.argwhere(eroded_mask)
+        
+        if len(object_points) == 0:
+            object_points = np.argwhere(object_mask)  # fallback to non-eroded mask points if erosion removed all points
+            
 
         # if len(object_points) == 0:
         #     # fallback: use centroid repeated to satisfy requested number
