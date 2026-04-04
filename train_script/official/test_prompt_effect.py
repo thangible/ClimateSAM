@@ -289,19 +289,21 @@ def validate_with_combined_prompts(
             
             # Convert combined prompts to device
             for key in combined_prompt_dict:
-                if  key in ["ar_bbox_prompts", "tc_bbox_prompts", "ar_mask_prompts", "tc_mask_prompts"]:
-                    batch[key] = [
+                if combined_prompt_dict[key] is None:
+                    continue
+                    
+                if key in ["ar_bbox_prompts", "tc_bbox_prompts", "ar_mask_prompts", "tc_mask_prompts"]:
+                    combined_prompt_dict[key] = [
                         item.to(device=device, dtype=torch.float32) if item is not None else None
-                        for item in batch[key]
-            ]
+                        for item in combined_prompt_dict[key]
+                    ]
                 elif key in ["ar_point_prompts", "tc_point_prompts"]:
-                    # points, labels = zip(*batch[key])
-                    batch[key] = [
+                    combined_prompt_dict[key] = [
                         (item[0].to(device=device, dtype=torch.float32),
-                        item[1].to(device=device, dtype=torch.float32))
+                         item[1].to(device=device, dtype=torch.float32))
                         if (item is not None and item[0] is not None)
                         else None
-                        for item in batch[key]
+                        for item in combined_prompt_dict[key]
                     ]
             
             # Set inference images
