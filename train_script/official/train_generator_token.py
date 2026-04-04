@@ -619,13 +619,31 @@ def set_up_model(worker_args, device):
     ).to(device)
     
     # Load pretrained weights
-    image_encoder_path = os.path.join(worker_args.exp_dir,'best_weights', f"phase_2_weights_best.pth")
+    image_encoder_path = os.path.join(worker_args.exp_dir, f"{worker_args.encoder_weights_name}.pth") 
+    if not os.path.exists(image_encoder_path):
+        raise FileNotFoundError(f"Pretrained weights not found at {image_encoder_path}. Please check the path and try again.")
     phase_1_checkpoint = torch.load(image_encoder_path, map_location=device)
     print(f"Pretrained weights from phase 1 loaded from {image_encoder_path}")
-    climatesam.image_encoder.load_state_dict(phase_1_checkpoint['image_encoder'])
-    print(f"Image encoder weights loaded from {image_encoder_path}")
-    climatesam.mask_decoder.load_state_dict(phase_1_checkpoint['mask_decoder'])
-    print(f"Mask decoder weights loaded from {image_encoder_path}")
+    # ENCODRER WEIGHTS
+    if 'image_encoder' not in phase_1_checkpoint:
+        raise ValueError(f"Image encoder weights not found in checkpoint.")
+    else:
+        climatesam.image_encoder.load_state_dict(phase_1_checkpoint['image_encoder'])
+        print(f"Image encoder weights loaded from {image_encoder_path}")
+        
+    # MASK DECODER WEIGHTS
+    if 'mask_decoder' not in phase_1_checkpoint:
+        raise ValueError(f"Mask decoder weights not found in checkpoint.")
+    else:
+        climatesam.mask_decoder.load_state_dict(phase_1_checkpoint['mask_decoder'])
+        print(f"Mask decoder weights loaded from {image_encoder_path}")
+    
+    # INPUT ADAPTER WEIGHTS
+    if 'input_adapter' not in phase_1_checkpoint:
+        raise ValueError(f"Input adapter weights not found in checkpoint.")
+    else:
+        climatesam.input_adapter.load_state_dict(phase_1_checkpoint['input_adapter'])
+        print(f"Input adapter weights loaded from {image_encoder_path}")
             
     ###################################################
     num_features_map = {
@@ -652,42 +670,7 @@ def set_up_model(worker_args, device):
         features_per_block=features_per_block[worker_args.sam_type]
     ).to(device)
     
-    if worker_args.load_pretrained:
-        generator_path = os.path.join(worker_args.exp_dir, 'best_weights', f"best_generator_token_fuse_channels_{worker_args.fuse_channels}_sam_type_{worker_args.sam_type}_{worker_args.run_name}.pth")
-        if os.path.exists(generator_path):
-            try:
-                # torch.load does not accept weights_only; load checkpoint normally
-                phase_2_checkpoint = torch.load(generator_path, map_location=device)
-                print(f"Pretrained weights for prompt generator from phase 2 loaded from {generator_path}")
 
-                # Support several checkpoint layouts
-                if isinstance(phase_2_checkpoint, dict):
-                    if 'prompt_generator' in phase_2_checkpoint:
-                        state_dict = phase_2_checkpoint['prompt_generator']
-                    elif 'state_dict' in phase_2_checkpoint:
-                        state_dict = phase_2_checkpoint['state_dict']
-                    elif 'model' in phase_2_checkpoint:
-                        state_dict = phase_2_checkpoint['model']
-                    else:
-                        # assume the dict itself is a state dict
-                        state_dict = phase_2_checkpoint
-                else:
-                    state_dict = phase_2_checkpoint
-
-                try:
-                    prompt_generator.load_state_dict(state_dict)
-                    print(f"Prompt generator weights loaded from {generator_path}")
-                except RuntimeError as e:
-                    # Try non-strict load in case of key mismatches
-                    try:
-                        prompt_generator.load_state_dict(state_dict, strict=False)
-                        print(f"Prompt generator weights loaded with strict=False from {generator_path} (key mismatch)")
-                    except Exception as e2:
-                        print(f"Failed to load prompt generator state_dict: {e2}")
-            except Exception as e:
-                print(f"Error loading prompt generator checkpoint {generator_path}: {e}")
-        else:
-            print(f"Pretrained generator checkpoint not found at {generator_path}")
     
     for params in climatesam.parameters():
         params.requires_grad = False
@@ -698,6 +681,17 @@ def set_up_model(worker_args, device):
         
     for params in prompt_generator.parameters():
         params.requires_grad = True
+        
+    if worker_args.load_pretrained:
+        generator_path = os.path.join(worker_args.exp_dir, worker_args.pretrained_name)
+        if not os.path.exists(generator_path):
+            print(f"Pretrained weights for prompt generator not found at {generator_path}. Starting training from scratch.")
+            return climatesam, prompt_generator
+        else:
+            phase_2_checkpoint = torch.load(generator_path, map_location=device, weights_only=False)
+            print(f"Pretrained weights for prompt generator from phase 2 loaded from {generator_path}")
+            prompt_generator.load_state_dict(phase_2_checkpoint['prompt_generator'])
+            print(f"Prompt generator weights loaded from {generator_path}")
         
 
     return climatesam, prompt_generator
