@@ -8,16 +8,22 @@ class PromptGenerator(nn.Module):
                  in_channels: int = 768,
                  fused_channels: int = 128,
                  out_channels: int = 3,
-                 num_features: int = 5):
+                 num_features: int = 12):
         super(PromptGenerator, self).__init__()  
         
         self.num_features = num_features
         
         self.input_reduction = nn.ModuleList()
-        self.shallow_upsamplers = nn.ModuleList()
         self.up_trans = nn.ModuleList()
         self.fuse_convs = nn.ModuleList()
         self.multilevel_mask_convs = nn.ModuleList()
+        
+        # METHOD 1: Single Shared Upsampling Block
+        # This replaces the 4.3M parameter combinatorial module list
+        self.shared_shallow_up = nn.Sequential(
+            nn.ConvTranspose2d(fused_channels, fused_channels, kernel_size=2, stride=2),
+            nn.ReLU(inplace=True)
+        )
         
         for i in range(self.num_features):
             # Reduce incoming channels to a consistent fused_channels dimension
@@ -27,20 +33,6 @@ class PromptGenerator(nn.Module):
                     nn.ReLU(inplace=True),
                 )
             )
-            
-            # Create the learned upsampling pathway for the incoming shallower features.
-            # The higher the level (i), the more times it needs to be upsampled to match the main branch.
-            shallow_layers = []
-            for _ in range(i):
-                shallow_layers.append(
-                    nn.ConvTranspose2d(fused_channels, fused_channels, kernel_size=2, stride=2)
-                )
-                shallow_layers.append(nn.ReLU(inplace=True))
-                
-            if len(shallow_layers) > 0:
-                self.shallow_upsamplers.append(nn.Sequential(*shallow_layers))
-            else:
-                self.shallow_upsamplers.append(nn.Identity())
             
             if i == 0:
                 # Deepest level fusion
@@ -115,8 +107,12 @@ class PromptGenerator(nn.Module):
                 # Upsample the accumulated features from the previous deeper level
                 upsampled_accumulated = self.up_trans[i - 1](accumulated_feat)
                 
-                # Upsample the incoming shallower feature using the learned ConvTranspose2d layers
-                aligned_reduced_feat = self.shallow_upsamplers[i](reduced_feat)
+                # METHOD 1 APPLIED:
+                # Iteratively apply the shared upsampler to align the incoming 
+                # shallower feature with the accumulated deep features.
+                aligned_reduced_feat = reduced_feat
+                for _ in range(i):
+                    aligned_reduced_feat = self.shared_shallow_up(aligned_reduced_feat)
                 
                 # Concatenate the upsampled features with the aligned shallower features
                 concat_feat = torch.cat([upsampled_accumulated, aligned_reduced_feat], dim=1)
@@ -135,8 +131,7 @@ class PromptGenerator(nn.Module):
         neck_out = self.neck(accumulated_feat)
         multiclass_mask = self.multiclass_mask_conv(neck_out)
 
-        # Final interpolation to the target ground truth resolution is still standard practice 
-        # (as the GT mask is rarely the exact downsampled multiple of the ViT output)
+        # Final interpolation to the target ground truth resolution
         multiclass_mask = F.interpolate(multiclass_mask, size=(768, 1152), mode='bilinear', align_corners=False)
         
         return multiclass_mask, intermediate_masks
