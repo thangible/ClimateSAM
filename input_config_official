@@ -78,6 +78,6 @@ tc_sigma = 1
 
 [DEBUGGING]
 load_pretrained = False
-wandb = False
+wandb = True
 save_model = True
 debugging = False
