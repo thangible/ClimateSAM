@@ -178,10 +178,27 @@ class CGNetBBoxPrompter:
         self.cgnet_model = CGNetDetectionModule(num_classes=num_classes, channels=4)
         
         if weights_path and os.path.exists(weights_path):
-            self.cgnet_model.load_state_dict(torch.load(weights_path, map_location=device), strict=False)
-            print(f"Loaded CGNet weights from {weights_path}")
+            # 1. Load the old weights
+            pretrained_dict = torch.load(weights_path, map_location=device)
+            # 2. Get the current model's dictionary
+            model_dict = self.cgnet_model.state_dict()
+            
+            # 3. Filter out the classifier layer (and any other size mismatches)
+            filtered_dict = {
+                k: v for k, v in pretrained_dict.items() 
+                if k in model_dict and v.size() == model_dict[k].size()
+            }
+            
+            # 4. Overwrite the randomized model dict with the matched pretrained weights
+            model_dict.update(filtered_dict)
+            self.cgnet_model.load_state_dict(model_dict)
+            
+            print(f"Salvaged {len(filtered_dict)}/{len(model_dict)} matching layers from {weights_path}")
         else:
             print(f"CGNet weights not found at {weights_path}, using random initialization.")
+
+
+
 
         self.cgnet_model.to(device)
         self.optimizer = torch.optim.Adam(self.cgnet_model.parameters(), lr=1e-4)
@@ -268,10 +285,11 @@ class CGNetBBoxPrompter:
                         print(f"WandB validation log failed: {e}")
 
                 # Save best model based on validation loss
-                if val_loss < best_val_loss:
-                    best_val_loss = val_loss
+                mean_val_iou = (val_ar_iou + val_tc_iou) / 2.0
+                if mean_val_iou > best_val_iou:  # (make sure to initialize best_val_iou = 0.0 before the epoch loop)
+                    best_val_iou = mean_val_iou
                     self.save_model()
-                    print(f"*** New best model saved with Val Loss: {best_val_loss:.4f} ***")
+                    print(f"*** New best model saved with Mean BBox IoU: {best_val_iou:.4f} ***")
                     if self.wandb:
                         try:
                             save_path = os.path.join(self.exp_dir, f"cgnet_bbox_weight.pth")
