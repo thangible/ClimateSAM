@@ -249,9 +249,10 @@ def main_worker(worker_id, worker_args):
         drop_last=False, collate_fn=val_collate_fn, worker_init_fn=partial(worker_init_fn, base_seed=3407), generator=g
     )
 
+    pretrained_name = worker_args.pretrained_name if hasattr(worker_args, 'pretrained_name') else os.path.join(worker_args.exp_dir,'cgnet_bbox_weight.pth')
     # Initialize the new BBox Prompter
     cgnetprompter = CGNetBBoxPrompter(
-        weights_path=worker_args.pretrained_name, # You can update this to the new checkpoint name
+        weights_path=pretrained_name, # You can update this to the new checkpoint name
         device=device, 
         worker_args=worker_args,
         num_classes=2 # 0: TC, 1: AR
@@ -259,8 +260,8 @@ def main_worker(worker_id, worker_args):
     
     # Execute the training loop
     print("Starting CGNet Bounding Box Training...")
-    cgnetprompter.train(dataloader=train_dataloader, epochs=max_epoch_num)
-    
+    cgnetprompter.train(dataloader=train_dataloader, val_dataloader=val_dataloader, epochs=max_epoch_num)
+
     # ---------------------------------------------------------
     # Validation / SAM Inference Phase
     # ---------------------------------------------------------
