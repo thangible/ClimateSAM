@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .layer_module import LayerNorm2d
-from prompt.cgnet_module import ContextGuidedBlock, ConvBNPReLU
+from .prompt.cgnet_module import ContextGuidedBlock, ConvBNPReLU
 
 class PromptGenerator(nn.Module):
     def __init__(self, 
