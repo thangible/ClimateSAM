@@ -11,7 +11,7 @@ from .climatenet_util import extract_point_and_bbox_prompts_from_climatenet_mask
 from model.prompt.cgnet import CGNetPrompter
 
 class ClimateDataset(Dataset):
-    def __init__(self, data_dir, train_flag=True, reset_flag=False, augmented=False, generate_prompt=False, **prompt_kwargs):
+    def __init__(self, data_dir, train_flag=True, reset_flag=False, augmented=False, generate_prompt=False, enlarge_ratio = [0,0], prompt_type = None, **prompt_kwargs):
         """
         Parameters:
             data_dir (str): Directory containing the .nc files.
@@ -34,7 +34,9 @@ class ClimateDataset(Dataset):
         self.transforms = Compose([HorizontalFlip(p = 0.5), 
                                   VerticalFlip(p = 0.5), 
                                   RandomHorizontalRoll(p = 0.5, shift_limit=(0.5))]) if self.train_flag and self.augmented else None
-        
+        self.enlarge_ratio = enlarge_ratio
+        self.prompt_type = prompt_type
+
         # self.transforms = None
 
         # Store prompt generation parameters.
@@ -66,6 +68,9 @@ class ClimateDataset(Dataset):
             self.mean_std_dict = np.load(self.mean_std_path, allow_pickle=True).item()
         else:
             self.mean_std_dict = self.calculate_stats()
+
+        prompt_type_str = prompt_type if prompt_type is not None else "random"
+        print("ClimateDataset initialized with {} samples. Enlarge Ratio {}, Prompt Type {}".format(len(self.files), self.enlarge_ratio, prompt_type_str))
 
     # def get_cg_prompter(self, worker_args, device):
     #     cg_prompter = CGNetPrompter(weights_path='pretrained/weights_cgnet.pth', device=device, worker_args=worker_args)
@@ -111,8 +116,11 @@ class ClimateDataset(Dataset):
 
         
         if self.generate_prompt:
-            prompt_type = random.choice(['bbox', 'point', 'mask']) if self.train_flag else random.choice(['point', 'bbox'])
-            prompt_dict = extract_point_and_bbox_prompts_from_climatenet_mask(mask=mask, prompt_type=prompt_type)
+            if self.prompt_type is not None:
+                prompt_type = self.prompt_type
+            else:
+                prompt_type = random.choice(['bbox', 'point', 'mask']) if self.train_flag else random.choice(['point', 'bbox'])
+            prompt_dict = extract_point_and_bbox_prompts_from_climatenet_mask(mask=mask, prompt_type=prompt_type, enlarge_ratio=self.enlarge_ratio)
             
         else:
             prompt_dict = {

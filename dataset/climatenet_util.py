@@ -15,15 +15,15 @@ import cv2
 import torch.nn.functional as F
 from torch import Tensor
 
-def extract_point_and_bbox_prompts_from_climatenet_mask(mask: np.array, device = None, connectivity = 8, threshold = 50, prompt_type = 'point', centroid_ratio = 0.1):
+def extract_point_and_bbox_prompts_from_climatenet_mask(mask: np.array, device = None, connectivity = 8, threshold = 50, prompt_type = 'point', centroid_ratio = 0.1, enlarge_ratio = [0, 0]):
     
     # get mask of ar and tc
     ar_mask = mask == 2
     tc_mask = mask == 1
     
 
-    ar_object_masks, ar_positive_points, ar_bboxes, ar_noisy_masks, ar_centroids = get_prompts_from_binary_mask(ar_mask, connectivity, threshold, centroid_ratio=centroid_ratio, prompt_type=prompt_type)
-    tc_object_masks, tc_positive_points, tc_bboxes, tc_noisy_masks, tc_centroids = get_prompts_from_binary_mask(tc_mask, connectivity, threshold, centroid_ratio=centroid_ratio, prompt_type=prompt_type)
+    ar_object_masks, ar_positive_points, ar_bboxes, ar_noisy_masks, ar_centroids = get_prompts_from_binary_mask(ar_mask, connectivity, threshold, centroid_ratio=centroid_ratio, prompt_type=prompt_type, enlarge_ratio=enlarge_ratio)
+    tc_object_masks, tc_positive_points, tc_bboxes, tc_noisy_masks, tc_centroids = get_prompts_from_binary_mask(tc_mask, connectivity, threshold, centroid_ratio=centroid_ratio, prompt_type=prompt_type, enlarge_ratio=enlarge_ratio)
 
     # SQUEEZE
 
@@ -63,7 +63,7 @@ def extract_point_and_bbox_prompts_from_climatenet_mask(mask: np.array, device =
     return prompt_dict
 
 
-def get_prompts_from_binary_mask(binary_mask, connectivity = 8, threshold = 50, centroid_ratio = 0.1, prompt_type = 'point'):
+def get_prompts_from_binary_mask(binary_mask, connectivity = 8, threshold = 50, centroid_ratio = 0.1, prompt_type = 'point', enlarge_ratio = [0, 0]):
 
     # Convert the PyTorch tensor to a NumPy array
     masks = binary_mask
@@ -102,11 +102,30 @@ def get_prompts_from_binary_mask(binary_mask, connectivity = 8, threshold = 50, 
             
             # BBOX PROMPT
             if prompt_type == 'bbox':
-                rightmost_pixel = leftmost_pixel + width - 1
-                bottommost_pixel = topmost_pixel + height - 1
+                left, top, width, height, _ = stats
+                right = left + width - 1
+                bottom = top + height - 1   
+                # rightmost_pixel = leftmost_pixel + width - 1
+                # bottommost_pixel = topmost_pixel + height - 1
             
-                #Bounding box prompt for sam
-                bounding_box = [leftmost_pixel, topmost_pixel, rightmost_pixel, bottommost_pixel]
+                # #Bounding box prompt for sam
+                # bounding_box = [leftmost_pixel, topmost_pixel, rightmost_pixel, bottommost_pixel]
+                
+                h_img, w_img = binary_mask.shape
+                enlarge_ratio_w = random.uniform(enlarge_ratio[0], enlarge_ratio[1]) if isinstance(enlarge_ratio, list) else enlarge_ratio
+                enlarge_ratio_h = random.uniform(enlarge_ratio[0], enlarge_ratio[1]) if isinstance(enlarge_ratio, list) else enlarge_ratio
+                # print(f"enlarge_ratio: {enlarge_ratio}")
+
+                
+                pad_w = int(round(enlarge_ratio_w * width))
+                pad_h = int(round(enlarge_ratio_h * height))
+                nleft = max(0, left - pad_w)
+                ntop = max(0, top - pad_h)
+                nright = min(w_img - 1, right + pad_w)
+                nbottom = min(h_img - 1, bottom + pad_h)
+                # print(f"Original bbox: left: {left}, top: {top}, right: {right}, bottom: {bottom}")
+                # print(f"nleft: {nleft}, ntop: {ntop}, nright: {nright}, nbottom: {nbottom}")
+                bounding_box = [nleft, ntop, nright, nbottom]
                 bboxes.append([bounding_box]) 
             
             # POINT PROMPT
