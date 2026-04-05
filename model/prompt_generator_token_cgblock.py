@@ -58,7 +58,7 @@ class PromptGenerator(nn.Module):
             num_layers = block_idx + 1
             self.block_feature_upsamplers.append(
                 nn.Sequential(*[
-                    nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+                    nn.Upsample(scale_factor=2, mode='nearest', align_corners=False)
                     for _ in range(num_layers)
                 ])
             )
@@ -72,7 +72,7 @@ class PromptGenerator(nn.Module):
                 )
             )
             self.block_out_trans.append(
-                nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+                nn.Upsample(scale_factor=2, mode='nearest', align_corners=False)
             )
 
         self.neck = nn.Sequential(
@@ -135,8 +135,8 @@ class PromptGenerator(nn.Module):
             ar_mask = self.ar_head(neck_out * ar_gate)
             tc_mask = self.tc_head(neck_out * tc_gate)
 
-            ar_mask = F.interpolate(ar_mask, size=(768, 1152), mode='bilinear', align_corners=False)
-            tc_mask = F.interpolate(tc_mask, size=(768, 1152), mode='bilinear', align_corners=False)
+            ar_mask = F.interpolate(ar_mask, size=(768, 1152), mode='nearest', align_corners=False)
+            tc_mask = F.interpolate(tc_mask, size=(768, 1152), mode='nearest', align_corners=False)
 
         return multiclass_mask, intermediate_masks, ar_mask, tc_mask
 

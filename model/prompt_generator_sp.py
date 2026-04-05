@@ -4,128 +4,120 @@ import torch.nn.functional as F
 from .layer_module import LayerNorm2d
 
 class PromptGenerator(nn.Module):
-    def __init__(self, pool_size: tuple = (2, 2),
-                 fused_channels: int = 128,
+    def __init__(self, 
                  in_channels: int = 768,
+                 fused_channels: int = 128,
                  out_channels: int = 3,
-                 num_features: int = 12,
-                 features_per_block: int = 3):
+                 num_features: int = 5):
         super(PromptGenerator, self).__init__()  
         
-        self.num_blocks = num_features // features_per_block
-        self.features_per_block = features_per_block
-        
-        if num_features % features_per_block != 0:
-            raise ValueError(f"num_features ({num_features}) must be divisible by features_per_block ({features_per_block})")
-             
-        self.pool = nn.AdaptiveAvgPool2d(pool_size)
+        self.num_features = num_features
         
         self.input_reduction = nn.ModuleList()
-        self.shallow_upsamplers = nn.ModuleList()
         self.up_trans = nn.ModuleList()
         self.fuse_convs = nn.ModuleList()
         self.multilevel_mask_convs = nn.ModuleList()
         
-        for block_idx in range(self.num_blocks):
-            # 1. Reduce incoming channels to fused_channels
+        for i in range(self.num_features):
+            # Reduce incoming channels to a consistent fused_channels dimension
             self.input_reduction.append(
                 nn.Sequential(
                     nn.Conv2d(in_channels, fused_channels, kernel_size=1, bias=False),
-                    nn.ReLU(),
+                    nn.ReLU(inplace=True),
                 )
             )
             
-            # 2. Setup structural upsampling and fusion
-            if block_idx == 0:
-                # The deepest block fuses directly without upsampling
+            if i == 0:
+                # The deepest feature map does not require upsampling or concatenation initially
                 self.fuse_convs.append(
                     nn.Sequential(
-                        nn.Conv2d(features_per_block * fused_channels, fused_channels, kernel_size=3, padding=1),
+                        nn.Conv2d(fused_channels, fused_channels, kernel_size=3, padding=1),
                         LayerNorm2d(fused_channels),
-                        nn.ReLU()
+                        nn.ReLU(inplace=True)
                     )
                 )
-                self.shallow_upsamplers.append(nn.Identity())
             else:
-                # Shallower blocks require upsampling to match the spatial dimensions
-                # of the accumulated deeper features
-                layers = []
-                in_ch = features_per_block * fused_channels
-                for i in range(block_idx):
-                    layers.append(nn.ConvTranspose2d(in_ch if i == 0 else fused_channels,
-                                                     fused_channels, kernel_size=2, stride=2))
-                    layers.append(nn.ReLU())
-                self.shallow_upsamplers.append(nn.Sequential(*layers))
-                
-                # Transpose convolution to double the size of the previous accumulated features
+                # Transpose convolution to double the size of the accumulated features from the previous level
                 self.up_trans.append(
                     nn.ConvTranspose2d(fused_channels, fused_channels, kernel_size=2, stride=2)
                 )
                 
-                # Fuse the concatenated features
+                # Fuse the concatenated features which now have twice the fused_channels
                 self.fuse_convs.append(
                     nn.Sequential(
                         nn.Conv2d(fused_channels * 2, fused_channels, kernel_size=3, padding=1),
                         LayerNorm2d(fused_channels),
-                        nn.ReLU()
+                        nn.ReLU(inplace=True)
                     )
                 )
                 
-            # 3. Deep supervision layer for current block
+            # Deep supervision layer applied at every hierarchical level
             self.multilevel_mask_convs.append(
                 nn.Conv2d(fused_channels, out_channels, kernel_size=3, padding=1)
             )
 
         self.neck = nn.Sequential(
             nn.Conv2d(fused_channels, fused_channels, kernel_size=3, padding=1),
-            nn.ReLU()
+            nn.ReLU(inplace=True)
         )
         
         self.multiclass_mask_conv = nn.Sequential(
             nn.Conv2d(fused_channels, fused_channels, kernel_size=3, padding=1),
-            nn.ReLU(),
+            nn.ReLU(inplace=True),
             nn.Conv2d(fused_channels, out_channels, kernel_size=3, padding=1),
         )
 
     def forward(self, feat_list):
-        # Permute feature maps from (B, 64, 64, 768) to (B, 768, 64, 64)
+        """
+        Args:
+            feat_list: list of feature maps from the image encoder.
+        Returns:
+            multiclass_mask: final high resolution mask.
+            intermediate_masks: list of masks for deep supervision.
+        """
+        # Ensure we only process the expected number of hierarchical features
+        feat_list = feat_list[-self.num_features:] 
+        
+        # Permute feature maps from (B, H, W, C) to (B, C, H, W)
         feat_list = [f.permute(0, 3, 1, 2) for f in feat_list]
+        
+        # Reverse the list to start processing from the deepest feature map
         reversed_feats = feat_list[::-1]
         
         intermediate_masks = []
-        prev_fused = None
+        accumulated_feat = None
         
-        for block_idx in range(self.num_blocks):
-            start_idx = block_idx * self.features_per_block
-            end_idx = (block_idx + 1) * self.features_per_block
-            group = reversed_feats[start_idx:end_idx]
+        for i in range(self.num_features):
+            current_feat = reversed_feats[i]
             
-            reduced_group = [self.input_reduction[block_idx](f) for f in group]
-            group_concat = torch.cat(reduced_group, dim=1) 
+            # Reduce channel dimensionality
+            reduced_feat = self.input_reduction[i](current_feat)
             
-            if block_idx == 0:
-                fused = self.fuse_convs[block_idx](group_concat)
+            if i == 0:
+                # Process the deepest level
+                fused = self.fuse_convs[i](reduced_feat)
             else:
-                # Upsample the current shallower group to match current spatial scale
-                current_upsampled = self.shallow_upsamplers[block_idx](group_concat)
+                # Upsample the accumulated features from the previous deeper level
+                upsampled_accumulated = self.up_trans[i - 1](accumulated_feat)
                 
-                # Upsample the accumulated deeper features
-                prev_upsampled = self.up_trans[block_idx - 1](prev_fused)
+                # Concatenate the upsampled features with the current shallower features
+                concat_feat = torch.cat([upsampled_accumulated, reduced_feat], dim=1)
                 
-                # Concatenate and fuse
-                concat_fused = torch.cat([prev_upsampled, current_upsampled], dim=1)
-                fused = self.fuse_convs[block_idx](concat_fused)
+                # Fuse the concatenated representation
+                fused = self.fuse_convs[i](concat_feat)
                 
-            # Deep supervision calculation
-            intermediate_logit = self.multilevel_mask_convs[block_idx](fused)
+            # Update the accumulated feature for the next iteration
+            accumulated_feat = fused
+            
+            # Generate the deep supervision mask for the current level
+            intermediate_logit = self.multilevel_mask_convs[i](accumulated_feat)
             intermediate_masks.append(intermediate_logit)
             
-            prev_fused = fused
-            
-        neck_out = self.neck(prev_fused)
+        # Final neck and output generation
+        neck_out = self.neck(accumulated_feat)
         multiclass_mask = self.multiclass_mask_conv(neck_out)
 
-        # Final interpolation to exact target size
-        multiclass_mask = F.interpolate(multiclass_mask, size=(768, 1152), mode='bilinear', align_corners=False)
+        # Final interpolation to the target ground truth resolution
+        multiclass_mask = F.interpolate(multiclass_mask, size=(768, 1152), mode='nearest', align_corners=False)
         
         return multiclass_mask, intermediate_masks

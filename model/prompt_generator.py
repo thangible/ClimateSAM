@@ -45,7 +45,7 @@ class PromptGenerator(nn.Module):
             # Upsample each feature (by a factor of 2 each ConvTranspose2d)
             self.block_feature_upsamplers.append(
                 nn.Sequential(*[
-                    nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+                    nn.Upsample(scale_factor=2, mode='nearest', align_corners=False)
                     for i in range(num_layers)
                 ])
             )
@@ -72,7 +72,7 @@ class PromptGenerator(nn.Module):
             up_in_channels = fused_channels if block_idx == 0 else fused_channels * 2
             # Extra upsampling: always upsample by a factor of 2.
             self.block_out_trans.append(
-                nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
+                nn.Upsample(scale_factor=2, mode='nearest', align_corners=False)
             )
 
         self.neck = nn.Sequential(
@@ -154,7 +154,7 @@ class PromptGenerator(nn.Module):
         multiclass_mask = self.multiclass_mask_conv(neck_out)
 
         # Interpolate the mask (B, 3, H, W)
-        multiclass_mask = F.interpolate(multiclass_mask, size=(768, 1152), mode='bilinear', align_corners=False)
+        multiclass_mask = F.interpolate(multiclass_mask, size=(768, 1152), mode='nearest', align_corners=False)
         
         # tc_mask = self.mask1_conv(neck_out)
         # ar_mask = self.mask2_conv(neck_out)
