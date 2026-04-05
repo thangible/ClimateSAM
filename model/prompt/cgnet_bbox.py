@@ -180,7 +180,9 @@ class CGNetBBoxPrompter:
         if weights_path and os.path.exists(weights_path):
             self.cgnet_model.load_state_dict(torch.load(weights_path, map_location=device), strict=False)
             print(f"Loaded CGNet weights from {weights_path}")
-            
+        else:
+            print(f"CGNet weights not found at {weights_path}, using random initialization.")
+
         self.cgnet_model.to(device)
         self.optimizer = torch.optim.Adam(self.cgnet_model.parameters(), lr=1e-4)
         
