@@ -14,6 +14,7 @@ class PromptGenerator(nn.Module):
         self.num_features = num_features
         
         self.input_reduction = nn.ModuleList()
+        self.shallow_upsamplers = nn.ModuleList()
         self.up_trans = nn.ModuleList()
         self.fuse_convs = nn.ModuleList()
         self.multilevel_mask_convs = nn.ModuleList()
@@ -27,8 +28,22 @@ class PromptGenerator(nn.Module):
                 )
             )
             
+            # Create the learned upsampling pathway for the incoming shallower features.
+            # The higher the level (i), the more times it needs to be upsampled to match the main branch.
+            shallow_layers = []
+            for _ in range(i):
+                shallow_layers.append(
+                    nn.ConvTranspose2d(fused_channels, fused_channels, kernel_size=2, stride=2)
+                )
+                shallow_layers.append(nn.ReLU(inplace=True))
+                
+            if len(shallow_layers) > 0:
+                self.shallow_upsamplers.append(nn.Sequential(*shallow_layers))
+            else:
+                self.shallow_upsamplers.append(nn.Identity())
+            
             if i == 0:
-                # The deepest feature map does not require upsampling or concatenation initially
+                # Deepest level fusion
                 self.fuse_convs.append(
                     nn.Sequential(
                         nn.Conv2d(fused_channels, fused_channels, kernel_size=3, padding=1),
@@ -37,12 +52,12 @@ class PromptGenerator(nn.Module):
                     )
                 )
             else:
-                # Transpose convolution to double the size of the accumulated features from the previous level
+                # Transpose convolution to double the size of the accumulated main branch
                 self.up_trans.append(
                     nn.ConvTranspose2d(fused_channels, fused_channels, kernel_size=2, stride=2)
                 )
                 
-                # Fuse the concatenated features which now have twice the fused_channels
+                # Fuse the concatenated features
                 self.fuse_convs.append(
                     nn.Sequential(
                         nn.Conv2d(fused_channels * 2, fused_channels, kernel_size=3, padding=1),
@@ -100,8 +115,11 @@ class PromptGenerator(nn.Module):
                 # Upsample the accumulated features from the previous deeper level
                 upsampled_accumulated = self.up_trans[i - 1](accumulated_feat)
                 
-                # Concatenate the upsampled features with the current shallower features
-                concat_feat = torch.cat([upsampled_accumulated, reduced_feat], dim=1)
+                # Upsample the incoming shallower feature using the learned ConvTranspose2d layers
+                aligned_reduced_feat = self.shallow_upsamplers[i](reduced_feat)
+                
+                # Concatenate the upsampled features with the aligned shallower features
+                concat_feat = torch.cat([upsampled_accumulated, aligned_reduced_feat], dim=1)
                 
                 # Fuse the concatenated representation
                 fused = self.fuse_convs[i](concat_feat)
@@ -117,7 +135,8 @@ class PromptGenerator(nn.Module):
         neck_out = self.neck(accumulated_feat)
         multiclass_mask = self.multiclass_mask_conv(neck_out)
 
-        # Final interpolation to the target ground truth resolution
-        multiclass_mask = F.interpolate(multiclass_mask, size=(768, 1152), mode='nearest', align_corners=False)
+        # Final interpolation to the target ground truth resolution is still standard practice 
+        # (as the GT mask is rarely the exact downsampled multiple of the ViT output)
+        multiclass_mask = F.interpolate(multiclass_mask, size=(768, 1152), mode='bilinear', align_corners=False)
         
         return multiclass_mask, intermediate_masks
