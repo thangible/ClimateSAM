@@ -61,6 +61,111 @@ def setup_optimizer_and_scheduler(model, worker_args):
     )
     return optimizer, scheduler
 
+@torch.no_grad()
+def validate_cgnet_bboxes(
+    val_dataloader, 
+    ar_metrics, 
+    tc_metrics, 
+    model, 
+    prompter, 
+    device, 
+    conf_threshold=0.5,
+    iou_threshold=0.4,
+    max_samples=None
+):
+    """
+    Validate model using direct BBox predictions from CGNetBBoxPrompter.
+    """
+    model.eval()
+    prompter.cgnet_model.eval()
+    
+    total_samples = 0
+    valid_pbar = tqdm(
+        total=len(val_dataloader), 
+        desc=f'Validation (BBox conf={conf_threshold}, iou={iou_threshold})',
+        leave=False
+    )
+    
+    with torch.no_grad():
+        for val_step, batch in enumerate(val_dataloader):
+            if max_samples and total_samples >= max_samples:
+                break
+                
+            batch = batch_to_cuda(batch, device)
+            total_samples += batch['input'].shape[0]
+            
+            # 1. Generate BBox prompts directly using the NEW CGNetBBoxPrompter
+            features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
+            prompt_dict = prompter.get_prompts(features, conf_threshold=conf_threshold, iou_threshold=iou_threshold)
+            
+            # 2. Package for SAM
+            combined_prompt_dict = {
+                'ar_point_prompts': None,
+                'tc_point_prompts': None,
+                'ar_bbox_prompts': prompt_dict['ar_bbox_prompts'],
+                'tc_bbox_prompts': prompt_dict['tc_bbox_prompts']
+            }
+            
+            # 3. Set inference images
+            images = model.set_infer_img(batch['input'])
+            
+            # 4. Perform inference with combined prompts - all at once
+            tc_masks, ar_masks = model.infer(
+                ar_point_prompts=combined_prompt_dict['ar_point_prompts'],
+                tc_point_prompts=combined_prompt_dict['tc_point_prompts'],
+                ar_bbox_prompts=combined_prompt_dict['ar_bbox_prompts'],
+                tc_bbox_prompts=combined_prompt_dict['tc_bbox_prompts']
+            )
+            
+            # 5. Extract ground truth masks
+            masks_gt = batch['gt_mask']
+            masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt]
+            masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt]
+            
+            # Ensure correct shape for metrics [B, 1, 1, H, W]
+            for masks in [masks_ar_gts, masks_tc_gts, ar_masks, tc_masks]:
+                for i in range(len(masks)):
+                    if len(masks[i].shape) == 2:
+                        masks[i] = masks[i][None, None, :]
+                    if len(masks[i].shape) == 3:
+                        masks[i] = masks[i][:, None, :]
+                    if len(masks[i].shape) != 4:
+                        raise RuntimeError(f"Unexpected mask shape: {masks[i].shape}")
+            
+            # 6. Update metrics
+            tc_metrics.update(tc_masks, masks_tc_gts, batch['index_name'])
+            ar_metrics.update(ar_masks, masks_ar_gts, batch['index_name'])
+            
+            valid_pbar.update(1)
+    
+    valid_pbar.close()
+    
+    # Compute metrics
+    ar_metric_dict, _ = ar_metrics.compute()
+    tc_metric_dict, _ = tc_metrics.compute()
+    
+    results = {
+        'prompt_type': 'bbox_direct',
+        'conf_threshold': conf_threshold,
+        'iou_threshold': iou_threshold,
+        'miou_ar': ar_metric_dict['Mean Foreground IoU'],
+        'miou_tc': tc_metric_dict['Mean Foreground IoU'],
+        'mean_acc_ar': ar_metric_dict['Mean Acc'],
+        'mean_acc_tc': tc_metric_dict['Mean Acc'],
+        'overall_acc_ar': ar_metric_dict['Overall Acc'],
+        'overall_acc_tc': tc_metric_dict['Overall Acc'],
+        'freqw_acc_ar': ar_metric_dict['FreqW Acc'],
+        'freqw_acc_tc': tc_metric_dict['FreqW Acc'],
+        'miou_including_bg_ar': ar_metric_dict['Mean IoU'],
+        'miou_including_bg_tc': tc_metric_dict['Mean IoU'],
+    }
+    
+    # Reset metrics for next validation
+    ar_metrics.reset()
+    tc_metrics.reset()
+    
+    return results
+
 def setup_device_and_distributed(worker_id, worker_args):
     gpu_num = len(worker_args.used_gpu)
     world_size = os.environ['WORLD_SIZE'] if 'WORLD_SIZE' in os.environ.keys() else gpu_num
@@ -156,31 +261,66 @@ def main_worker(worker_id, worker_args):
     print("Starting CGNet Bounding Box Training...")
     cgnetprompter.train(dataloader=train_dataloader, epochs=max_epoch_num)
     
-    # Validation / Inference Check
-    print("Testing prompt generation on validation set...")
-    count = 0
-    for batch in val_dataloader:
-        features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
-        
-        # get_prompts returns a list of tensors [N, 6] -> [x_min, y_min, x_max, y_max, conf, class_id]
-        pred_boxes = cgnetprompter.get_prompts(features, conf_threshold=0.5, iou_threshold=0.4)
+    # ---------------------------------------------------------
+    # Validation / SAM Inference Phase
+    # ---------------------------------------------------------
+    print("Initializing SAM for final validation...")
+    
+    climatesam = ClimateSAM(
+        model_type=worker_args.sam_type, 
+        mlp_ratio=worker_args.image_encoder_mlp_ratio,
+        enable_wandb_logging=getattr(worker_args, 'debugging', False)
+    ).to(device=device)
+    
+    # Load pretrained SAM weights if available
+    weights_name = getattr(worker_args, 'encoder_weights_name', 'phase_1_weights')
+    image_encoder_path = os.path.join(worker_args.exp_dir, f"{weights_name}.pth")
+    
+    if os.path.exists(image_encoder_path):
+        print(f"Loading SAM weights from {image_encoder_path}")
+        checkpoint = torch.load(image_encoder_path, map_location=device)
+        if 'image_encoder' in checkpoint: 
+            climatesam.image_encoder.load_state_dict(checkpoint['image_encoder'])
+        if 'mask_decoder' in checkpoint: 
+            climatesam.mask_decoder.load_state_dict(checkpoint['mask_decoder'])
+        if 'input_adapter' in checkpoint: 
+            climatesam.input_adapter.load_state_dict(checkpoint['input_adapter'])
+    else:
+        print(f"Warning: SAM weights not found at {image_encoder_path}. Using default initialization.")
 
-        print(f"--- Batch {count} ---")
-        for b_idx, boxes in enumerate(pred_boxes):
-            print(f"Image {b_idx}: Detected {boxes.shape[0]} bounding boxes.")
-            if boxes.shape[0] > 0:
-                print(f"Sample boxes [xmin, ymin, xmax, ymax, conf, cls]: \n{boxes[:2]}")
-                
-        count += 1
-        if count >= 4:
-            break
-            
-    # SAM Phase Initialization (if continuing into SAM training)
-    # climatesam = ClimateSAM(
-    #     model_type=worker_args.sam_type, 
-    #     mlp_ratio=worker_args.image_encoder_mlp_ratio,
-    #     enable_wandb_logging=getattr(worker_args, 'debugging', False)
-    # ).to(device=device)
+    # Initialize segmentation metrics
+    ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+    tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+
+    print("Running final validation with integrated BBox Prompter and SAM...")
+    results = validate_cgnet_bboxes(
+        val_dataloader=val_dataloader,
+        ar_metrics=ar_metrics,
+        tc_metrics=tc_metrics,
+        model=climatesam,
+        prompter=cgnetprompter,
+        device=device,
+        conf_threshold=0.5,
+        iou_threshold=0.4,
+        max_samples=None
+    )
+
+    # Print summary
+    print("\n" + "="*60)
+    print("FINAL VALIDATION RESULTS")
+    print("="*60)
+    print(f"mIoU TC: {results['miou_tc']:.4f}, mIoU AR: {results['miou_ar']:.4f}")
+    print(f"Mean Acc TC: {results['mean_acc_tc']:.4f}, Mean Acc AR: {results['mean_acc_ar']:.4f}")
+    print("="*60)
+    
+    # Log to WandB
+    if hasattr(worker_args, 'wandb') and worker_args.wandb:
+        wandb.log({
+            'val_final/miou_tc': results['miou_tc'],
+            'val_final/miou_ar': results['miou_ar'],
+            'val_final/mean_acc_tc': results['mean_acc_tc'],
+            'val_final/mean_acc_ar': results['mean_acc_ar']
+        })
     
 if __name__ == '__main__':
     print("Starting training process...")
