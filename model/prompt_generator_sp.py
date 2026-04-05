@@ -36,9 +36,19 @@ class PromptGenerator(nn.Module):
             
             if i == 0:
                 # Deepest level fusion
+                # self.fuse_convs.append(
+                #     nn.Sequential(
+                #         nn.Conv2d(fused_channels, fused_channels, kernel_size=3, padding=1),
+                #         LayerNorm2d(fused_channels),
+                #         nn.ReLU(inplace=True)
+                #     )
+                # )
                 self.fuse_convs.append(
                     nn.Sequential(
-                        nn.Conv2d(fused_channels, fused_channels, kernel_size=3, padding=1),
+                        # Depthwise (groups = in_channels)
+                        nn.Conv2d(fused_channels * 2, fused_channels * 2, kernel_size=3, padding=1, groups=fused_channels * 2),
+                        # Pointwise
+                        nn.Conv2d(fused_channels * 2, fused_channels, kernel_size=1),
                         LayerNorm2d(fused_channels),
                         nn.ReLU(inplace=True)
                     )
@@ -49,15 +59,24 @@ class PromptGenerator(nn.Module):
                     nn.ConvTranspose2d(fused_channels, fused_channels, kernel_size=2, stride=2)
                 )
                 
-                # Fuse the concatenated features
+                # # Fuse the concatenated features
+                # self.fuse_convs.append(
+                #     nn.Sequential(
+                #         nn.Conv2d(fused_channels * 2, fused_channels, kernel_size=3, padding=1),
+                #         LayerNorm2d(fused_channels),
+                #         nn.ReLU(inplace=True)
+                #     )
+                # )
                 self.fuse_convs.append(
                     nn.Sequential(
-                        nn.Conv2d(fused_channels * 2, fused_channels, kernel_size=3, padding=1),
+                        # Depthwise (groups = in_channels)
+                        nn.Conv2d(fused_channels * 2, fused_channels * 2, kernel_size=3, padding=1, groups=fused_channels * 2),
+                        # Pointwise
+                        nn.Conv2d(fused_channels * 2, fused_channels, kernel_size=1),
                         LayerNorm2d(fused_channels),
                         nn.ReLU(inplace=True)
                     )
                 )
-                
             # Deep supervision layer applied at every hierarchical level
             self.multilevel_mask_convs.append(
                 nn.Conv2d(fused_channels, out_channels, kernel_size=3, padding=1)
