@@ -186,13 +186,13 @@ class CGNetBBoxPrompter:
         self.wandb = getattr(worker_args, 'wandb', False)
         self.run_name = getattr(worker_args, 'run_name', None)
 
-    def train(self, dataloader, epochs):
-        best_loss = float('inf')
+    def train(self, train_dataloader, val_dataloader, epochs):
+        best_val_loss = float('inf')
         
         for epoch in range(1, epochs + 1):
             self.cgnet_model.train()
-            print(f'Epoch {epoch}:')
-            epoch_loader = tqdm(dataloader)
+            print(f'\nEpoch {epoch}/{epochs}:')
+            epoch_loader = tqdm(train_dataloader, desc="Training")
             
             epoch_loss_sum = 0.0
             epoch_loss_count = 0
@@ -204,10 +204,7 @@ class CGNetBBoxPrompter:
             for batch in epoch_loader:
                 features = batch['cgnet_input'].to(device=self.device, dtype=torch.float32)
                 
-                # Get dynamic image dimensions from the feature tensor
                 img_h, img_w = features.shape[2], features.shape[3]
-
-                # Parse the raw absolute bounding boxes into normalized target lists
                 raw_ar_boxes = batch['ar_bbox_prompts']
                 raw_tc_boxes = batch['tc_bbox_prompts']
                 
@@ -220,7 +217,7 @@ class CGNetBBoxPrompter:
                 
                 loss, (l_conf, l_box, l_cls) = yolo_detection_loss(outputs, targets)
 
-                epoch_loader.set_description(f'Total Loss: {loss.item():.4f}')
+                epoch_loader.set_description(f'Train Loss: {loss.item():.4f}')
                 
                 loss.backward()
                 self.optimizer.step()
@@ -234,18 +231,7 @@ class CGNetBBoxPrompter:
 
             avg_epoch_loss = epoch_loss_sum / epoch_loss_count if epoch_loss_count > 0 else 0.0
 
-            print(f"Epoch stats: Avg Loss {avg_epoch_loss:.4f} (Conf: {np.mean(epoch_conf_losses):.4f}, Box: {np.mean(epoch_box_losses):.4f}, Cls: {np.mean(epoch_cls_losses):.4f})")
-
-            if avg_epoch_loss < best_loss and epoch > 10:
-                best_loss = avg_epoch_loss
-                self.save_model()
-                print(f"New best model saved with Loss: {best_loss:.4f}")
-                if self.wandb:
-                    try:
-                        save_path = os.path.join(self.exp_dir, f"cgnet_bbox_weight.pth")
-                        wandb.save(save_path)
-                    except Exception as e:
-                        print(f"WandB save failed: {e}")
+            print(f"Train Stats: Avg Loss {avg_epoch_loss:.4f} (Conf: {np.mean(epoch_conf_losses):.4f}, Box: {np.mean(epoch_box_losses):.4f}, Cls: {np.mean(epoch_cls_losses):.4f})")
 
             if self.wandb:
                 log_dict = {
@@ -259,7 +245,129 @@ class CGNetBBoxPrompter:
                     wandb.log(log_dict, step=epoch)
                 except Exception as e:
                     print(f"WandB scalar log failed: {e}")
+
+            # --------------------------------------------------------- #
+            # Validation every 5 epochs or on the final epoch         #
+            # --------------------------------------------------------- #
+            if epoch % 5 == 0 or epoch == epochs:
+                val_loss, val_ar_iou, val_tc_iou = self.validate(val_dataloader, epoch)
+                print(f"Validation Stats: Loss {val_loss:.4f} | AR BBox IoU: {val_ar_iou:.4f} | TC BBox IoU: {val_tc_iou:.4f}")
+                
+                if self.wandb:
+                    try:
+                        wandb.log({
+                            "val/loss": val_loss,
+                            "val/ar_bbox_iou": val_ar_iou,
+                            "val/tc_bbox_iou": val_tc_iou,
+                            "epoch": epoch
+                        }, step=epoch)
+                    except Exception as e:
+                        print(f"WandB validation log failed: {e}")
+
+                # Save best model based on validation loss
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                    self.save_model()
+                    print(f"*** New best model saved with Val Loss: {best_val_loss:.4f} ***")
+                    if self.wandb:
+                        try:
+                            save_path = os.path.join(self.exp_dir, f"cgnet_bbox_weight.pth")
+                            wandb.save(save_path)
+                        except Exception as e:
+                            print(f"WandB save failed: {e}")
+
+    @torch.no_grad()
+    def validate(self, val_dataloader, epoch):
+        self.cgnet_model.eval()
+        epoch_loss_sum = 0.0
+        epoch_loss_count = 0
+        
+        ar_ious = []
+        tc_ious = []
+        
+        plot_saved = False
+        
+        from utility import plot_mask_with_points_and_bbox  # Assuming it's accessible
+        
+        for batch in tqdm(val_dataloader, desc="Validating"):
+            features = batch['cgnet_input'].to(device=self.device, dtype=torch.float32)
+            img_h, img_w = features.shape[2], features.shape[3]
             
+            raw_ar_boxes = batch['ar_bbox_prompts']
+            raw_tc_boxes = batch['tc_bbox_prompts']
+            bboxes = parse_climatenet_bboxes(raw_ar_boxes, raw_tc_boxes, img_h, img_w)
+            
+            outputs = self.cgnet_model(features)
+            grid_shape = outputs.shape[2:] 
+            targets = build_grid_targets(bboxes, grid_shape, self.device)
+            
+            loss, _ = yolo_detection_loss(outputs, targets)
+            epoch_loss_sum += float(loss.item())
+            epoch_loss_count += 1
+            
+            # Get BBox Predictions
+            prompt_dict = self.get_prompts(features, conf_threshold=0.5, iou_threshold=0.4)
+            pred_ar_bboxes = prompt_dict['ar_bbox_prompts']
+            pred_tc_bboxes = prompt_dict['tc_bbox_prompts']
+            
+            # Compute Average Maximum IoU Metric
+            for b in range(features.shape[0]):
+                # AR IoU Calculation
+                gt_ar = raw_ar_boxes[b]  # [N, 1, 4]
+                pr_ar = pred_ar_bboxes[b]  # [M, 1, 4]
+                if gt_ar is not None and pr_ar is not None:
+                    gt_ar_flat = gt_ar.view(-1, 4).to(self.device)
+                    pr_ar_flat = pr_ar.view(-1, 4).to(self.device)
+                    ious = ops.box_iou(pr_ar_flat, gt_ar_flat)
+                    ar_ious.append(ious.max(dim=1)[0].mean().item()) # Avg IoU of matched boxes
+                elif gt_ar is None and pr_ar is None:
+                    ar_ious.append(1.0) # Correctly predicted empty
+                else:
+                    ar_ious.append(0.0) # False positive or false negative
+                    
+                # TC IoU Calculation
+                gt_tc = raw_tc_boxes[b]
+                pr_tc = pred_tc_bboxes[b]
+                if gt_tc is not None and pr_tc is not None:
+                    gt_tc_flat = gt_tc.view(-1, 4).to(self.device)
+                    pr_tc_flat = pr_tc.view(-1, 4).to(self.device)
+                    ious = ops.box_iou(pr_tc_flat, gt_tc_flat)
+                    tc_ious.append(ious.max(dim=1)[0].mean().item())
+                elif gt_tc is None and pr_tc is None:
+                    tc_ious.append(1.0)
+                else:
+                    tc_ious.append(0.0)
+            
+            # Save visual plot for the very first batch
+            if not plot_saved and self.wandb:
+                gt_mask = batch['gt_mask'][0] 
+                p_ar = pred_ar_bboxes[0]
+                p_tc = pred_tc_bboxes[0]
+                
+                plot_path = os.path.join(self.exp_dir, f"val_epoch_{epoch}.png")
+                
+                # Pass GT Mask to display background context, and overlay predicted BBoxes
+                plot_mask_with_points_and_bbox(
+                    mask=gt_mask,
+                    ar_bbox=p_ar,
+                    tc_bbox=p_tc,
+                    save_path=plot_path,
+                    title=f"BBox Predictions - Epoch {epoch}"
+                )
+                
+                try:
+                    wandb.log({f"val/predictions": wandb.Image(plot_path)}, step=epoch)
+                except Exception as e:
+                    print(f"WandB image log failed: {e}")
+
+                plot_saved = True
+                
+        avg_loss = epoch_loss_sum / epoch_loss_count if epoch_loss_count > 0 else 0.0
+        avg_ar_iou = np.mean(ar_ious) if len(ar_ious) > 0 else 0.0
+        avg_tc_iou = np.mean(tc_ious) if len(tc_ious) > 0 else 0.0
+        
+        return avg_loss, avg_ar_iou, avg_tc_iou
+
     def save_model(self):
         save_path = os.path.join(self.exp_dir, f"cgnet_bbox_weight.pth")
         torch.save(self.cgnet_model.state_dict(), save_path)

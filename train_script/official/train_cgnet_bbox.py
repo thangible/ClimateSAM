@@ -22,7 +22,7 @@ from loss_function import ClimateLoss, compute_climate_loss
 from tqdm import tqdm
 from contextlib import nullcontext
 from parser_config import parse
-from climatesam import ClimateSAM
+from model.climatesam import ClimateSAM
 from dataset.climatenet import ClimateDataset
 from evaluator import StreamSegMetrics
 import copy
@@ -251,7 +251,7 @@ def main_worker(worker_id, worker_args):
 
     # Initialize the new BBox Prompter
     cgnetprompter = CGNetBBoxPrompter(
-        weights_path=None, # You can update this to the new checkpoint name
+        weights_path=worker_args.pretrained_name, # You can update this to the new checkpoint name
         device=device, 
         worker_args=worker_args,
         num_classes=2 # 0: TC, 1: AR
