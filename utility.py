@@ -896,7 +896,7 @@ def worker_init_fn(worker_id: int, base_seed: int, same_worker_seed: bool = True
     """
     Set random seed for each worker in DataLoader to ensure the reproducibility.
     """
-    seed = base_seed if same_worker_seed else base_seed + worker_id
+    seed = (torch.initial_seed() + worker_id) % (2**32) if same_worker_seed else (base_seed + worker_id)
 
     random.seed(seed)
     np.random.seed(seed)

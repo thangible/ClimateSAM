@@ -18,7 +18,7 @@ import torch.multiprocessing as mp
 import torch.nn.functional as F
 from functools import partial
 from torch.utils.data import DataLoader
-from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug, setup_optimizer_and_scheduler
+from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug, setup_optimizer_and_scheduler, worker_init_fn, setup_device_and_distributed
 from loss_function import ClimateLoss, compute_climate_loss
 from tqdm import tqdm
 from contextlib import nullcontext
@@ -29,32 +29,8 @@ from evaluator import StreamSegMetrics
 import copy
 import wandb
 
-def worker_init_fn(worker_id: int, base_seed: int, same_worker_seed: bool = True):
-    """
-    Set random seed for each worker in DataLoader to ensure the reproducibility.
-
-    """
-    seed = base_seed if same_worker_seed else base_seed + worker_id
-
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)
-    
 
 
-def setup_device_and_distributed(worker_id, worker_args):
-    gpu_num = len(worker_args.used_gpu)
-    world_size = os.environ['WORLD_SIZE'] if 'WORLD_SIZE' in os.environ.keys() else gpu_num
-    base_rank = os.environ['RANK'] if 'RANK' in os.environ.keys() else 0
-    local_rank = (base_rank * gpu_num) + worker_id
-    if gpu_num > 1:
-        dist.init_process_group(backend='nccl', init_method=worker_args.dist_url,
-                                world_size=world_size, rank=local_rank)
-    device = torch.device(f"cuda:{worker_id}")
-    torch.cuda.set_device(device)
-    return device, local_rank
 
     
 def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler):
@@ -486,6 +462,9 @@ def main_worker(worker_id, worker_args):
     print(f"Validation will be performed every {worker_args.valid_per_epochs} epochs.")
     model.train(mode = True, phase = worker_args.phase, verbose=True)
     for epoch in range(1, max_epoch_num + 1):
+        
+        if sampler is not None:
+            sampler.set_epoch(epoch)
         
         if epoch % worker_args.valid_per_epochs == 1 or epoch == max_epoch_num:
             if worker_args.load_pretrained or epoch > 1: 

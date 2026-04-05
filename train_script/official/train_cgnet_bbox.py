@@ -260,7 +260,7 @@ def main_worker(worker_id, worker_args):
     
     # Execute the training loop
     print("Starting CGNet Bounding Box Training...")
-    cgnetprompter.train(dataloader=train_dataloader, val_dataloader=val_dataloader, epochs=max_epoch_num)
+    cgnetprompter.train(train_dataloader=train_dataloader, val_dataloader=val_dataloader, epochs=max_epoch_num)
 
     # ---------------------------------------------------------
     # Validation / SAM Inference Phase
