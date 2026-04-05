@@ -1023,3 +1023,13 @@ def setup_device_and_distributed(worker_id, worker_args):
     device = torch.device(f"cuda:{worker_id}")
     torch.cuda.set_device(device)
     return device, local_rank
+
+def print_param_stats(module, phase):
+        for n, c in module.named_children():
+            total = sum(p.numel() for p in c.parameters())
+            trainable = sum(p.numel() for p in c.parameters() if p.requires_grad)
+            if total > 0:
+                print(f"{n.upper():<25} | train={str(c.training):<5} | {trainable:>9,}/{total:>12,} ({100*trainable/total:>5.2f}%)")
+        total = sum(p.numel() for p in module.parameters())
+        trainable = sum(p.numel() for p in module.parameters() if p.requires_grad)
+        print(f"Phase {phase}: trainable = {trainable:,} / {total:,}\n")

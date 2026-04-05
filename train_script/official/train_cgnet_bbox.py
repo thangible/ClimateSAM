@@ -17,7 +17,7 @@ import torch.multiprocessing as mp
 import torch.nn.functional as F
 from functools import partial
 from torch.utils.data import DataLoader
-from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug
+from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug, print_param_stats
 from loss_function import ClimateLoss, compute_climate_loss
 from tqdm import tqdm
 from contextlib import nullcontext
@@ -260,6 +260,7 @@ def main_worker(worker_id, worker_args):
     
     # Execute the training loop
     print("Starting CGNet Bounding Box Training...")
+    print_param_stats(cgnetprompter, phase="train")
     cgnetprompter.train(train_dataloader=train_dataloader, val_dataloader=val_dataloader, epochs=max_epoch_num)
 
     # ---------------------------------------------------------
