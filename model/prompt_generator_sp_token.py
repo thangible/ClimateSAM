@@ -62,6 +62,22 @@ class PromptGenerator(nn.Module):
             nn.Conv2d(fused_channels, out_channels, kernel_size=3, padding=1),
         )
 
+    def _build_gate(self, refined_token, proj_layer, batch_size, dtype, device):
+        gate = proj_layer(refined_token)
+
+        # Accept [C], [1, C], or [B, C] token layouts and align to image batch.
+        if gate.dim() == 1:
+            gate = gate.unsqueeze(0)
+
+        if gate.shape[0] == 1:
+            gate = gate.expand(batch_size, -1)
+        elif gate.shape[0] != batch_size:
+            raise ValueError(
+                f"Token batch mismatch: got {gate.shape[0]} gates for image batch {batch_size}."
+            )
+
+        return gate.to(device=device, dtype=dtype).unsqueeze(-1).unsqueeze(-1)
+
     def forward(self, feat_list, ar_refined=None, tc_refined=None):
         # Ensure we only process the expected number of hierarchical features
         feat_list = feat_list[-self.num_blocks * self.features_per_block:]
@@ -119,8 +135,20 @@ class PromptGenerator(nn.Module):
             b = neck_out.shape[0]
             
             # Project tokens to gates and reshape for spatial broadcasting
-            ar_gate = self.ar_gate_proj(ar_refined).view(b, self.fused_channels, 1, 1)
-            tc_gate = self.tc_gate_proj(tc_refined).view(b, self.fused_channels, 1, 1)
+            ar_gate = self._build_gate(
+                ar_refined,
+                self.ar_gate_proj,
+                b,
+                dtype=neck_out.dtype,
+                device=neck_out.device,
+            )
+            tc_gate = self._build_gate(
+                tc_refined,
+                self.tc_gate_proj,
+                b,
+                dtype=neck_out.dtype,
+                device=neck_out.device,
+            )
 
             # Task-specific feature highlighting and head projection
             ar_mask = self.ar_head(neck_out * ar_gate)
