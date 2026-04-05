@@ -217,7 +217,7 @@ def parse():
     )
     
     parser.add_argument(
-        '--gt_prompt_enlarge_ratio', default=[0, 0.3], type=float,
+        '--gt_prompt_enlarge_ratio', default=[0, 0.3], nargs='+', type=float,
         help="Enlarge ratio for the ground truth prompt points. Default is [0, 0.3]."
     )
     parser.add_argument(
