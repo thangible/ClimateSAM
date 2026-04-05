@@ -60,7 +60,7 @@ class PromptGenerator(nn.Module):
             num_layers = block_idx + 1
             self.block_feature_upsamplers.append(
                 nn.Sequential(*[
-                    nn.Upsample(scale_factor=2, mode='nearest', align_corners=False)
+                    nn.Upsample(scale_factor=2, mode='nearest' )
                     for _ in range(num_layers)
                 ])
             )
@@ -73,7 +73,7 @@ class PromptGenerator(nn.Module):
                 )
             )
             self.block_out_trans.append(
-                nn.Upsample(scale_factor=2, mode='nearest', align_corners=False)
+                nn.Upsample(scale_factor=2, mode='nearest' )
             )
 
         self.neck = nn.Sequential(
@@ -121,7 +121,7 @@ class PromptGenerator(nn.Module):
         
         # 4. Multiclass Prediction (Logits for classes 0, 1, 2) [cite: 48, 553]
         multiclass_mask = self.multiclass_mask_conv(neck_out)
-        multiclass_mask = F.interpolate(multiclass_mask, size=(768, 1152), mode='bilinear', align_corners=False)
+        multiclass_mask = F.interpolate(multiclass_mask, size=(768, 1152), mode='bilinear' )
         
         # 5. Class-specific binary heads using refined task tokens [cite: 249, 362]
         ar_mask, tc_mask = None, None
@@ -135,8 +135,8 @@ class PromptGenerator(nn.Module):
             ar_mask = self.ar_head(neck_out * ar_gate)
             tc_mask = self.tc_head(neck_out * tc_gate)
 
-            ar_mask = F.interpolate(ar_mask, size=(768, 1152), mode='nearest', align_corners=False)
-            tc_mask = F.interpolate(tc_mask, size=(768, 1152), mode='nearest', align_corners=False)
+            ar_mask = F.interpolate(ar_mask, size=(768, 1152), mode='nearest' )
+            tc_mask = F.interpolate(tc_mask, size=(768, 1152), mode='nearest' )
 
         return multiclass_mask, intermediate_masks, ar_mask, tc_mask
 
