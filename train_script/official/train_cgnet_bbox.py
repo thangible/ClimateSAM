@@ -12,29 +12,28 @@ for p in (PROJECT_ROOT, TRAIN_SCRIPT_DIR):
 import random
 import numpy as np
 import torch
-import os
 import torch.distributed as dist
 import torch.multiprocessing as mp
 import torch.nn.functional as F
 from functools import partial
 from torch.utils.data import DataLoader
-from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug
+from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug
 from loss_function import ClimateLoss, compute_climate_loss
 from tqdm import tqdm
 from contextlib import nullcontext
 from parser_config import parse
 from climatesam import ClimateSAM
-from model.prompt_generator import PromptGenerator
 from dataset.climatenet import ClimateDataset
 from evaluator import StreamSegMetrics
 import copy
 import wandb
-from model.prompt.cgnet import CGNetPrompter
+
+# Import the new BBox Prompter
+from model.prompt.cgnet_bbox import CGNetBBoxPrompter 
 
 def worker_init_fn(worker_id: int, base_seed: int, same_worker_seed: bool = True):
     """
     Set random seed for each worker in DataLoader to ensure the reproducibility.
-
     """
     seed = base_seed if same_worker_seed else base_seed + worker_id
 
@@ -48,19 +47,15 @@ def setup_optimizer_and_scheduler(model, worker_args):
     """
     Sets up a joint optimizer and scheduler for CAT-SAM and U-Net models.
     """
-    # Learning rate and weight decay with defaults
     lr = worker_args.lr if hasattr(worker_args, 'lr') else 1e-3
     weight_decay = worker_args.weight_decay if hasattr(worker_args, 'weight_decay') else 1e-4
 
-    # Combine parameters from both models
     all_trainable_params = list(p for p in model.parameters() if p.requires_grad) 
 
     optimizer = torch.optim.AdamW(
         params=all_trainable_params, lr=lr, weight_decay=weight_decay
     )
 
-    
-    # Cosine Annealing Learning Rate Scheduler
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
         optimizer=optimizer, T_max=worker_args.max_epoch_num, eta_min=1e-5
     )
@@ -77,8 +72,6 @@ def setup_device_and_distributed(worker_id, worker_args):
     device = torch.device(f"cuda:{worker_id}")
     torch.cuda.set_device(device)
     return device, local_rank
-
-
         
 def main_worker(worker_id, worker_args):
     set_randomness()
@@ -89,23 +82,24 @@ def main_worker(worker_id, worker_args):
     print(f"Worker {worker_id} initialized on device {device} with local_rank {local_rank}.")
     
     # PREPARE DATASET
+    # Ensure generate_prompt is True if it's required to yield bounding boxes inside your dataset
     dataset_dir = worker_args.data_dir
     train_dataset = ClimateDataset(
         data_dir=dataset_dir, train_flag=True, shot_num=worker_args.shot_num,
-        augmented=worker_args.augmented, generate_prompt=False
+        augmented=worker_args.augmented, generate_prompt=True, prompt_type='bbox'
     )
-    val_dataset = ClimateDataset(data_dir=dataset_dir, train_flag=False, augmented=False)
+    val_dataset = ClimateDataset(data_dir=dataset_dir, train_flag=False, augmented=False, generate_prompt=True, prompt_type='bbox')
     
     train_collate_fn = train_dataset.collate_fn
     val_collate_fn = val_dataset.collate_fn
 
     if hasattr(worker_args, 'debugging') and worker_args.debugging:
-        debug_size = getattr(worker_args, 'debug_size', 10)  # Default to 50 samples
+        debug_size = getattr(worker_args, 'debug_size', 10)  
         indices = list(range(min(debug_size, len(train_dataset))))
         train_dataset = torch.utils.data.Subset(train_dataset, indices)
         print(f"Debug mode: Using only {len(train_dataset)} training samples")
 
-        debug_val_size = getattr(worker_args, 'debug_val_size', 5)  # Default to 10 samples
+        debug_val_size = getattr(worker_args, 'debug_val_size', 5)  
         val_indices = list(range(min(debug_val_size, len(val_dataset))))
         val_dataset = torch.utils.data.Subset(val_dataset, val_indices)
         print(f"Debug mode: Using only {len(val_dataset)} validation samples")
@@ -119,7 +113,6 @@ def main_worker(worker_id, worker_args):
     train_bs = worker_args.train_bs if worker_args.train_bs else (1 if worker_args.shot_num == 1 else 4)
     gradient_accumulation_steps = getattr(worker_args, 'gradient_accumulation_steps', 1)
     
-    # Adjust batch size for gradient accumulation
     actual_train_bs = train_bs // gradient_accumulation_steps
     if actual_train_bs < 1:
         actual_train_bs = 1
@@ -138,7 +131,6 @@ def main_worker(worker_id, worker_args):
         
     sampler = None
         
-            
     g = torch.Generator()
     g.manual_seed(3407)
         
@@ -151,68 +143,45 @@ def main_worker(worker_id, worker_args):
         dataset=val_dataset, batch_size=val_bs, shuffle=False, num_workers=val_workers,
         drop_last=False, collate_fn=val_collate_fn, worker_init_fn=partial(worker_init_fn, base_seed=3407), generator=g
     )
+
+    # Initialize the new BBox Prompter
+    cgnetprompter = CGNetBBoxPrompter(
+        weights_path=None, # You can update this to the new checkpoint name
+        device=device, 
+        worker_args=worker_args,
+        num_classes=2 # 0: TC, 1: AR
+    )
     
-
-    cgnetprompter = CGNetPrompter(weights_path='pretrained/exp_cgnet_weight.pth', device=device, worker_args=worker_args)
-    # cgnetprompter.train(dataloader=train_dataloader, epochs=100)
+    # Execute the training loop
+    print("Starting CGNet Bounding Box Training...")
+    cgnetprompter.train(dataloader=train_dataloader, epochs=max_epoch_num)
     
-    # count = 0
-    # for batch in val_dataloader:
-
-    #     features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
-    #     prompt_dict = cgnetprompter.get_prompts(features, prompt_type='point')
-
-
-
-    #     point = prompt_dict['ar_point_prompts'][0]
-    #     if point is not None:
-    #         print(f"AR Point Prompts shape: {point[0].shape if point[0] is not None else None}, Labels shape: {point[1].shape if point[1] is not None else None}")        
-    #     # print(f"Prompt dictionary keys: {list(prompt_dict.keys())}")
-    #     # for key, value in prompt_dict.items():
-    #     #     if isinstance(value, torch.Tensor):
-    #     #         print(f"{key}: Tensor with shape {value.shape}")
-    #     #     elif isinstance(value, list):
-    #     #         print(f"{key}: List with length {len(value)}")
-    #     #         if len(value) > 0 and isinstance(value[0], torch.Tensor):
-    #     #             print(f"  First item shape: {value[0].shape}")
-    #     #         else:
-    #     #             print(f"  First item type: {type(value[0])}")
-    #     #         # if len(value) > 0:
-    #     #         #     print(value[0])
-    #     #     elif isinstance(value, tuple):
-    #     #         print(f"{key}: Tuple with length {len(value)}")
-    #     #         print(f"  First element type: {type(value[0])}")
-    #     #         print(f"  Second element type: {type(value[1])}")
-    #     #     else:
-    #     #         print(f"{key}: {type(value)}")
-    #     # count += 1
-    #     if count >= 4:
-    #         break
-    
-    
+    # Validation / Inference Check
+    print("Testing prompt generation on validation set...")
+    count = 0
+    for batch in val_dataloader:
+        features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
         
-        # Do something with the prompts
-    ##########################
-    ###########################
-    
+        # get_prompts returns a list of tensors [N, 6] -> [x_min, y_min, x_max, y_max, conf, class_id]
+        pred_boxes = cgnetprompter.get_prompts(features, conf_threshold=0.5, iou_threshold=0.4)
+
+        print(f"--- Batch {count} ---")
+        for b_idx, boxes in enumerate(pred_boxes):
+            print(f"Image {b_idx}: Detected {boxes.shape[0]} bounding boxes.")
+            if boxes.shape[0] > 0:
+                print(f"Sample boxes [xmin, ymin, xmax, ymax, conf, cls]: \n{boxes[:2]}")
+                
+        count += 1
+        if count >= 4:
+            break
+            
+    # SAM Phase Initialization (if continuing into SAM training)
     # climatesam = ClimateSAM(
     #     model_type=worker_args.sam_type, 
     #     mlp_ratio=worker_args.image_encoder_mlp_ratio,
-    #     enable_wandb_logging=getattr(worker_args, 'debugging', False)  # Only log if debugging=True
+    #     enable_wandb_logging=getattr(worker_args, 'debugging', False)
     # ).to(device=device)
     
-    
-    # image_encoder_path = os.path.join(worker_args.exp_dir, f"phase_2_weights.pth")
-    # phase_2_checkpoint = torch.load(image_encoder_path, map_location='cpu')
-    # print(f"Pretrained weights from phase 2 loaded from {image_encoder_path}")
-    # climatesam.image_encoder.load_state_dict(phase_2_checkpoint['image_encoder'])
-    # print(f"Image encoder weights loaded from {image_encoder_path}")
-    # climatesam.mask_decoder.load_state_dict(phase_2_checkpoint['mask_decoder'])
-    # print(f"Mask decoder weights loaded from {image_encoder_path}")
-    # climatesam.input_adapter.load_state_dict(phase_2_checkpoint['input_adapter'])
-    # print(f"Input adapter weights loaded from {image_encoder_path}")
-    
-        
 if __name__ == '__main__':
     print("Starting training process...")
     args = parse()
@@ -221,7 +190,6 @@ if __name__ == '__main__':
         project_name = args.project_name if hasattr(args, 'project_name') else "climate-sam-cgnet"
         run_name = args.run_name if hasattr(args, 'run_name') else None
         wandb.init(project=project_name, name=run_name, config=vars(args))
-
 
     if torch.cuda.is_available():
         if 'CUDA_VISIBLE_DEVICES' in os.environ.keys():
@@ -233,10 +201,5 @@ if __name__ == '__main__':
     else:
         args.used_gpu, args.gpu_num = [], 1
 
-    # launch the experiment process for both single-GPU and multi-GPU settings
     if len(args.used_gpu) == 1:
         main_worker(worker_id=0, worker_args=args)
-
-
-
-

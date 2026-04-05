@@ -631,21 +631,21 @@ def main_worker(worker_id, worker_args):
         # {'positive_point_num': 5, 'negative_point_num': 5},
         # {'positive_point_num': 10, 'negative_point_num': 10},
         # {'positive_point_num': 5, 'negative_point_num': 10},
-        {'positive_point_num': 15, 'negative_point_num': 5},
-        {'positive_point_num': 10, 'negative_point_num': 5},
-        {'positive_point_num': 20, 'negative_point_num': 10},
-        {'positive_point_num': 20, 'negative_point_num': 5},
-        {'positive_point_num': 20, 'negative_point_num': 20},
+        # {'positive_point_num': 15, 'negative_point_num': 5},
+        # {'positive_point_num': 10, 'negative_point_num': 5},
+        # {'positive_point_num': 20, 'negative_point_num': 10},
+        # {'positive_point_num': 20, 'negative_point_num': 5},
+        # {'positive_point_num': 20, 'negative_point_num': 20},
     ]
     
     # Configuration 2: BBox prompts with different enlarge ratios
     bbox_configs = [
-        # {'enlarge_ratio': 0.0},
-        # {'enlarge_ratio': 0.1},
-        # {'enlarge_ratio': 0.2},
+        {'enlarge_ratio': 0.0},
+        {'enlarge_ratio': 0.1},
+        {'enlarge_ratio': 0.2},
         # {'enlarge_ratio': 0.3},
         # {'enlarge_ratio': 0.5},
-        # {'enlarge_ratio': -0.1},
+        {'enlarge_ratio': -0.1},
         # {'enlarge_ratio': -0.2},
     ]
     
@@ -689,42 +689,42 @@ def main_worker(worker_id, worker_args):
     #             'point_prompt/config': f"pos={config['positive_point_num']}_neg={config['negative_point_num']}"
     #         })
     
-    # # ==================== TEST BBOX PROMPTS ====================
-    # print("\n" + "-"*60)
-    # print("TESTING BBOX PROMPTS")
-    # print("-"*60)
+    # ==================== TEST BBOX PROMPTS ====================
+    print("\n" + "-"*60)
+    print("TESTING BBOX PROMPTS")
+    print("-"*60)
     
-    # for config in bbox_configs:
-    #     print(f"\nTesting BBox Prompt: enlarge_ratio={config['enlarge_ratio']}")
+    for config in bbox_configs:
+        print(f"\nTesting BBox Prompt: enlarge_ratio={config['enlarge_ratio']}")
         
-    #     ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
-    #     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+        ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+        tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
         
-    #     results = validate_with_prompt_config(
-    #         val_dataloader=val_dataloader,
-    #         ar_metrics=ar_metrics,
-    #         tc_metrics=tc_metrics,
-    #         model=climatesam,
-    #         prompter=prompter,
-    #         device=device,
-    #         prompt_type='bbox',
-    #         positive_point_num=0,
-    #         negative_point_num=0,
-    #         enlarge_ratio=config['enlarge_ratio'],
-    #         centroid_ratio=0,
-    #         worker_args=worker_args,
-    #         max_samples=None
-    #     )
+        results = validate_with_prompt_config(
+            val_dataloader=val_dataloader,
+            ar_metrics=ar_metrics,
+            tc_metrics=tc_metrics,
+            model=climatesam,
+            prompter=prompter,
+            device=device,
+            prompt_type='bbox',
+            positive_point_num=0,
+            negative_point_num=0,
+            enlarge_ratio=config['enlarge_ratio'],
+            centroid_ratio=0,
+            worker_args=worker_args,
+            max_samples=None
+        )
         
-    #     all_results.append(results)
-    #     print(f"  mIoU TC: {results['miou_tc']:.4f}, mIoU AR: {results['miou_ar']:.4f}")
+        all_results.append(results)
+        print(f"  mIoU TC: {results['miou_tc']:.4f}, mIoU AR: {results['miou_ar']:.4f}")
         
-    #     if worker_args.wandb:
-    #         wandb.log({
-    #             'bbox_prompt/miou_tc': results['miou_tc'],
-    #             'bbox_prompt/miou_ar': results['miou_ar'],
-    #             'bbox_prompt/enlarge_ratio': config['enlarge_ratio']
-    #         })
+        if worker_args.wandb:
+            wandb.log({
+                'bbox_prompt/miou_tc': results['miou_tc'],
+                'bbox_prompt/miou_ar': results['miou_ar'],
+                'bbox_prompt/enlarge_ratio': config['enlarge_ratio']
+            })
     
     # # ==================== TEST MASK PROMPTS ====================
     # print("\n" + "-"*60)
@@ -762,36 +762,36 @@ def main_worker(worker_id, worker_args):
     #             'mask_prompt/miou_ar': results['miou_ar'],
     #         })
     
-    # ==================== TEST COMBINED PROMPTS ====================
-    print("\n" + "-"*60)
-    print("TESTING COMBINED PROMPTS (Point + BBox + Mask)")
-    print("-"*60)
+    # # ==================== TEST COMBINED PROMPTS ====================
+    # print("\n" + "-"*60)
+    # print("TESTING COMBINED PROMPTS (Point + BBox + Mask)")
+    # print("-"*60)
     
     combined_configs = [
-        {
-            'prompt_types': ['point', 'bbox'],
-            'positive_point_num': 10,
-            'negative_point_num': 5,
-            'enlarge_ratio': 0.0,
-        },
-        {
-            'prompt_types': ['point', 'bbox'],
-            'positive_point_num': 15,
-            'negative_point_num': 10,
-            'enlarge_ratio': 0.0,
-        },
-        {
-            'prompt_types': ['point', 'bbox', 'mask'],
-            'positive_point_num': 10,
-            'negative_point_num': 5,
-            'enlarge_ratio': 0.0,
-        },
-        {
-            'prompt_types': ['point', 'bbox', 'mask'],
-            'positive_point_num': 20,
-            'negative_point_num': 10,
-            'enlarge_ratio': 0.0,
-        },
+        # {
+        #     'prompt_types': ['point', 'bbox'],
+        #     'positive_point_num': 10,
+        #     'negative_point_num': 5,
+        #     'enlarge_ratio': 0.0,
+        # },
+        # {
+        #     'prompt_types': ['point', 'bbox'],
+        #     'positive_point_num': 15,
+        #     'negative_point_num': 10,
+        #     'enlarge_ratio': 0.0,
+        # },
+        # {
+        #     'prompt_types': ['point', 'bbox', 'mask'],
+        #     'positive_point_num': 10,
+        #     'negative_point_num': 5,
+        #     'enlarge_ratio': 0.0,
+        # },
+        # {
+        #     'prompt_types': ['point', 'bbox', 'mask'],
+        #     'positive_point_num': 20,
+        #     'negative_point_num': 10,
+        #     'enlarge_ratio': 0.0,
+        # },
     ]
     
     for config in combined_configs:
