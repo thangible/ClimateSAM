@@ -77,7 +77,7 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
         with torch.amp.autocast('cuda'):
             # Build MLP-refined tokens from the mask decoder (use no_grad to avoid updating mask decoder)
             with torch.no_grad():
-                ar_refined = climatesam.mask_decoder.hf_mlp_ar(climatesam.mask_decoder.hf_token_ar.weight.to(device))
+                ar_refined = climatesam.mask_decoder.hf_mlp_ar(climatesam.mask_decoder.hf_token_ar.weight.to(device ))
                 tc_refined = climatesam.mask_decoder.hf_mlp_tc(climatesam.mask_decoder.hf_token_tc.weight.to(device))
 
             # Pass refined tokens into the prompt generator for gating
@@ -99,10 +99,10 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
                 # pass sigmoid probabilities to PromptMaker
                 ar_mask_sig = torch.sigmoid(ar_mask.detach())
                 tc_mask_sig = torch.sigmoid(tc_mask.detach())
-                prompt_dict = prompt_maker.make_prompts(ar_mask=ar_mask_sig, tc_mask=tc_mask_sig, enlarge_ratio=worker_args.prompt_enlarge_ratio)
+                prompt_dict = prompt_maker.make_prompts(ar_mask=ar_mask_sig, tc_mask=tc_mask_sig, enlarge_ratio=worker_args.prompt_enlarge_ratio, prompt_type=worker_args.prompt_type)
             else:
                 # Use detached multiclass_mask to avoid accidental gradient flow into prompt creation
-                prompt_dict = prompt_maker.make_prompts(multiclass_mask.detach(), enlarge_ratio=worker_args.prompt_enlarge_ratio)
+                prompt_dict = prompt_maker.make_prompts(multiclass_mask.detach(), enlarge_ratio=worker_args.prompt_enlarge_ratio, prompt_type=worker_args.prompt_type)
             prompt_dict = batch_to_cuda(prompt_dict, device)
 
             # Compute combined generator + optional AR/TC binary loss via helper
@@ -291,8 +291,8 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
                 pred_multiclass_for_prompts[ar_pos] = 2
             else:
                 pred_multiclass_for_prompts = multiclass_mask
-            
-            prompt_dict = prompt_maker.make_prompts(pred_multiclass_for_prompts, enlarge_ratio=worker_args.prompt_enlarge_ratio)
+
+            prompt_dict = prompt_maker.make_prompts(pred_multiclass_for_prompts, prompt_type=worker_args.prompt_type, enlarge_ratio=worker_args.prompt_enlarge_ratio)
             prompt_dict = batch_to_cuda(prompt_dict, device)
             
             ar_point_prompts_copy = copy.deepcopy(prompt_dict['ar_point_prompts'])
@@ -665,7 +665,7 @@ def set_up_model(worker_args, device):
     
     prompt_generator = PromptGenerator(
         in_channels=in_channels[worker_args.sam_type],
-        fused_channels=worker_args.fused_channels,
+        fused_channels=worker_args.fuse_channels,
         num_features=num_features_map[worker_args.sam_type],
         features_per_block=features_per_block[worker_args.sam_type]
     ).to(device)

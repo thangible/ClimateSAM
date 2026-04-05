@@ -93,7 +93,7 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
 
         # ClimateSAM forward also doesn't require gradients (we don't train it)
         with torch.no_grad():
-            prompt_dict = prompt_maker.make_prompts(multiclass_mask, enlarge_ratio=worker_args.prompt_enlarge_ratio)
+            prompt_dict = prompt_maker.make_prompts(multiclass_mask, enlarge_ratio=worker_args.prompt_enlarge_ratio, prompt_type=worker_args.prompt_type)
             prompt_dict = batch_to_cuda(prompt_dict, device)
                         
             tc_pred_masks, ar_pred_masks, _ = climatesam.forward(
@@ -219,7 +219,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
             gt_masks = torch.stack(batch['gt_mask'], dim=0).to(device)  # B, H, W
 
             
-            prompt_dict = prompt_maker.make_prompts(multiclass_mask)
+            prompt_dict = prompt_maker.make_prompts(multiclass_mask, enlarge_ratio=worker_args.prompt_enlarge_ratio, prompt_type=worker_args.prompt_type)
             prompt_dict = batch_to_cuda(prompt_dict, device)
             
             ar_point_prompts_copy = copy.deepcopy(prompt_dict['ar_point_prompts'])

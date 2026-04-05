@@ -99,10 +99,10 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, prompt_maker,
                 # pass sigmoid probabilities to PromptMaker
                 ar_mask_sig = torch.sigmoid(ar_mask.detach())
                 tc_mask_sig = torch.sigmoid(tc_mask.detach())
-                prompt_dict = prompt_maker.make_prompts(ar_mask=ar_mask_sig, tc_mask=tc_mask_sig, enlarge_ratio=worker_args.prompt_enlarge_ratio)
+                prompt_dict = prompt_maker.make_prompts(ar_mask=ar_mask_sig, tc_mask=tc_mask_sig, prompt_type=worker_args.prompt_type, enlarge_ratio=worker_args.prompt_enlarge_ratio)
             else:
                 # Use detached multiclass_mask to avoid accidental gradient flow into prompt creation
-                prompt_dict = prompt_maker.make_prompts(multiclass_mask.detach(), enlarge_ratio=worker_args.prompt_enlarge_ratio)
+                prompt_dict = prompt_maker.make_prompts(multiclass_mask.detach(), prompt_type=worker_args.prompt_type, enlarge_ratio=worker_args.prompt_enlarge_ratio)
             prompt_dict = batch_to_cuda(prompt_dict, device)
 
             # Compute combined generator + optional AR/TC binary loss via helper
@@ -291,8 +291,8 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
                 pred_multiclass_for_prompts[ar_pos] = 2
             else:
                 pred_multiclass_for_prompts = multiclass_mask
-            
-            prompt_dict = prompt_maker.make_prompts(pred_multiclass_for_prompts, enlarge_ratio=worker_args.prompt_enlarge_ratio)
+
+            prompt_dict = prompt_maker.make_prompts(pred_multiclass_for_prompts, prompt_type=worker_args.prompt_type, enlarge_ratio=worker_args.prompt_enlarge_ratio)
             prompt_dict = batch_to_cuda(prompt_dict, device)
             
             ar_point_prompts_copy = copy.deepcopy(prompt_dict['ar_point_prompts'])
