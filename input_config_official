@@ -33,6 +33,7 @@ fuse_channels = 128
 
 [PROMPTS]
 prompt_enlarge_ratio = 0.1
+gt_prompt_enlarge_ratio = [0, 0.3]
 
 [TRAINING LOOP]
 ; shot_num = 1
