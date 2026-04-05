@@ -622,8 +622,7 @@ def set_up_model(worker_args, device):
     prompt_generator = PromptGenerator(
         in_channels=in_channels[worker_args.sam_type],
         fused_channels=128,
-        num_features=num_features_map[worker_args.sam_type],
-        features_per_block=features_per_block[worker_args.sam_type]
+        num_features=num_features_map[worker_args.sam_type]
     ).to(device)
     
     for params in climatesam.parameters():
