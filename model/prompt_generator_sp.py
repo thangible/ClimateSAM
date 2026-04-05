@@ -25,14 +25,19 @@ class PromptGenerator(nn.Module):
             nn.ReLU(inplace=True)
         )
         
-        for i in range(self.num_features):
-            # Reduce incoming channels to a consistent fused_channels dimension
-            self.input_reduction.append(
-                nn.Sequential(
+        self.shared_input_reduction = nn.Sequential(
                     nn.Conv2d(in_channels, fused_channels, kernel_size=1, bias=False),
                     nn.ReLU(inplace=True),
                 )
-            )
+        
+        for i in range(self.num_features):
+            # Reduce incoming channels to a consistent fused_channels dimension
+            # self.input_reduction.append(
+            #     nn.Sequential(
+            #         nn.Conv2d(in_channels, fused_channels, kernel_size=1, bias=False),
+            #         nn.ReLU(inplace=True),
+            #     )
+            # )
             
             if i == 0:
                 # Deepest level fusion
@@ -46,7 +51,7 @@ class PromptGenerator(nn.Module):
                 self.fuse_convs.append(
                     nn.Sequential(
                         # Depthwise (groups = in_channels)
-                        nn.Conv2d(fused_channels * 2, fused_channels * 2, kernel_size=3, padding=1, groups=fused_channels * 2),
+                        nn.Conv2d(fused_channels, fused_channels * 2, kernel_size=3, padding=1, groups=fused_channels),
                         # Pointwise
                         nn.Conv2d(fused_channels * 2, fused_channels, kernel_size=1),
                         LayerNorm2d(fused_channels),
@@ -117,7 +122,7 @@ class PromptGenerator(nn.Module):
             current_feat = reversed_feats[i]
             
             # Reduce channel dimensionality
-            reduced_feat = self.input_reduction[i](current_feat)
+            reduced_feat = self.shared_input_reduction(current_feat)
             
             if i == 0:
                 # Process the deepest level
