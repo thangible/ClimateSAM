@@ -13,3 +13,4 @@ exp
 embeddings/*.pth
 */*.pth
 */*.pt
+hparam_search_log_offical.txt

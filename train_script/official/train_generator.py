@@ -621,7 +621,7 @@ def set_up_model(worker_args, device):
     
     prompt_generator = PromptGenerator(
         in_channels=in_channels[worker_args.sam_type],
-        fused_channels=worker_args.fused_channels,
+        fused_channels=worker_args.fuse_channels,
         num_features=num_features_map[worker_args.sam_type],
         features_per_block=features_per_block[worker_args.sam_type]
     ).to(device)
