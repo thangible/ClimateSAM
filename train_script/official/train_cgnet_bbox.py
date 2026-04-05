@@ -86,9 +86,9 @@ def main_worker(worker_id, worker_args):
     dataset_dir = worker_args.data_dir
     train_dataset = ClimateDataset(
         data_dir=dataset_dir, train_flag=True, shot_num=worker_args.shot_num,
-        augmented=worker_args.augmented, generate_prompt=True, prompt_type='bbox'
+        augmented=worker_args.augmented, generate_prompt=True, prompt_type='bbox', enlarge_ratio=[0,0]
     )
-    val_dataset = ClimateDataset(data_dir=dataset_dir, train_flag=False, augmented=False, generate_prompt=True, prompt_type='bbox')
+    val_dataset = ClimateDataset(data_dir=dataset_dir, train_flag=False, augmented=False, generate_prompt=True, prompt_type='bbox', enlarge_ratio=[0,0])
     
     train_collate_fn = train_dataset.collate_fn
     val_collate_fn = val_dataset.collate_fn

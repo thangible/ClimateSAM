@@ -263,3 +263,89 @@ class CGNetBBoxPrompter:
     def save_model(self):
         save_path = os.path.join(self.exp_dir, f"cgnet_bbox_weight.pth")
         torch.save(self.cgnet_model.state_dict(), save_path)
+        
+    @torch.no_grad()
+    def get_prompts(self, batch_input, conf_threshold=0.5, iou_threshold=0.4):
+        """
+        Infers bounding boxes from the input and formats them as SAM-compatible prompts.
+        Applies Non-Maximum Suppression (NMS) to filter redundant overlapping boxes.
+        
+        Returns:
+            dict: A dictionary containing lists of tensors for 'ar_bbox_prompts' 
+                  and 'tc_bbox_prompts'. Tensor shapes are [N, 1, 4] containing 
+                  absolute pixel coordinates [xmin, ymin, xmax, ymax].
+        """
+        self.cgnet_model.eval()
+        outputs = self.cgnet_model(batch_input)
+        
+        B, C, GH, GW = outputs.shape
+        H, W = batch_input.shape[2], batch_input.shape[3]
+
+        # Permute for easier indexing: [B, GH, GW, 7]
+        outputs_permuted = outputs.permute(0, 2, 3, 1)
+        pred_conf = torch.sigmoid(outputs_permuted[..., 0])
+
+        ar_bbox_prompts = []
+        tc_bbox_prompts = []
+
+        for b in range(B):
+            # 1. Filter out low-confidence cells
+            mask = pred_conf[b] > conf_threshold
+            if mask.sum() == 0:
+                ar_bbox_prompts.append(None)
+                tc_bbox_prompts.append(None)
+                continue
+
+            pos_preds = outputs_permuted[b][mask]
+            grid_y, grid_x = torch.where(mask)
+
+            # 2. Extract bounding box properties
+            dxdy = torch.sigmoid(pos_preds[:, 1:3])
+            wh = torch.sigmoid(pos_preds[:, 3:5])
+            
+            # 3. Extract class predictions
+            cls_probs = torch.softmax(pos_preds[:, 5:], dim=1)
+            cls_conf, cls_pred = torch.max(cls_probs, dim=1)
+
+            # 4. Map from grid scale back to normalized image coordinates [0, 1]
+            cx = (grid_x.float() + dxdy[:, 0]) / GW
+            cy = (grid_y.float() + dxdy[:, 1]) / GH
+            norm_w = wh[:, 0]
+            norm_h = wh[:, 1]
+
+            # 5. Convert to absolute pixel coordinates [x_min, y_min, x_max, y_max] 
+            # This is crucial for SAM which expects native image scaling.
+            x_min = (cx - norm_w / 2) * W
+            y_min = (cy - norm_h / 2) * H
+            x_max = (cx + norm_w / 2) * W
+            y_max = (cy + norm_h / 2) * H
+
+            # Stack for NMS processing
+            boxes = torch.stack((x_min, y_min, x_max, y_max, pred_conf[b][mask], cls_pred.float()), dim=1)
+            
+            # 6. Apply Non-Maximum Suppression (NMS)
+            keep_idx = ops.nms(boxes[:, :4], boxes[:, 4], iou_threshold=iou_threshold)
+            boxes = boxes[keep_idx]
+            
+            # 7. Separate boxes by Class ID (0: TC, 1: AR)
+            tc_mask = boxes[:, 5] == 0
+            ar_mask = boxes[:, 5] == 1
+            
+            tc_boxes = boxes[tc_mask][:, :4]
+            ar_boxes = boxes[ar_mask][:, :4]
+            
+            # 8. Format to [N, 1, 4] to mimic original climatenet_util.py output
+            if len(tc_boxes) > 0:
+                tc_bbox_prompts.append(tc_boxes.unsqueeze(1))
+            else:
+                tc_bbox_prompts.append(None)
+                
+            if len(ar_boxes) > 0:
+                ar_bbox_prompts.append(ar_boxes.unsqueeze(1))
+            else:
+                ar_bbox_prompts.append(None)
+
+        return {
+            'ar_bbox_prompts': ar_bbox_prompts,
+            'tc_bbox_prompts': tc_bbox_prompts
+        }
