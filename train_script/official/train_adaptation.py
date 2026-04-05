@@ -150,7 +150,6 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
         if (train_step + 1) % gradient_accumulation_steps == 0:
             scaler.step(optimizer)
             scaler.update()
-            scheduler.step()
             optimizer.zero_grad()
             
             # Calculate effective step for logging
@@ -175,10 +174,12 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
     if len(train_dataloader) % gradient_accumulation_steps != 0:
         scaler.step(optimizer)
         scaler.update()
-        scheduler.step()
         optimizer.zero_grad()
         step_count += 1
         epoch_loss_count += 1
+    
+    # Step the scheduler once per epoch after all optimizer steps
+    scheduler.step()
     
     # Calculate average losses for the entire epoch
     if epoch_loss_count > 0:
