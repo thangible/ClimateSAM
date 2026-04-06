@@ -523,8 +523,8 @@ class ClimateDataset(Dataset):
     
     def calculate_spatial_priors(self):
         """
-        Creates a 2D heatmap tracking the exact locations where TCs and ARs occur
-        across the entire training dataset.
+        Creates a 2D heatmap tracking the exact locations where TCs, ARs, 
+        and pure Backgrounds occur across the entire training dataset.
         """
         if os.path.exists(self.spatial_priors_path) and not self.reset_flag:
             return np.load(self.spatial_priors_path, allow_pickle=True).item()
@@ -539,12 +539,13 @@ class ClimateDataset(Dataset):
 
         tc_heatmap = np.zeros(shape, dtype=np.int32)
         ar_heatmap = np.zeros(shape, dtype=np.int32)
-
+        bg_heatmap = np.zeros(shape, dtype=np.int32) # Added background tracker
+        
         # Strictly use training files to prevent validation data leakage
         train_files = [os.path.join(self.train_path, f) for f in sorted(os.listdir(self.train_path)) if f.endswith(".nc")]
 
         from tqdm import tqdm
-        for file in tqdm(train_files, desc="Mapping Historical TC/AR Hotspots"):
+        for file in tqdm(train_files, desc="Mapping Historical Hotspots and Backgrounds"):
             try:
                 ds = xr.load_dataset(file)
                 m = self.get_labels(ds)
@@ -552,35 +553,51 @@ class ClimateDataset(Dataset):
                 # Accumulate occurrences
                 tc_heatmap += (m == 1).astype(np.int32)
                 ar_heatmap += (m == 2).astype(np.int32)
+                bg_heatmap += (m == 0).astype(np.int32) # Count background pixels
                 ds.close()
             except Exception as e:
                 print(f"Skipped {file} during prior building: {e}")
                 continue
         
-        priors = {'tc': tc_heatmap, 'ar': ar_heatmap}
+        priors = {'tc': tc_heatmap, 'ar': ar_heatmap, 'bg': bg_heatmap}
         np.save(self.spatial_priors_path, priors)
         return priors
-    def generate_smart_grid_prompts(self, class_type, grid_size=(32, 32), jitter_amount=0.5, min_occurrences=1):
+
+    def generate_smart_grid_prompts(self, class_type, grid_size=(32, 32), jitter_amount=0.5, threshold=0.05):
         """
-        Generates a grid restricted to historical hotspots, with random variations.
+        Generates a grid restricted to historical hotspots (or safe backgrounds), with random variations.
         
         Args:
-            class_type (str): 'tc' or 'ar'
+            class_type (str): 'tc', 'ar', or 'bg' (background)
             grid_size (tuple): The base uniform grid density (y_steps, x_steps)
             jitter_amount (float): How much random shift to apply (0.0 to 1.0). 
                                    0.5 means a point can shift up to half a grid cell.
-            min_occurrences (int): Drop grid points where historical occurrences are less than this.
+            threshold (float): The normalized probability (0.0 to 1.0) required to keep a point.
+                               e.g., 0.05 means keep points that have at least 5% of the max historical density.
         """
         
         if os.path.exists(self.spatial_priors_path) and not self.reset_flag:
-            spatial_priors =  np.load(self.spatial_priors_path, allow_pickle=True).item()
+            spatial_priors = np.load(self.spatial_priors_path, allow_pickle=True).item()
         else:
             spatial_priors = self.calculate_spatial_priors()
         
+        # 1. Normalize the Heatmap to [0.0, 1.0]
         heatmap = spatial_priors[class_type]
+        heatmap = heatmap.astype(np.float32)
+        heatmap_max = float(heatmap.max()) if heatmap.size else 1.0
+        
+        if heatmap_max <= 0:
+            heatmap_max = 1.0
+            
+        heatmap = heatmap / heatmap_max
+        
+        # Sharpen background to heavily penalize areas near storm tracks
+        if class_type == 'bg':
+            heatmap = heatmap ** 3
+            
         H, W = heatmap.shape
 
-        # Create uniform grid baseline
+        # 2. Create uniform grid baseline
         y_steps = np.linspace(0, H - 1, grid_size[0])
         x_steps = np.linspace(0, W - 1, grid_size[1])
 
@@ -594,8 +611,8 @@ class ClimateDataset(Dataset):
             for x in x_steps:
                 y_int, x_int = int(y), int(x)
                 
-                # Filter Step: Does this point fall in a valid hotspot?
-                if heatmap[y_int, x_int] >= min_occurrences:
+                # Filter Step: Compare normalized value against the threshold (0.0 to 1.0)
+                if heatmap[y_int, x_int] >= threshold:
                     
                     # Randomness Step: Add jitter
                     y_jitter = y + random.uniform(-dy * jitter_amount, dy * jitter_amount)
@@ -614,7 +631,8 @@ class ClimateDataset(Dataset):
         points = np.array(valid_points)[:, np.newaxis, :] 
         points = torch.from_numpy(points).to(torch.float32)
         
-        # Positive point labels
-        labels = torch.ones(points.shape[0], dtype=torch.float32).unsqueeze(1)
+        # Determine labels: 1.0 for positive objects, 0.0 for negative (background) prompts
+        label_val = 0.0 if class_type == 'bg' else 1.0
+        labels = torch.full((points.shape[0], 1), label_val, dtype=torch.float32)
 
         return points, labels
