@@ -31,6 +31,60 @@ from dataset.climatenet import ClimateDataset
 from evaluator import StreamSegMetrics
 from model.prompt.cgnet_module import CGNetModule
 
+import matplotlib.pyplot as plt
+import wandb
+import numpy as np
+
+def log_pipeline_visualizations(gt_mask, tc_pred, ar_pred, tc_points, ar_points, step, image_idx):
+    """
+    Creates a 1x3 plot showing:
+    1. GT Mask + TC Grid Prompts
+    2. GT Mask + AR Grid Prompts
+    3. Final Accepted Predicted Masks
+    and logs it to Weights & Biases.
+    """
+    # Convert tensors to numpy arrays for plotting
+    gt = gt_mask.cpu().numpy()
+    tc_m = tc_pred.squeeze().cpu().numpy()
+    ar_m = ar_pred.squeeze().cpu().numpy()
+    
+    tc_pts = tc_points.cpu().numpy()
+    ar_pts = ar_points.cpu().numpy()
+    
+    # Create a combined prediction mask for visualization (1=TC, 2=AR)
+    pred_combined = np.zeros_like(gt)
+    pred_combined[tc_m > 0] = 1
+    pred_combined[ar_m > 0] = 2
+
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6))
+    
+    # --- Plot 1: GT + TC Grid ---
+    axes[0].imshow(gt, cmap='viridis', interpolation='nearest')
+    axes[0].scatter(tc_pts[:, 0], tc_pts[:, 1], c='red', s=2, alpha=0.5, label='TC Grid')
+    axes[0].set_title('GT Mask + TC Grid Prompts')
+    axes[0].axis('off')
+    
+    # --- Plot 2: GT + AR Grid ---
+    axes[1].imshow(gt, cmap='viridis', interpolation='nearest')
+    axes[1].scatter(ar_pts[:, 0], ar_pts[:, 1], c='cyan', s=2, alpha=0.5, label='AR Grid')
+    axes[1].set_title('GT Mask + AR Grid Prompts')
+    axes[1].axis('off')
+    
+    # --- Plot 3: Final Accepted Segment ---
+    # We plot the GT dimly in the background, and the Prediction brightly on top
+    axes[2].imshow(gt, cmap='gray', alpha=0.3) 
+    axes[2].imshow(pred_combined, cmap='viridis', alpha=0.8, interpolation='nearest')
+    axes[2].set_title('Final Accepted Segments (1=TC, 2=AR)')
+    axes[2].axis('off')
+
+    plt.tight_layout()
+    
+    # Log to WandB
+    if wandb.run is not None:
+        wandb.log({f"visualizations/step_{step}_img_{image_idx}": wandb.Image(fig)}, commit=False)
+    
+    plt.close(fig)
+
 # ========================================== #
 # 1. CGNet Patch Classifier                  #
 # ========================================== #
@@ -209,13 +263,21 @@ class ProposeAndScorePipeline:
 # ========================================== #
 # 4. Evaluation Loop                         #
 # ========================================== #
-def validate_propose_and_score(val_dataloader, ar_metrics, tc_metrics, pipeline, device, max_samples=None):
+@torch.no_grad()
+def validate_propose_and_score(val_dataloader, ar_metrics, tc_metrics, pipeline, device, worker_args, max_samples=None):
     pipeline.sam.eval()
     pipeline.classifier.eval()
     
     total_samples = 0
     valid_pbar = tqdm(total=len(val_dataloader), desc='Propose & Score Eval', leave=False)
     
+    # ---> ADDED: Generate the visualization grids here so they are defined <---
+    W = val_dataloader.dataset[0]['input'].shape[2] 
+    tc_y_bands = [(105, 341), (427, 678)]
+    ar_y_bands = [(54, 341), (427, 739)]
+    tc_points_vis = generate_banded_point_grid(W, tc_y_bands, grid_x_steps=32, y_steps_per_band=10, device=device)
+    ar_points_vis = generate_banded_point_grid(W, ar_y_bands, grid_x_steps=32, y_steps_per_band=12, device=device)
+
     with torch.no_grad():
         for val_step, batch in enumerate(val_dataloader):
             if max_samples and total_samples >= max_samples: break
@@ -254,6 +316,19 @@ def validate_propose_and_score(val_dataloader, ar_metrics, tc_metrics, pipeline,
                 
                 batch_tc_preds.append(tc_pred)
                 batch_ar_preds.append(ar_pred)
+
+                # ---> ADDED: Visualization Logging <---
+                if val_step == 0 and b < 2 and getattr(worker_args, 'wandb', False):
+                    gt_mask = batch['gt_mask'][b]
+                    log_pipeline_visualizations(
+                        gt_mask=gt_mask, 
+                        tc_pred=tc_pred, 
+                        ar_pred=ar_pred, 
+                        tc_points=tc_points_vis, 
+                        ar_points=ar_points_vis, 
+                        step=val_step, 
+                        image_idx=b
+                    )
             
             # GT Formatting
             masks_gt = batch['gt_mask']
@@ -268,6 +343,11 @@ def validate_propose_and_score(val_dataloader, ar_metrics, tc_metrics, pipeline,
             
     valid_pbar.close()
     
+    # Force wandb to commit the step if we logged images
+    if getattr(worker_args, 'wandb', False):
+        import wandb
+        wandb.log({"eval_complete": True})
+
     ar_metric_dict, _ = ar_metrics.compute()
     tc_metric_dict, _ = tc_metrics.compute()
     
@@ -322,7 +402,8 @@ def main_worker(worker_id, worker_args):
     ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     
-    results = validate_propose_and_score(val_dataloader, ar_metrics, tc_metrics, pipeline, device)
+    # Pass worker_args so the function knows whether to log to W&B
+    results = validate_propose_and_score(val_dataloader, ar_metrics, tc_metrics, pipeline, device, worker_args)
     
     print("\n" + "="*60)
     print(f"✓ Final mIoU TC: {results['miou_tc']:.4f}")
