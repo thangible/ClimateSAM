@@ -391,6 +391,9 @@ def main_worker(worker_id, worker_args):
         val_indices = list(range(min(getattr(worker_args, 'debug_val_size', 20), len(val_dataset))))
         val_dataset = torch.utils.data.Subset(val_dataset, val_indices)
     
+    g = torch.Generator()
+    g.manual_seed(3407)
+    
     train_dataloader = DataLoader(
         dataset=train_dataset, batch_size=getattr(worker_args, 'train_bs', 2), shuffle=False is None, num_workers=getattr(worker_args, 'num_workers', 2),
          drop_last=False, collate_fn=train_collate_fn,
