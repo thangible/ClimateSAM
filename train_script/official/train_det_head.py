@@ -99,11 +99,11 @@ def yolo_detection_loss_single_class(preds, targets):
 # ============================================================
 
 class TokenGatedDetectionHead(nn.Module):
-    def __init__(self, embedding_dim=256):
+    def __init__(self, embedding_dim=256, token_dim=32): # Added token_dim=32
         super().__init__()
-        # Separate gating mechanisms
-        self.ar_gate = nn.Sequential(nn.Linear(embedding_dim, embedding_dim), nn.Sigmoid())
-        self.tc_gate = nn.Sequential(nn.Linear(embedding_dim, embedding_dim), nn.Sigmoid())
+        # Gating mechanisms project 32-dim tokens to 256-dim weights
+        self.ar_gate = nn.Sequential(nn.Linear(token_dim, embedding_dim), nn.Sigmoid())
+        self.tc_gate = nn.Sequential(nn.Linear(token_dim, embedding_dim), nn.Sigmoid())
         
         # Separate heads for AR and TC (5 channels: obj, x, y, w, h)
         self.ar_conv_block = nn.Sequential(
@@ -123,13 +123,19 @@ class TokenGatedDetectionHead(nn.Module):
     def forward(self, x, ar_token, tc_token):
         # x shape: [B, 256, 64, 64]
         B = x.shape[0]
-        # Expand tokens if they are [1, 256]
+        
+        # Flatten tokens to [1, 32] if they are [1, 32, 1, 1] etc., then expand to batch size
+        ar_token = ar_token.view(-1, 32)
+        tc_token = tc_token.view(-1, 32)
+        
         if ar_token.shape[0] == 1: ar_token = ar_token.expand(B, -1)
         if tc_token.shape[0] == 1: tc_token = tc_token.expand(B, -1)
         
+        # Output shape of gates will be [B, 256] -> expand to [B, 256, 1, 1]
         ar_w = self.ar_gate(ar_token).unsqueeze(-1).unsqueeze(-1)
         tc_w = self.tc_gate(tc_token).unsqueeze(-1).unsqueeze(-1)
         
+        # Channel-wise weighting
         ar_gated_x = x * ar_w
         tc_gated_x = x * tc_w
         
