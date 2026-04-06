@@ -364,6 +364,17 @@ def validate_propose_and_score(train_dataloader,val_dataloader, ar_metrics, tc_m
                         axis=False, 
                         title="Raw SAM Assembled Masks (No Filter)"
                     )
+                    
+                    log_pipeline_visualizations(
+                        gt_mask=gt_mask, 
+                        tc_pred=tc_pred, 
+                        ar_pred=ar_pred, 
+                        tc_points=tc_points_vis, 
+                        ar_points=ar_points_vis, 
+                        step=val_step, 
+                        image_idx=b
+                    )
+                    
                     if getattr(worker_args, 'wandb', False):
                         wandb.log({f"visualizations/raw_sam_batch_{val_step}_img_{b}": wandb.Image(fig)})
             
