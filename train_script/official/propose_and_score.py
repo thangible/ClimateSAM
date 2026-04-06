@@ -72,6 +72,10 @@ def generate_banded_point_grid(image_w, y_bands, grid_x_steps=32, y_steps_per_ba
     return torch.cat(all_points, dim=0)
 
 def extract_and_score_masks(cgnet_image, masks, classifier_model, crop_size=(128, 128)):
+    model_device = next(classifier_model.parameters()).device
+    if cgnet_image.device != model_device:
+        cgnet_image = cgnet_image.to(model_device)
+    masks = masks.to(device=model_device)
     N, H, W = masks.shape
     C = cgnet_image.shape[0]
     
@@ -96,9 +100,9 @@ def extract_and_score_masks(cgnet_image, masks, classifier_model, crop_size=(128
         valid_masks.append(mask)
 
     if len(mask_crops) == 0:
-        return torch.empty(0, device=cgnet_image.device), torch.empty(0, device=cgnet_image.device), torch.empty(0, H, W, device=cgnet_image.device)
+        return torch.empty(0, device=model_device), torch.empty(0, device=model_device), torch.empty(0, H, W, device=model_device)
 
-    batch_crops = torch.stack(mask_crops)
+    batch_crops = torch.stack(mask_crops).to(model_device)
     
     with torch.no_grad():
         logits = classifier_model(batch_crops)

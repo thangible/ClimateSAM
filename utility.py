@@ -832,7 +832,7 @@ def get_idle_gpu(gpu_num: int = 1, id_only: bool = True) -> List[GPU]:
 
 def batch_to_cuda(batch, device):
     for key in batch.keys():
-        if key == 'input':
+        if key in ['input', 'cgnet_input']:
             # input is already a single tensor (B, C, H, W)
             # batch[key] = torch.from_numpy(batch[key])
             batch[key] = batch[key].to(device=device, dtype=torch.float32)
