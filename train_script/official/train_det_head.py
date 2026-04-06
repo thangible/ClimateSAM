@@ -9,7 +9,7 @@ for p in (PROJECT_ROOT, TRAIN_SCRIPT_DIR):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-#  python train_script/official/train_det_head.py --config input_config_official  --sam_type vit_b --image_encoder_mlp_ratio 1 --encoder_weights_name best_weights/general_infused  --run_name det_head --encoder_weights_name infused_token_vit_b_1.0_best_only_bbox
+# python train_script/official/train_det_head.py --config input_config_official  --sam_type vit_b --image_encoder_mlp_ratio 1  --run_name det_head --encoder_weights_name best_weights/infused_token_vit_b_1.0_best_only_bbox --run_name DET_HEAD
  
 import random
 import numpy as np
@@ -446,7 +446,7 @@ def main_worker(worker_id, worker_args):
             avg_miou = (miou_tc + miou_ar) / 2
             if avg_miou > best_miou:
                 best_miou = avg_miou
-                save_path = os.path.join(worker_args.exp_dir, f"best_bbox_prompter_{worker_args.run_name}.pth")
+                save_path = os.path.join(worker_args.exp_dir, f"det_head_{worker_args.run_name}.pth")
                 torch.save(prompter.state_dict(), save_path)
                 print(f"*** Best model saved! (Mean IoU: {best_miou:.4f}) ***")
 
