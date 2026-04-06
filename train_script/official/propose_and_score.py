@@ -269,7 +269,7 @@ class ProposeAndScorePipeline:
 # 4. Evaluation Loop                         #
 # ========================================== #
 @torch.no_grad()
-def validate_propose_and_score(val_dataloader, ar_metrics, tc_metrics, pipeline, device, worker_args, max_samples=None):
+def validate_propose_and_score(train_dataloader,val_dataloader, ar_metrics, tc_metrics, pipeline, device, worker_args, max_samples=None):
     from utility import plot_mask_with_points_and_bbox
     import os
     import wandb
@@ -280,11 +280,12 @@ def validate_propose_and_score(val_dataloader, ar_metrics, tc_metrics, pipeline,
     total_samples = 0
     valid_pbar = tqdm(total=len(val_dataloader), desc='Propose & Score Eval', leave=False)
     
-    W = val_dataloader.dataset[0]['input'].shape[2] 
-    tc_y_bands = [(105, 341), (427, 678)]
-    ar_y_bands = [(54, 341), (427, 739)]
-    tc_points_vis = generate_banded_point_grid(W, tc_y_bands, grid_x_steps=32, y_steps_per_band=10, device=device)
-    ar_points_vis = generate_banded_point_grid(W, ar_y_bands, grid_x_steps=32, y_steps_per_band=12, device=device)
+    tc_pts_raw, _ = train_dataloader.generate_smart_grid_prompts('tc', grid_size=(32, 32), jitter_amount=0.0, min_occurrences=5)
+    ar_pts_raw, _ = train_dataloader.generate_smart_grid_prompts('ar', grid_size=(32, 32), jitter_amount=0.0, min_occurrences=5)
+    
+    # Squeeze from (N, 1, 2) to (N, 2) to match SAM's expected inference input format
+    tc_points_vis = tc_pts_raw.squeeze(1).to(device) if tc_pts_raw is not None else torch.empty((0, 2), device=device)
+    ar_points_vis = ar_pts_raw.squeeze(1).to(device) if ar_pts_raw is not None else torch.empty((0, 2), device=device)
 
     with torch.no_grad():
         for val_step, batch in enumerate(val_dataloader):
@@ -412,7 +413,7 @@ def main_worker(worker_id, worker_args):
     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     
     # Pass worker_args so the function knows whether to log to W&B
-    results = validate_propose_and_score(val_dataloader, ar_metrics, tc_metrics, pipeline, device, worker_args)
+    results = validate_propose_and_score(train_dataloader=train_dataloader, val_dataloader=val_dataloader, ar_metrics=ar_metrics, tc_metrics=tc_metrics, pipeline=pipeline, device=device, worker_args=worker_args)
     
     print("\n" + "="*60)
     print(f"✓ Final mIoU TC: {results['miou_tc']:.4f}")

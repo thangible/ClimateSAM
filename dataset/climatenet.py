@@ -19,9 +19,9 @@ class ClimateDataset(Dataset):
             transforms (list): A list of transforms to apply.
             prompt_kwargs: Additional keyword arguments for prompt generation.
         """
-        train_path = os.path.join(data_dir, "train")
-        test_path = os.path.join(data_dir, "test")
-        sub_dir = train_path if train_flag else test_path
+        self.train_path = os.path.join(data_dir, "train")
+        self.test_path = os.path.join(data_dir, "test")
+        sub_dir = self.train_path if train_flag else self.test_path
 
         self.files = [os.path.join(sub_dir, f) for f in sorted(os.listdir(sub_dir)) if f.endswith(".nc")]
         if len(self.files) == 0:
@@ -56,6 +56,7 @@ class ClimateDataset(Dataset):
         
         # Define the path to save the mean and std values.
         self.mean_std_path = os.path.join(data_dir, "mean_std.npy")
+        self.spatial_priors_path = os.path.join(data_dir, "spatial_priors.npy")
         self.cgnet_fields = {
             "TMQ": {"mean": 19.21859, "std": 15.81723},
             "U850": {"mean": 1.55302, "std": 8.29764},
@@ -519,4 +520,101 @@ class ClimateDataset(Dataset):
             dataset.close()
 
         return extremes
+    
+    def calculate_spatial_priors(self):
+        """
+        Creates a 2D heatmap tracking the exact locations where TCs and ARs occur
+        across the entire training dataset.
+        """
+        if os.path.exists(self.spatial_priors_path) and not self.reset_flag:
+            return np.load(self.spatial_priors_path, allow_pickle=True).item()
 
+        print("Building spatial occurrence heatmaps from training data... (This only happens once)")
+        
+        # Get shape from the first file
+        ds = xr.load_dataset(self.files[0])
+        m = self.get_labels(ds)
+        shape = m.shape
+        ds.close()
+
+        tc_heatmap = np.zeros(shape, dtype=np.int32)
+        ar_heatmap = np.zeros(shape, dtype=np.int32)
+
+        # Strictly use training files to prevent validation data leakage
+        train_files = [os.path.join(self.train_path, f) for f in sorted(os.listdir(self.train_path)) if f.endswith(".nc")]
+
+        from tqdm import tqdm
+        for file in tqdm(train_files, desc="Mapping Historical TC/AR Hotspots"):
+            try:
+                ds = xr.load_dataset(file)
+                m = self.get_labels(ds)
+                
+                # Accumulate occurrences
+                tc_heatmap += (m == 1).astype(np.int32)
+                ar_heatmap += (m == 2).astype(np.int32)
+                ds.close()
+            except Exception as e:
+                print(f"Skipped {file} during prior building: {e}")
+                continue
+        
+        priors = {'tc': tc_heatmap, 'ar': ar_heatmap}
+        np.save(self.spatial_priors_path, priors)
+        return priors
+    def generate_smart_grid_prompts(self, class_type, grid_size=(32, 32), jitter_amount=0.5, min_occurrences=1):
+        """
+        Generates a grid restricted to historical hotspots, with random variations.
+        
+        Args:
+            class_type (str): 'tc' or 'ar'
+            grid_size (tuple): The base uniform grid density (y_steps, x_steps)
+            jitter_amount (float): How much random shift to apply (0.0 to 1.0). 
+                                   0.5 means a point can shift up to half a grid cell.
+            min_occurrences (int): Drop grid points where historical occurrences are less than this.
+        """
+        
+        if os.path.exists(self.spatial_priors_path) and not self.reset_flag:
+            spatial_priors =  np.load(self.spatial_priors_path, allow_pickle=True).item()
+        else:
+            spatial_priors = self.calculate_spatial_priors()
+        
+        heatmap = spatial_priors[class_type]
+        H, W = heatmap.shape
+
+        # Create uniform grid baseline
+        y_steps = np.linspace(0, H - 1, grid_size[0])
+        x_steps = np.linspace(0, W - 1, grid_size[1])
+
+        # Calculate pixel distance between grid points for jitter scaling
+        dy = (H - 1) / (grid_size[0] - 1)
+        dx = (W - 1) / (grid_size[1] - 1)
+
+        valid_points = []
+
+        for y in y_steps:
+            for x in x_steps:
+                y_int, x_int = int(y), int(x)
+                
+                # Filter Step: Does this point fall in a valid hotspot?
+                if heatmap[y_int, x_int] >= min_occurrences:
+                    
+                    # Randomness Step: Add jitter
+                    y_jitter = y + random.uniform(-dy * jitter_amount, dy * jitter_amount)
+                    x_jitter = x + random.uniform(-dx * jitter_amount, dx * jitter_amount)
+
+                    # Clamp to image boundaries
+                    y_final = np.clip(y_jitter, 0, H - 1)
+                    x_final = np.clip(x_jitter, 0, W - 1)
+
+                    valid_points.append([x_final, y_final])
+
+        if not valid_points:
+            return None, None
+
+        # Format for SAM: (N, 1, 2)
+        points = np.array(valid_points)[:, np.newaxis, :] 
+        points = torch.from_numpy(points).to(torch.float32)
+        
+        # Positive point labels
+        labels = torch.ones(points.shape[0], dtype=torch.float32).unsqueeze(1)
+
+        return points, labels
