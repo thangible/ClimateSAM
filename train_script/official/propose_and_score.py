@@ -181,32 +181,48 @@ class ProposeAndScorePipeline:
         self.device = device
         
     @torch.no_grad()
-    def generate_objects(self, sam_image, cgnet_image, points_per_batch=64, iou_thresh=0.5, conf_thresh=0.6):
+    def generate_objects(self, sam_image, cgnet_image, tc_points, ar_points, points_per_batch=64, iou_thresh=0.5, conf_thresh=0.6):
         C, H, W = sam_image.shape
         
-        tc_y_bands = [(105, 341), (427, 678)]
-        ar_y_bands = [(54, 341), (427, 739)]
+        # tc_y_bands = [(105, 341), (427, 678)]
+        # ar_y_bands = [(54, 341), (427, 739)]
         
-        tc_points = generate_banded_point_grid(W, tc_y_bands, grid_x_steps=32, y_steps_per_band=10, device=self.device)
-        ar_points = generate_banded_point_grid(W, ar_y_bands, grid_x_steps=32, y_steps_per_band=12, device=self.device)
+        # tc_points = generate_banded_point_grid(W, tc_y_bands, grid_x_steps=32, y_steps_per_band=10, device=self.device)
+        # ar_points = generate_banded_point_grid(W, ar_y_bands, grid_x_steps=32, y_steps_per_band=12, device=self.device)
         
         self.sam.set_infer_img(sam_image.unsqueeze(0))
         
         all_masks, all_scores, all_classes, all_boxes = [], [], [], []
         
+        # # --- PHASE 1: Process TC Grid ---
+        # all_masks, all_scores, all_classes, all_boxes, raw_tc = self._process_grid(
+        #     points=tc_points, cgnet_image=cgnet_image, points_per_batch=points_per_batch, 
+        #     prompt_type='TC', conf_thresh=conf_thresh, target_class_id=1, 
+        #     accumulators=(all_masks, all_scores, all_classes, all_boxes)
+        # )
+        
+        # # --- PHASE 2: Process AR Grid ---
+        # all_masks, all_scores, all_classes, all_boxes, raw_ar = self._process_grid(
+        #     points=ar_points, cgnet_image=cgnet_image, points_per_batch=points_per_batch, 
+        #     prompt_type='AR', conf_thresh=conf_thresh, target_class_id=2, 
+        #     accumulators=(all_masks, all_scores, all_classes, all_boxes)
+        # )
+        
         # --- PHASE 1: Process TC Grid ---
-        all_masks, all_scores, all_classes, all_boxes, raw_tc = self._process_grid(
-            points=tc_points, cgnet_image=cgnet_image, points_per_batch=points_per_batch, 
-            prompt_type='TC', conf_thresh=conf_thresh, target_class_id=1, 
-            accumulators=(all_masks, all_scores, all_classes, all_boxes)
-        )
+        if tc_points is not None and len(tc_points) > 0:
+            all_masks, all_scores, all_classes, all_boxes, raw_tc = self._process_grid(
+                points=tc_points, cgnet_image=cgnet_image, points_per_batch=points_per_batch, 
+                prompt_type='TC', conf_thresh=conf_thresh, target_class_id=1, 
+                accumulators=(all_masks, all_scores, all_classes, all_boxes)
+            )
         
         # --- PHASE 2: Process AR Grid ---
-        all_masks, all_scores, all_classes, all_boxes, raw_ar = self._process_grid(
-            points=ar_points, cgnet_image=cgnet_image, points_per_batch=points_per_batch, 
-            prompt_type='AR', conf_thresh=conf_thresh, target_class_id=2, 
-            accumulators=(all_masks, all_scores, all_classes, all_boxes)
-        )
+        if ar_points is not None and len(ar_points) > 0:
+            all_masks, all_scores, all_classes, all_boxes, raw_ar = self._process_grid(
+                points=ar_points, cgnet_image=cgnet_image, points_per_batch=points_per_batch, 
+                prompt_type='AR', conf_thresh=conf_thresh, target_class_id=2, 
+                accumulators=(all_masks, all_scores, all_classes, all_boxes)
+            )
         
         if not all_masks:
             return None, None, None, raw_tc, raw_ar
@@ -306,8 +322,10 @@ def validate_propose_and_score(train_dataloader,val_dataloader, ar_metrics, tc_m
                 final_masks, final_classes, final_scores, raw_tc, raw_ar = pipeline.generate_objects(
                     sam_image=sam_img, 
                     cgnet_image=cgnet_img,
-                    points_per_batch=64, 
-                    iou_thresh=0.4, 
+                    tc_points=tc_points_vis,
+                    ar_points=ar_points_vis,
+                    points_per_batch=64,
+                    iou_thresh=0.4,
                     conf_thresh=0.6
                 )
                 
