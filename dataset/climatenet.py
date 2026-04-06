@@ -417,3 +417,106 @@ class ClimateDataset(Dataset):
     
         return batch_dict
 
+    def get_hemisphere_extremal_points(self):
+        """
+        Finds the top-most and bottom-most points for Tropical Cyclones (TC) and 
+        Atmospheric Rivers (AR) in the Northern and Southern hemispheres.
+        
+        Returns:
+            dict: Nested dictionary containing pixel coordinates (y, x), 
+                  geographic coordinates (lat, lon), and the source filename.
+        """
+        # Initialize the output dictionary
+        extremes = {
+            'tc': {
+                'north': {'top': None, 'bottom': None},
+                'south': {'top': None, 'bottom': None}
+            },
+            'ar': {
+                'north': {'top': None, 'bottom': None},
+                'south': {'top': None, 'bottom': None}
+            }
+        }
+
+        # Helper to pick a representative x for a given y (mean x at that y)
+        def rep_point_at_y(pt_array, y_val):
+            xs = pt_array[pt_array[:, 0] == y_val, 1]
+            x_rep = int(xs.mean()) if xs.size else int(pt_array[0, 1])
+            return int(y_val), x_rep
+
+        print(f"Scanning {len(self.files)} files for extremal points...")
+
+        for file_path in self.files:
+            dataset = xr.load_dataset(file_path)
+            
+            # Get the label mask and lat/lon arrays
+            m = self.get_labels(dataset)
+            if hasattr(m, 'numpy'):
+                m = m.numpy()
+            m = m.astype(np.int32)
+            
+            lats = dataset.lat.values
+            lons = dataset.lon.values
+            
+            H, W = m.shape
+            half_row = H // 2
+
+            for cls_val, cls_key in zip((1, 2), ('tc', 'ar')):
+                pts = np.argwhere(m == cls_val)  # rows (y), cols (x)
+                if pts.size == 0:
+                    continue
+
+                # north = top half (rows < half_row), south = bottom half (rows >= half_row)
+                north_pts = pts[pts[:, 0] < half_row]
+                south_pts = pts[pts[:, 0] >= half_row]
+
+                # --- NORTH hemisphere updates ---
+                if north_pts.size:
+                    y_top = int(north_pts[:, 0].min())
+                    y_bot = int(north_pts[:, 0].max())
+                    yt, xt = rep_point_at_y(north_pts, y_top)
+                    yb, xb = rep_point_at_y(north_pts, y_bot)
+
+                    # Update most top (smallest y) in north
+                    if extremes[cls_key]['north']['top'] is None or yt < extremes[cls_key]['north']['top']['pixel'][0]:
+                        extremes[cls_key]['north']['top'] = {
+                            'pixel': (yt, xt),
+                            'latlon': (float(lats[yt]), float(lons[xt])),
+                            'file': os.path.basename(file_path)
+                        }
+                    
+                    # Update most bottom (largest y) in north
+                    if extremes[cls_key]['north']['bottom'] is None or yb > extremes[cls_key]['north']['bottom']['pixel'][0]:
+                        extremes[cls_key]['north']['bottom'] = {
+                            'pixel': (yb, xb),
+                            'latlon': (float(lats[yb]), float(lons[xb])),
+                            'file': os.path.basename(file_path)
+                        }
+
+                # --- SOUTH hemisphere updates ---
+                if south_pts.size:
+                    y_top_s = int(south_pts[:, 0].min())
+                    y_bot_s = int(south_pts[:, 0].max())
+                    yt_s, xt_s = rep_point_at_y(south_pts, y_top_s)
+                    yb_s, xb_s = rep_point_at_y(south_pts, y_bot_s)
+
+                    # Update most top (smallest y) in south
+                    if extremes[cls_key]['south']['top'] is None or yt_s < extremes[cls_key]['south']['top']['pixel'][0]:
+                        extremes[cls_key]['south']['top'] = {
+                            'pixel': (yt_s, xt_s),
+                            'latlon': (float(lats[yt_s]), float(lons[xt_s])),
+                            'file': os.path.basename(file_path)
+                        }
+                    
+                    # Update most bottom (largest y) in south
+                    if extremes[cls_key]['south']['bottom'] is None or yb_s > extremes[cls_key]['south']['bottom']['pixel'][0]:
+                        extremes[cls_key]['south']['bottom'] = {
+                            'pixel': (yb_s, xb_s),
+                            'latlon': (float(lats[yb_s]), float(lons[xb_s])),
+                            'file': os.path.basename(file_path)
+                        }
+            
+            dataset.close()
+
+        return extremes
+

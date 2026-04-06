@@ -311,6 +311,7 @@ def main_worker(worker_id, worker_args):
     all_results = []
     for bbox_config in bbox_configs:
         enlarge_ratio = bbox_config['enlarge_ratio']
+        print(f"\nValidating with enlarge_ratio={enlarge_ratio}...")
         results = validate_cgnet_bboxes(
             val_dataloader=val_dataloader,
             ar_metrics=ar_metrics,
