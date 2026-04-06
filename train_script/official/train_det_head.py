@@ -9,6 +9,8 @@ for p in (PROJECT_ROOT, TRAIN_SCRIPT_DIR):
     if p not in sys.path:
         sys.path.insert(0, p)
 
+#  python train_script/official/train_det_head.py --config input_config_official  --sam_type vit_b --image_encoder_mlp_ratio 1 --encoder_weights_name best_weights/general_infused  --run_name det_head --encoder_weights_name infused_token_vit_b_1.0_best_only_bbox
+ 
 import random
 import numpy as np
 import torch
@@ -388,8 +390,11 @@ def set_up_model(worker_args, device):
     weights_path = os.path.join(worker_args.exp_dir, f"{worker_args.encoder_weights_name}.pth")
     ckpt = torch.load(weights_path, map_location=device)
     climatesam.image_encoder.load_state_dict(ckpt['image_encoder'])
+    print(f"Loaded image encoder weights from {weights_path}")
     climatesam.mask_decoder.load_state_dict(ckpt['mask_decoder'])
+    print(f"Loaded mask decoder weights from {weights_path}")
     climatesam.input_adapter.load_state_dict(ckpt['input_adapter'])
+    print(f"Loaded input adapter weights from {weights_path}")
     
     for param in climatesam.parameters():
         param.requires_grad = False
