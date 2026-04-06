@@ -184,37 +184,33 @@ class ProposeAndScorePipeline:
     def generate_objects(self, sam_image, cgnet_image, points_per_batch=64, iou_thresh=0.5, conf_thresh=0.6):
         C, H, W = sam_image.shape
         
-        # Define strict geographic bounds
         tc_y_bands = [(105, 341), (427, 678)]
         ar_y_bands = [(54, 341), (427, 739)]
         
-        # Generate target grids
         tc_points = generate_banded_point_grid(W, tc_y_bands, grid_x_steps=32, y_steps_per_band=10, device=self.device)
         ar_points = generate_banded_point_grid(W, ar_y_bands, grid_x_steps=32, y_steps_per_band=12, device=self.device)
         
-        # Cache image embedding in SAM
         self.sam.set_infer_img(sam_image.unsqueeze(0))
         
         all_masks, all_scores, all_classes, all_boxes = [], [], [], []
         
         # --- PHASE 1: Process TC Grid ---
-        all_masks, all_scores, all_classes, all_boxes = self._process_grid(
+        all_masks, all_scores, all_classes, all_boxes, raw_tc = self._process_grid(
             points=tc_points, cgnet_image=cgnet_image, points_per_batch=points_per_batch, 
             prompt_type='TC', conf_thresh=conf_thresh, target_class_id=1, 
             accumulators=(all_masks, all_scores, all_classes, all_boxes)
         )
         
         # --- PHASE 2: Process AR Grid ---
-        all_masks, all_scores, all_classes, all_boxes = self._process_grid(
+        all_masks, all_scores, all_classes, all_boxes, raw_ar = self._process_grid(
             points=ar_points, cgnet_image=cgnet_image, points_per_batch=points_per_batch, 
             prompt_type='AR', conf_thresh=conf_thresh, target_class_id=2, 
             accumulators=(all_masks, all_scores, all_classes, all_boxes)
         )
         
         if not all_masks:
-            return None, None, None
+            return None, None, None, raw_tc, raw_ar
             
-        # Global NMS
         global_masks = torch.cat(all_masks, dim=0)
         global_scores = torch.cat(all_scores, dim=0)
         global_classes = torch.cat(all_classes, dim=0)
@@ -222,28 +218,31 @@ class ProposeAndScorePipeline:
         
         keep_indices = ops.batched_nms(global_boxes, global_scores, global_classes, iou_thresh)
         
-        return global_masks[keep_indices], global_classes[keep_indices], global_scores[keep_indices]
+        return global_masks[keep_indices], global_classes[keep_indices], global_scores[keep_indices], raw_tc, raw_ar
 
     def _process_grid(self, points, cgnet_image, points_per_batch, prompt_type, conf_thresh, target_class_id, accumulators):
         all_masks, all_scores, all_classes, all_boxes = accumulators
         num_points = points.shape[0]
         
+        # ---> ADDED: Accumulate raw masks <---
+        raw_mask_accumulator = []
+        
         for i in range(0, num_points, points_per_batch):
             batch_points = points[i:i+points_per_batch]
             formatted_points = [(batch_points.unsqueeze(0), torch.ones(len(batch_points), device=self.device).unsqueeze(0))]
             
-            # Request masks ONLY from the targeted SAM head
             if prompt_type == 'TC':
                 tc_masks, _ = self.sam.infer(tc_point_prompts=formatted_points, ar_point_prompts=None)
                 raw_masks = tc_masks[0].squeeze(1)
             else:
                 _, ar_masks = self.sam.infer(tc_point_prompts=None, ar_point_prompts=formatted_points)
                 raw_masks = ar_masks[0].squeeze(1)
+            
+            # Save the raw mask output from SAM BEFORE filtering it
+            raw_mask_accumulator.append(raw_masks.cpu())
                 
-            # Score crops using the CGNet Patch Classifier
             scores, classes, valid_masks = extract_and_score_masks(cgnet_image, raw_masks, self.classifier)
             
-            # Enforce Confidence AND Class Consistency
             valid_idx = (scores > conf_thresh) & (classes == target_class_id)
             scores, classes, valid_masks = scores[valid_idx], classes[valid_idx], valid_masks[valid_idx]
             
@@ -251,13 +250,19 @@ class ProposeAndScorePipeline:
                 continue
                 
             boxes = ops.masks_to_boxes(valid_masks)
-            
             all_masks.append(valid_masks)
             all_scores.append(scores)
             all_classes.append(classes)
             all_boxes.append(boxes)
             
-        return all_masks, all_scores, all_classes, all_boxes
+        # Assemble the raw masks for this grid into a single layer
+        if len(raw_mask_accumulator) > 0:
+            assembled_raw_mask = torch.cat(raw_mask_accumulator, dim=0).to(self.device).sum(dim=0).clamp(max=1)
+        else:
+            _, H, W = cgnet_image.shape
+            assembled_raw_mask = torch.zeros((H, W), device=self.device)
+            
+        return all_masks, all_scores, all_classes, all_boxes, assembled_raw_mask
 
 
 # ========================================== #
@@ -265,13 +270,16 @@ class ProposeAndScorePipeline:
 # ========================================== #
 @torch.no_grad()
 def validate_propose_and_score(val_dataloader, ar_metrics, tc_metrics, pipeline, device, worker_args, max_samples=None):
+    from utility import plot_mask_with_points_and_bbox
+    import os
+    import wandb
+    
     pipeline.sam.eval()
     pipeline.classifier.eval()
     
     total_samples = 0
     valid_pbar = tqdm(total=len(val_dataloader), desc='Propose & Score Eval', leave=False)
     
-    # ---> ADDED: Generate the visualization grids here so they are defined <---
     W = val_dataloader.dataset[0]['input'].shape[2] 
     tc_y_bands = [(105, 341), (427, 678)]
     ar_y_bands = [(54, 341), (427, 739)]
@@ -288,14 +296,13 @@ def validate_propose_and_score(val_dataloader, ar_metrics, tc_metrics, pipeline,
             
             batch_tc_preds, batch_ar_preds = [], []
             
-            # Process each image in the batch independently
             for b in range(B):
                 sam_img = batch['input'][b]
                 cgnet_img = batch['cgnet_input'][b]
                 H, W = sam_img.shape[1], sam_img.shape[2]
                 
-                # Run the pipeline
-                final_masks, final_classes, final_scores = pipeline.generate_objects(
+                # ---> Unpack the raw_tc and raw_ar here <---
+                final_masks, final_classes, final_scores, raw_tc, raw_ar = pipeline.generate_objects(
                     sam_image=sam_img, 
                     cgnet_image=cgnet_img,
                     points_per_batch=64, 
@@ -317,25 +324,29 @@ def validate_propose_and_score(val_dataloader, ar_metrics, tc_metrics, pipeline,
                 batch_tc_preds.append(tc_pred)
                 batch_ar_preds.append(ar_pred)
 
-                # ---> ADDED: Visualization Logging <---
+                # ---> ADDED: Use your utility function to plot the raw SAM output <---
                 if val_step == 0 and b < 2 and getattr(worker_args, 'wandb', False):
                     gt_mask = batch['gt_mask'][b]
-                    log_pipeline_visualizations(
-                        gt_mask=gt_mask, 
-                        tc_pred=tc_pred, 
-                        ar_pred=ar_pred, 
-                        tc_points=tc_points_vis, 
+                    save_path = os.path.join(worker_args.exp_dir, f"raw_sam_masks_step{val_step}_img{b}.png")
+                    
+                    # Call your utility function using the unfiltered masks
+                    fig = plot_mask_with_points_and_bbox(
+                        mask=gt_mask, 
                         ar_points=ar_points_vis, 
-                        step=val_step, 
-                        image_idx=b
+                        tc_points=tc_points_vis, 
+                        tc_pred_mask=raw_tc, 
+                        ar_pred_mask=raw_ar, 
+                        save_path=save_path, 
+                        axis=False, 
+                        title="Raw SAM Assembled Masks (No Filter)"
                     )
+                    
+                    wandb.log({f"visualizations/raw_sam_batch_{val_step}_img_{b}": wandb.Image(fig)})
             
-            # GT Formatting
             masks_gt = batch['gt_mask']
             masks_ar_gts = [(mask == 2).to(torch.uint8)[None, None, :] for mask in masks_gt]
             masks_tc_gts = [(mask == 1).to(torch.uint8)[None, None, :] for mask in masks_gt]
             
-            # Update Metrics
             tc_metrics.update(batch_tc_preds, masks_tc_gts, batch['index_name'])
             ar_metrics.update(batch_ar_preds, masks_ar_gts, batch['index_name'])
             
@@ -343,9 +354,7 @@ def validate_propose_and_score(val_dataloader, ar_metrics, tc_metrics, pipeline,
             
     valid_pbar.close()
     
-    # Force wandb to commit the step if we logged images
     if getattr(worker_args, 'wandb', False):
-        import wandb
         wandb.log({"eval_complete": True})
 
     ar_metric_dict, _ = ar_metrics.compute()
