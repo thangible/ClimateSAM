@@ -260,7 +260,7 @@ def main_worker(worker_id, worker_args):
     
     # Execute the training loop
     print("Starting CGNet Bounding Box Training...")
-    print_param_stats(cgnetprompter, phase="train")
+    print_param_stats(cgnetprompter.cgnet_model, phase="train")
     cgnetprompter.train(train_dataloader=train_dataloader, val_dataloader=val_dataloader, epochs=max_epoch_num)
 
     # ---------------------------------------------------------

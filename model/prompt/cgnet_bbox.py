@@ -201,7 +201,7 @@ class CGNetBBoxPrompter:
 
 
         self.cgnet_model.to(device)
-        self.optimizer = torch.optim.Adam(self.cgnet_model.parameters(), lr=1e-4)
+        self.optimizer = torch.optim.Adam(self.cgnet_model.parameters(), lr=1e-4, weight_decay=1e-5)
         
         self.wandb = getattr(worker_args, 'wandb', False)
         self.run_name = getattr(worker_args, 'run_name', None)
