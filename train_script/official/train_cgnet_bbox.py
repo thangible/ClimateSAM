@@ -71,7 +71,8 @@ def validate_cgnet_bboxes(
     device, 
     conf_threshold=0.5,
     iou_threshold=0.4,
-    max_samples=None
+    max_samples=None,
+    enlarge_ratio=0
 ):
     """
     Validate model using direct BBox predictions from CGNetBBoxPrompter.
@@ -96,7 +97,7 @@ def validate_cgnet_bboxes(
             
             # 1. Generate BBox prompts directly using the NEW CGNetBBoxPrompter
             features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
-            prompt_dict = prompter.get_prompts(features, conf_threshold=conf_threshold, iou_threshold=iou_threshold)
+            prompt_dict = prompter.get_prompts(features, conf_threshold=conf_threshold, iou_threshold=iou_threshold, enlarge_ratio=enlarge_ratio)
             
             # 2. Package for SAM
             combined_prompt_dict = {
@@ -295,34 +296,48 @@ def main_worker(worker_id, worker_args):
     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
 
     print("Running final validation with integrated BBox Prompter and SAM...")
-    results = validate_cgnet_bboxes(
-        val_dataloader=val_dataloader,
-        ar_metrics=ar_metrics,
-        tc_metrics=tc_metrics,
-        model=climatesam,
-        prompter=cgnetprompter,
-        device=device,
-        conf_threshold=0.5,
-        iou_threshold=0.4,
-        max_samples=None
+    bbox_configs = [
+        {'enlarge_ratio': 0.0},
+        {'enlarge_ratio': 0.1},
+        {'enlarge_ratio': 0.2},
+        {'enlarge_ratio': 0.3},
+        {'enlarge_ratio': 0.4},
+        {'enlarge_ratio': 0.5},
+        {'enlarge_ratio': 0.6},
+        {'enlarge_ratio': 0.7},
+        {'enlarge_ratio': -0.1},
+        {'enlarge_ratio': -0.2},
+    ]
+    all_results = []
+    for bbox_config in bbox_configs:
+        enlarge_ratio = bbox_config['enlarge_ratio']
+        results = validate_cgnet_bboxes(
+            val_dataloader=val_dataloader,
+            ar_metrics=ar_metrics,
+            tc_metrics=tc_metrics,
+            model=climatesam,
+            prompter=cgnetprompter,
+            device=device,
+            conf_threshold=0.5,
+            iou_threshold=0.4,
+            max_samples=None,
+            enlarge_ratio=enlarge_ratio
     )
+        all_results.append(results)
+        print(f"Validation completed for enlarge_ratio={enlarge_ratio}. mIoU TC: {results['miou_tc']:.4f}, mIoU AR: {results['miou_ar']:.4f}")
 
-    # Print summary
+    # ==================== SAVE RESULTS ====================
     print("\n" + "="*60)
-    print("FINAL VALIDATION RESULTS")
-    print("="*60)
-    print(f"mIoU TC: {results['miou_tc']:.4f}, mIoU AR: {results['miou_ar']:.4f}")
-    print(f"Mean Acc TC: {results['mean_acc_tc']:.4f}, Mean Acc AR: {results['mean_acc_ar']:.4f}")
+    print("RESULTS SUMMARY")
     print("="*60)
     
-    # Log to WandB
-    if hasattr(worker_args, 'wandb') and worker_args.wandb:
-        wandb.log({
-            'val_final/miou_tc': results['miou_tc'],
-            'val_final/miou_ar': results['miou_ar'],
-            'val_final/mean_acc_tc': results['mean_acc_tc'],
-            'val_final/mean_acc_ar': results['mean_acc_ar']
-        })
+    # Convert to DataFrame for better visualization
+    import pandas as pd
+    results_df = pd.DataFrame(all_results)
+    print("="*80)
+    print(results_df.to_string(index=False))
+    print("="*80)
+    
     
 if __name__ == '__main__':
     print("Starting training process...")

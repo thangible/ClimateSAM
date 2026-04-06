@@ -395,10 +395,14 @@ class CGNetBBoxPrompter:
         torch.save(self.cgnet_model.state_dict(), save_path)
         
     @torch.no_grad()
-    def get_prompts(self, batch_input, conf_threshold=0.5, iou_threshold=0.4):
+    def get_prompts(self, batch_input, conf_threshold=0.5, iou_threshold=0.4, enlarge_ratio=0.0):
         """
         Infers bounding boxes from the input and formats them as SAM-compatible prompts.
         Applies Non-Maximum Suppression (NMS) to filter redundant overlapping boxes.
+        
+        Args:
+            enlarge_ratio (float or list): Expands/shrinks the bbox by this percentage. 
+                                           If a list [min, max] is provided, a random value is uniformly sampled.
         
         Returns:
             dict: A dictionary containing lists of tensors for 'ar_bbox_prompts' 
@@ -418,8 +422,15 @@ class CGNetBBoxPrompter:
         ar_bbox_prompts = []
         tc_bbox_prompts = []
 
+        # 1. Handle enlarge_ratio (can be a scalar or a list/tuple like [min, max])
+        if isinstance(enlarge_ratio, (list, tuple)):
+            import random
+            e_ratio = random.uniform(enlarge_ratio[0], enlarge_ratio[1])
+        else:
+            e_ratio = enlarge_ratio
+
         for b in range(B):
-            # 1. Filter out low-confidence cells
+            # 2. Filter out low-confidence cells
             mask = pred_conf[b] > conf_threshold
             if mask.sum() == 0:
                 ar_bbox_prompts.append(None)
@@ -429,42 +440,51 @@ class CGNetBBoxPrompter:
             pos_preds = outputs_permuted[b][mask]
             grid_y, grid_x = torch.where(mask)
 
-            # 2. Extract bounding box properties
+            # 3. Extract bounding box properties
             dxdy = torch.sigmoid(pos_preds[:, 1:3])
             wh = torch.sigmoid(pos_preds[:, 3:5])
             
-            # 3. Extract class predictions
+            # 4. Extract class predictions
             cls_probs = torch.softmax(pos_preds[:, 5:], dim=1)
             cls_conf, cls_pred = torch.max(cls_probs, dim=1)
 
-            # 4. Map from grid scale back to normalized image coordinates [0, 1]
+            # 5. Map from grid scale back to normalized image coordinates [0, 1]
             cx = (grid_x.float() + dxdy[:, 0]) / GW
             cy = (grid_y.float() + dxdy[:, 1]) / GH
             norm_w = wh[:, 0]
             norm_h = wh[:, 1]
 
-            # 5. Convert to absolute pixel coordinates [x_min, y_min, x_max, y_max] 
-            # This is crucial for SAM which expects native image scaling.
-            x_min = (cx - norm_w / 2) * W
-            y_min = (cy - norm_h / 2) * H
-            x_max = (cx + norm_w / 2) * W
-            y_max = (cy + norm_h / 2) * H
+            # 6. Convert to absolute pixel coordinates and apply enlarge_ratio
+            w_abs = norm_w * W
+            h_abs = norm_h * H
+            cx_abs = cx * W
+            cy_abs = cy * H
+            
+            # Calculate padding based on the ratio
+            pad_w = w_abs * e_ratio
+            pad_h = h_abs * e_ratio
+
+            # Clamp coordinates to ensure they don't go out of image bounds
+            x_min = torch.clamp(cx_abs - (w_abs / 2) - pad_w, min=0)
+            y_min = torch.clamp(cy_abs - (h_abs / 2) - pad_h, min=0)
+            x_max = torch.clamp(cx_abs + (w_abs / 2) + pad_w, max=W - 1)
+            y_max = torch.clamp(cy_abs + (h_abs / 2) + pad_h, max=H - 1)
 
             # Stack for NMS processing
             boxes = torch.stack((x_min, y_min, x_max, y_max, pred_conf[b][mask], cls_pred.float()), dim=1)
             
-            # 6. Apply Non-Maximum Suppression (NMS)
+            # 7. Apply Non-Maximum Suppression (NMS)
             keep_idx = ops.nms(boxes[:, :4], boxes[:, 4], iou_threshold=iou_threshold)
             boxes = boxes[keep_idx]
             
-            # 7. Separate boxes by Class ID (0: TC, 1: AR)
+            # 8. Separate boxes by Class ID (0: TC, 1: AR)
             tc_mask = boxes[:, 5] == 0
             ar_mask = boxes[:, 5] == 1
             
             tc_boxes = boxes[tc_mask][:, :4]
             ar_boxes = boxes[ar_mask][:, :4]
             
-            # 8. Format to [N, 1, 4] to mimic original climatenet_util.py output
+            # 9. Format to [N, 1, 4] to mimic original climatenet_util.py output
             if len(tc_boxes) > 0:
                 tc_bbox_prompts.append(tc_boxes.unsqueeze(1))
             else:
