@@ -280,9 +280,9 @@ def validate_propose_and_score(train_dataloader,val_dataloader, ar_metrics, tc_m
     total_samples = 0
     valid_pbar = tqdm(total=len(val_dataloader), desc='Propose & Score Eval', leave=False)
     
-    tc_pts_raw, _ = train_dataloader.generate_smart_grid_prompts('tc', grid_size=(32, 32), jitter_amount=0.0, min_occurrences=5)
-    ar_pts_raw, _ = train_dataloader.generate_smart_grid_prompts('ar', grid_size=(32, 32), jitter_amount=0.0, min_occurrences=5)
-    
+    tc_pts_raw, _ = train_dataloader.dataset.generate_smart_grid_prompts('tc', grid_size=(32, 32), jitter_amount=0.0, min_occurrences=5)
+    ar_pts_raw, _ = train_dataloader.dataset.generate_smart_grid_prompts('ar', grid_size=(32, 32), jitter_amount=0.0, min_occurrences=5)
+
     # Squeeze from (N, 1, 2) to (N, 2) to match SAM's expected inference input format
     tc_points_vis = tc_pts_raw.squeeze(1).to(device) if tc_pts_raw is not None else torch.empty((0, 2), device=device)
     ar_points_vis = ar_pts_raw.squeeze(1).to(device) if ar_pts_raw is not None else torch.empty((0, 2), device=device)
