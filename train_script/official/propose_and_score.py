@@ -24,7 +24,7 @@ for p in (PROJECT_ROOT, TRAIN_SCRIPT_DIR):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from utility import batch_to_cuda, get_idle_gpu, set_randomness, setup_device_and_distributed, worker_init_fn
+from utility import batch_to_cuda, get_idle_gpu, set_randomness, setup_device_and_distributed, worker_init_fn, plot_mask_with_points_and_bbox
 from parser_config import parse
 from model.climatesam import ClimateSAM
 from dataset.climatenet import ClimateDataset
@@ -34,11 +34,11 @@ from model.prompt.cgnet_module import CGNetModule
 import matplotlib.pyplot as plt
 import numpy as np
 
-def log_pipeline_visualizations(gt_mask, tc_pred, ar_pred, tc_points, ar_points, bg_points, step, image_idx):
+def log_pipeline_visualizations(gt_mask, tc_pred, ar_pred, tc_points, ar_points, step, image_idx):
     """
     Creates a 1x3 plot showing:
-    1. GT Mask + TC Grid Prompts + BG Negative Prompts
-    2. GT Mask + AR Grid Prompts + BG Negative Prompts
+    1. GT Mask + TC Grid Prompts
+    2. GT Mask + AR Grid Prompts
     3. Final Accepted Predicted Masks
     """
     gt = gt_mask.cpu().numpy()
@@ -46,9 +46,8 @@ def log_pipeline_visualizations(gt_mask, tc_pred, ar_pred, tc_points, ar_points,
     ar_m = ar_pred.squeeze().cpu().numpy()
     
     # Flatten from [N, 1, 2] to [N, 2] for plotting
-    tc_pts = tc_points.view(-1, 2).cpu().numpy() if tc_points is not None else []
-    ar_pts = ar_points.view(-1, 2).cpu().numpy() if ar_points is not None else []
-    bg_pts = bg_points.view(-1, 2).cpu().numpy() if bg_points is not None else []
+    tc_pts = tc_points.view(-1, 2).cpu().numpy()
+    ar_pts = ar_points.view(-1, 2).cpu().numpy()
     
     pred_combined = np.zeros_like(gt)
     pred_combined[tc_m > 0] = 1
@@ -56,22 +55,18 @@ def log_pipeline_visualizations(gt_mask, tc_pred, ar_pred, tc_points, ar_points,
 
     fig, axes = plt.subplots(1, 3, figsize=(18, 6))
     
-    # --- Plot 1: GT + TC + BG ---
+    # --- Plot 1: GT + TC ---
     axes[0].imshow(gt, cmap='viridis', interpolation='nearest')
-    if len(bg_pts) > 0:
-        axes[0].scatter(bg_pts[:, 0], bg_pts[:, 1], c='white', marker='x', s=2, alpha=0.3, label='BG (Neg)')
     if len(tc_pts) > 0:
         axes[0].scatter(tc_pts[:, 0], tc_pts[:, 1], c='red', s=6, alpha=0.8, label='TC (Pos)')
-    axes[0].set_title('GT Mask + TC & BG Prompts')
+    axes[0].set_title('GT Mask + TC Prompts')
     axes[0].axis('off')
     
-    # --- Plot 2: GT + AR + BG ---
+    # --- Plot 2: GT + AR ---
     axes[1].imshow(gt, cmap='viridis', interpolation='nearest')
-    if len(bg_pts) > 0:
-        axes[1].scatter(bg_pts[:, 0], bg_pts[:, 1], c='white', marker='x', s=2, alpha=0.3, label='BG (Neg)')
     if len(ar_pts) > 0:
         axes[1].scatter(ar_pts[:, 0], ar_pts[:, 1], c='cyan', s=6, alpha=0.8, label='AR (Pos)')
-    axes[1].set_title('GT Mask + AR & BG Prompts')
+    axes[1].set_title('GT Mask + AR Prompts')
     axes[1].axis('off')
     
     # --- Plot 3: Final Accepted Segment ---
@@ -168,7 +163,7 @@ class ProposeAndScorePipeline:
         self.device = device
         
     @torch.no_grad()
-    def generate_objects(self, sam_image, cgnet_image, tc_points, ar_points, bg_points, points_per_batch=64, iou_thresh=0.5, conf_thresh=0.6):
+    def generate_objects(self, sam_image, cgnet_image, tc_points, ar_points, points_per_batch=64, iou_thresh=0.5, conf_thresh=0.6):
         C, H, W = sam_image.shape
         self.sam.set_infer_img(sam_image.unsqueeze(0))
         
@@ -178,14 +173,14 @@ class ProposeAndScorePipeline:
         
         if tc_points is not None and len(tc_points) > 0:
             all_masks, all_scores, all_classes, all_boxes, raw_tc = self._process_grid(
-                points=tc_points, bg_points=bg_points, cgnet_image=cgnet_image, points_per_batch=points_per_batch, 
+                points=tc_points, cgnet_image=cgnet_image, points_per_batch=points_per_batch, 
                 prompt_type='TC', conf_thresh=conf_thresh, target_class_id=1, 
                 accumulators=(all_masks, all_scores, all_classes, all_boxes)
             )
         
         if ar_points is not None and len(ar_points) > 0:
             all_masks, all_scores, all_classes, all_boxes, raw_ar = self._process_grid(
-                points=ar_points, bg_points=bg_points, cgnet_image=cgnet_image, points_per_batch=points_per_batch, 
+                points=ar_points, cgnet_image=cgnet_image, points_per_batch=points_per_batch, 
                 prompt_type='AR', conf_thresh=conf_thresh, target_class_id=2, 
                 accumulators=(all_masks, all_scores, all_classes, all_boxes)
             )
@@ -202,7 +197,7 @@ class ProposeAndScorePipeline:
         
         return global_masks[keep_indices], global_classes[keep_indices], global_scores[keep_indices], raw_tc, raw_ar
 
-    def _process_grid(self, points, bg_points, cgnet_image, points_per_batch, prompt_type, conf_thresh, target_class_id, accumulators):
+    def _process_grid(self, points, cgnet_image, points_per_batch, prompt_type, conf_thresh, target_class_id, accumulators):
         all_masks, all_scores, all_classes, all_boxes = accumulators
         
         if points is None or len(points) == 0:
@@ -210,30 +205,14 @@ class ProposeAndScorePipeline:
             
         num_points = points.shape[0]
         raw_mask_accumulator = []
-        
-        # Determine how many negative points to attach per positive point. Limit to 2 to prevent drowning.
-        K = min(2, bg_points.shape[0]) if (bg_points is not None and len(bg_points) > 0) else 0
 
         for i in range(0, num_points, points_per_batch):
             batch_pos = points[i:i+points_per_batch] # Shape: [B, 1, 2]
             B = batch_pos.shape[0]
             
-            if K > 0:
-                # Sample K negative points and duplicate them across this batch dimension
-                idx = torch.randperm(bg_points.shape[0], device=self.device)[:K]
-                bg_sampled = bg_points[idx].view(-1, 2) # [K, 2]
-                bg_exp = bg_sampled.unsqueeze(0).expand(B, K, 2) # [B, K, 2]
-                
-                # Combine Coordinates and Labels
-                batch_coords = torch.cat([batch_pos, bg_exp], dim=1) # [B, 1+K, 2]
-                pos_lbl = torch.ones((B, 1), dtype=torch.float32, device=self.device)
-                neg_lbl = torch.zeros((B, K), dtype=torch.float32, device=self.device)
-                batch_labels = torch.cat([pos_lbl, neg_lbl], dim=1) # [B, 1+K]
-            else:
-                batch_coords = batch_pos
-                batch_labels = torch.ones((B, 1), dtype=torch.float32, device=self.device)
-            
-            formatted_points = [(batch_coords.unsqueeze(0), batch_labels.unsqueeze(0))]
+            # Format strictly for 1 Positive Point per prompt
+            batch_labels = torch.ones((B, 1), dtype=torch.float32, device=self.device)
+            formatted_points = [(batch_pos.unsqueeze(0), batch_labels.unsqueeze(0))]
             
             if prompt_type == 'TC':
                 tc_masks, _ = self.sam.infer(tc_point_prompts=formatted_points, ar_point_prompts=None)
@@ -272,24 +251,18 @@ class ProposeAndScorePipeline:
 # ========================================== #
 @torch.no_grad()
 def validate_propose_and_score(train_dataloader, val_dataloader, ar_metrics, tc_metrics, pipeline, device, worker_args, max_samples=None):
-    from utility import plot_mask_with_points_and_bbox
-    import os
-    import wandb
-    
     pipeline.sam.eval()
     pipeline.classifier.eval()
     
     total_samples = 0
     valid_pbar = tqdm(total=len(val_dataloader), desc='Propose & Score Eval', leave=False)
     
-    # 1. Generate Smart Grids (Including safely defined Backgrounds)
+    # 1. Generate ONLY Positive Smart Grids
     tc_pts_raw, _ = train_dataloader.dataset.generate_smart_grid_prompts('tc', grid_size=(32, 32), jitter_amount=0.5, threshold=0.10)
     ar_pts_raw, _ = train_dataloader.dataset.generate_smart_grid_prompts('ar', grid_size=(32, 32), jitter_amount=0.5, threshold=0.10)
-    bg_pts_raw, _ = train_dataloader.dataset.generate_smart_grid_prompts('bg', grid_size=(32, 32), jitter_amount=0.5, threshold=0.95)
 
     tc_points_vis = tc_pts_raw.to(device) if tc_pts_raw is not None else torch.empty((0, 1, 2), device=device)
     ar_points_vis = ar_pts_raw.to(device) if ar_pts_raw is not None else torch.empty((0, 1, 2), device=device)
-    bg_points_vis = bg_pts_raw.to(device) if bg_pts_raw is not None else torch.empty((0, 1, 2), device=device)
     
     tc_points_vis_copy = tc_points_vis.view(-1, 2).clone()
     ar_points_vis_copy = ar_points_vis.view(-1, 2).clone()
@@ -314,7 +287,6 @@ def validate_propose_and_score(train_dataloader, val_dataloader, ar_metrics, tc_
                     cgnet_image=cgnet_img,
                     tc_points=tc_points_vis,
                     ar_points=ar_points_vis,
-                    bg_points=bg_points_vis,
                     points_per_batch=64,
                     iou_thresh=0.4,
                     conf_thresh=0.6
@@ -354,7 +326,6 @@ def validate_propose_and_score(train_dataloader, val_dataloader, ar_metrics, tc_
                         ar_pred=ar_pred, 
                         tc_points=tc_points_vis, 
                         ar_points=ar_points_vis, 
-                        bg_points=bg_points_vis,
                         step=val_step, 
                         image_idx=b
                     )
@@ -400,10 +371,7 @@ def main_worker(worker_id, worker_args):
         data_dir=worker_args.data_dir, train_flag=True, shot_num=worker_args.shot_num,
         augmented=worker_args.augmented, generate_prompt=True
     )
-    
-    # Ensure spatial priors exist before fetching grids
     train_dataset.calculate_spatial_priors()
-    
     val_dataset = ClimateDataset(data_dir=worker_args.data_dir, train_flag=False, augmented=False, generate_prompt=True)
     train_collate_fn = train_dataset.collate_fn
     
@@ -415,7 +383,7 @@ def main_worker(worker_id, worker_args):
     g.manual_seed(3407)
     
     train_dataloader = DataLoader(
-        dataset=train_dataset, batch_size=getattr(worker_args, 'train_bs', 2), shuffle=False, num_workers=getattr(worker_args, 'num_workers', 2),
+        dataset=train_dataset, batch_size=getattr(worker_args, 'train_bs', 2), shuffle=False is None, num_workers=getattr(worker_args, 'num_workers', 2),
          drop_last=False, collate_fn=train_collate_fn,
         worker_init_fn=partial(worker_init_fn, base_seed=3407), generator=g
     )
