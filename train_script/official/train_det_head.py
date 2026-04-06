@@ -54,25 +54,27 @@ def parse_climatenet_bboxes(batch_ar, batch_tc, img_h, img_w):
         formatted_bboxes.append(b_boxes)
     return formatted_bboxes
 
-def build_grid_targets(boxes_list, grid_shape, device):
-    """Transforms list of bboxes into grid-based YOLO targets"""
+def build_grid_targets_single_class(boxes_list, grid_shape, device, class_id):
+    """Transforms list of bboxes into grid-based YOLO targets for a specific class"""
     B = len(boxes_list)
     GH, GW = grid_shape
-    targets = torch.zeros((B, 6, GH, GW), device=device)
+    # 5 channels: obj, x, y, w, h
+    targets = torch.zeros((B, 5, GH, GW), device=device)
     for b in range(B):
         for box in boxes_list[b]:
             cls_id, cx, cy, w, h = box
+            if cls_id != class_id:
+                continue
             gi, gj = min(max(int(cy * GH), 0), GH - 1), min(max(int(cx * GW), 0), GW - 1)
             targets[b, 0, gi, gj] = 1.0  
             targets[b, 1, gi, gj] = cx * GW - gj
             targets[b, 2, gi, gj] = cy * GH - gi
             targets[b, 3, gi, gj] = w
             targets[b, 4, gi, gj] = h
-            targets[b, 5, gi, gj] = cls_id
     return targets
 
-def yolo_detection_loss(preds, targets):
-    """Computes BCE for objectness, MSE for boxes, and CE for classes."""
+def yolo_detection_loss_single_class(preds, targets):
+    """Computes BCE for objectness and MSE for boxes for a single class map."""
     obj_mask = targets[:, 0] == 1.0
     noobj_mask = targets[:, 0] == 0.0
 
@@ -81,36 +83,41 @@ def yolo_detection_loss(preds, targets):
     loss_conf = loss_obj + 0.5 * loss_noobj
 
     if obj_mask.sum() == 0:
-        return loss_conf, (loss_conf.item(), 0.0, 0.0)
+        return loss_conf, (loss_conf.item(), 0.0)
 
     pos_preds = preds.permute(0, 2, 3, 1)[obj_mask]           
     pos_targets = targets.permute(0, 2, 3, 1)[obj_mask]       
 
     loss_box = F.mse_loss(torch.sigmoid(pos_preds[:, 1:3]), pos_targets[:, 1:3]) + \
                F.mse_loss(torch.sigmoid(pos_preds[:, 3:5]), pos_targets[:, 3:5])
-    loss_cls = F.cross_entropy(pos_preds[:, 5:], pos_targets[:, 5].long())
 
-    total_loss = loss_conf + 5.0 * loss_box + loss_cls
-    return total_loss, (loss_conf.item(), loss_box.item(), loss_cls.item())
+    total_loss = loss_conf + 5.0 * loss_box
+    return total_loss, (loss_conf.item(), loss_box.item())
 
 # ============================================================
-# 2. TOKEN-GATED BBOX PROMPTER
+# 2. TOKEN-GATED BBOX PROMPTER (DUAL HEAD ARCHITECTURE)
 # ============================================================
 
 class TokenGatedDetectionHead(nn.Module):
-    def __init__(self, embedding_dim=256, num_classes=2):
+    def __init__(self, embedding_dim=256):
         super().__init__()
+        # Separate gating mechanisms
         self.ar_gate = nn.Sequential(nn.Linear(embedding_dim, embedding_dim), nn.Sigmoid())
         self.tc_gate = nn.Sequential(nn.Linear(embedding_dim, embedding_dim), nn.Sigmoid())
         
-        self.conv_block = nn.Sequential(
-            nn.Conv2d(embedding_dim, embedding_dim, kernel_size=3, padding=1),
-            nn.BatchNorm2d(embedding_dim),
-            nn.ReLU(inplace=True),
+        # Separate heads for AR and TC (5 channels: obj, x, y, w, h)
+        self.ar_conv_block = nn.Sequential(
             nn.Conv2d(embedding_dim, embedding_dim // 2, kernel_size=3, padding=1),
             nn.BatchNorm2d(embedding_dim // 2),
             nn.ReLU(inplace=True),
-            nn.Conv2d(embedding_dim // 2, 1 + 4 + num_classes, kernel_size=1) # 7 channels
+            nn.Conv2d(embedding_dim // 2, 5, kernel_size=1) 
+        )
+        
+        self.tc_conv_block = nn.Sequential(
+            nn.Conv2d(embedding_dim, embedding_dim // 2, kernel_size=3, padding=1),
+            nn.BatchNorm2d(embedding_dim // 2),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(embedding_dim // 2, 5, kernel_size=1) 
         )
 
     def forward(self, x, ar_token, tc_token):
@@ -123,8 +130,13 @@ class TokenGatedDetectionHead(nn.Module):
         ar_w = self.ar_gate(ar_token).unsqueeze(-1).unsqueeze(-1)
         tc_w = self.tc_gate(tc_token).unsqueeze(-1).unsqueeze(-1)
         
-        gated_x = x * (ar_w + tc_w)
-        return self.conv_block(gated_x)
+        ar_gated_x = x * ar_w
+        tc_gated_x = x * tc_w
+        
+        ar_logits = self.ar_conv_block(ar_gated_x)
+        tc_logits = self.tc_conv_block(tc_gated_x)
+        
+        return ar_logits, tc_logits
 
 class SAMBBoxPrompter(nn.Module):
     def __init__(self):
@@ -135,19 +147,17 @@ class SAMBBoxPrompter(nn.Module):
         return self.det_head(image_embeddings, ar_token, tc_token)
 
     @torch.no_grad()
-    def get_prompts(self, yolo_logits, original_h, original_w, conf_threshold=0.5, iou_threshold=0.4, enlarge_ratio=0.0):
-        """Converts YOLO grid logits into BBox prompts for SAM."""
-        B, C, GH, GW = yolo_logits.shape
-        logits_permuted = yolo_logits.permute(0, 2, 3, 1)
+    def _process_single_class_logits(self, logits, original_h, original_w, conf_threshold, iou_threshold, enlarge_ratio):
+        B, C, GH, GW = logits.shape
+        logits_permuted = logits.permute(0, 2, 3, 1)
         pred_conf = torch.sigmoid(logits_permuted[..., 0])
 
-        ar_bbox_prompts, tc_bbox_prompts = [], []
+        bbox_prompts = []
 
         for b in range(B):
             mask = pred_conf[b] > conf_threshold
             if mask.sum() == 0:
-                ar_bbox_prompts.append(None)
-                tc_bbox_prompts.append(None)
+                bbox_prompts.append(None)
                 continue
 
             pos_preds = logits_permuted[b][mask]
@@ -155,7 +165,6 @@ class SAMBBoxPrompter(nn.Module):
 
             dxdy = torch.sigmoid(pos_preds[:, 1:3])
             wh = torch.sigmoid(pos_preds[:, 3:5])
-            cls_conf, cls_pred = torch.max(torch.softmax(pos_preds[:, 5:], dim=1), dim=1)
 
             # Map back to 0-1
             cx = (grid_x.float() + dxdy[:, 0]) / GW
@@ -170,14 +179,23 @@ class SAMBBoxPrompter(nn.Module):
             x_max = torch.clamp(cx_abs + (w_abs / 2) + pad_w, max=original_w - 1)
             y_max = torch.clamp(cy_abs + (h_abs / 2) + pad_h, max=original_h - 1)
 
-            boxes = torch.stack((x_min, y_min, x_max, y_max, pred_conf[b][mask], cls_pred.float()), dim=1)
+            boxes = torch.stack((x_min, y_min, x_max, y_max, pred_conf[b][mask]), dim=1)
             keep_idx = ops.nms(boxes[:, :4], boxes[:, 4], iou_threshold=iou_threshold)
-            boxes = boxes[keep_idx]
+            boxes = boxes[keep_idx][:, :4]
             
-            tc_boxes, ar_boxes = boxes[boxes[:, 5] == 0][:, :4], boxes[boxes[:, 5] == 1][:, :4]
-            
-            tc_bbox_prompts.append(tc_boxes.unsqueeze(1) if len(tc_boxes) > 0 else None)
-            ar_bbox_prompts.append(ar_boxes.unsqueeze(1) if len(ar_boxes) > 0 else None)
+            bbox_prompts.append(boxes.unsqueeze(1) if len(boxes) > 0 else None)
+
+        return bbox_prompts
+
+    @torch.no_grad()
+    def get_prompts(self, ar_logits, tc_logits, original_h, original_w, conf_threshold=0.5, iou_threshold=0.4, enlarge_ratio=0.0):
+        """Converts separate AR and TC YOLO grid logits into BBox prompts for SAM."""
+        ar_bbox_prompts = self._process_single_class_logits(
+            ar_logits, original_h, original_w, conf_threshold, iou_threshold, enlarge_ratio
+        )
+        tc_bbox_prompts = self._process_single_class_logits(
+            tc_logits, original_h, original_w, conf_threshold, iou_threshold, enlarge_ratio
+        )
 
         return {'ar_bbox_prompts': ar_bbox_prompts, 'tc_bbox_prompts': tc_bbox_prompts}
 
@@ -190,7 +208,7 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, optimizer, sc
     prompter.train()
     
     batch_pbar = tqdm(total=len(train_dataloader), desc=f'Epoch {epoch}/{max_epoch_num}', leave=True) if local_rank == 0 else None
-    epoch_loss_dict = {"total": 0, "conf": 0, "box": 0, "cls": 0}
+    epoch_loss_dict = {"total": 0, "ar_conf": 0, "ar_box": 0, "tc_conf": 0, "tc_box": 0}
     
     for train_step, batch in enumerate(train_dataloader):
         batch = batch_to_cuda(batch, device)
@@ -206,24 +224,30 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, optimizer, sc
 
         # 2. Forward through BBox Prompter
         with torch.amp.autocast('cuda'):
-            yolo_logits = prompter(image_embeddings, ar_token, tc_token)
+            ar_logits, tc_logits = prompter(image_embeddings, ar_token, tc_token)
             
-            # 3. Build YOLO Targets
+            # 3. Build Separate YOLO Targets
             img_h, img_w = batch['gt_mask'][0].shape
             bboxes = parse_climatenet_bboxes(batch['ar_bbox_prompts'], batch['tc_bbox_prompts'], img_h, img_w)
-            targets = build_grid_targets(bboxes, grid_shape=yolo_logits.shape[2:], device=device)
+            
+            ar_targets = build_grid_targets_single_class(bboxes, grid_shape=ar_logits.shape[2:], device=device, class_id=1.0)
+            tc_targets = build_grid_targets_single_class(bboxes, grid_shape=tc_logits.shape[2:], device=device, class_id=0.0)
             
             # 4. Compute Loss
-            total_loss, (l_conf, l_box, l_cls) = yolo_detection_loss(yolo_logits, targets)
+            ar_loss, (ar_l_conf, ar_l_box) = yolo_detection_loss_single_class(ar_logits, ar_targets)
+            tc_loss, (tc_l_conf, tc_l_box) = yolo_detection_loss_single_class(tc_logits, tc_targets)
+            
+            total_loss = ar_loss + tc_loss
             loss_scaled = total_loss / gradient_accumulation_steps
 
         # 5. Backward & Step
         scaler.scale(loss_scaled).backward()
         
         epoch_loss_dict["total"] += total_loss.item()
-        epoch_loss_dict["conf"] += l_conf
-        epoch_loss_dict["box"] += l_box
-        epoch_loss_dict["cls"] += l_cls
+        epoch_loss_dict["ar_conf"] += ar_l_conf
+        epoch_loss_dict["ar_box"] += ar_l_box
+        epoch_loss_dict["tc_conf"] += tc_l_conf
+        epoch_loss_dict["tc_box"] += tc_l_box
 
         if (train_step + 1) % gradient_accumulation_steps == 0 or (train_step + 1) == len(train_dataloader):
             scaler.step(optimizer)
@@ -241,9 +265,10 @@ def train_one_epoch(epoch, train_dataloader, climatesam, prompter, optimizer, sc
         steps = len(train_dataloader)
         wandb.log({
             "train/loss_total": epoch_loss_dict["total"] / steps,
-            "train/loss_conf": epoch_loss_dict["conf"] / steps,
-            "train/loss_box": epoch_loss_dict["box"] / steps,
-            "train/loss_cls": epoch_loss_dict["cls"] / steps,
+            "train/ar_loss_conf": epoch_loss_dict["ar_conf"] / steps,
+            "train/ar_loss_box": epoch_loss_dict["ar_box"] / steps,
+            "train/tc_loss_conf": epoch_loss_dict["tc_conf"] / steps,
+            "train/tc_loss_box": epoch_loss_dict["tc_box"] / steps,
             "epoch": epoch, "lr": scheduler.get_last_lr()[0]
         }, step=epoch)
 
@@ -266,10 +291,10 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
         ar_token = climatesam.mask_decoder.hf_mlp_ar(climatesam.mask_decoder.hf_token_ar.weight.to(device))
         tc_token = climatesam.mask_decoder.hf_mlp_tc(climatesam.mask_decoder.hf_token_tc.weight.to(device))
 
-        yolo_logits = prompter(image_embeddings, ar_token, tc_token)
+        ar_logits, tc_logits = prompter(image_embeddings, ar_token, tc_token)
         
         prompt_dict = prompter.get_prompts(
-            yolo_logits, img_h, img_w, 
+            ar_logits, tc_logits, img_h, img_w, 
             conf_threshold=0.5, iou_threshold=0.4, enlarge_ratio=getattr(worker_args, 'prompt_enlarge_ratio', 0.0)
         )
 
