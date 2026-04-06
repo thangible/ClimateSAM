@@ -414,6 +414,18 @@ def set_up_model(worker_args, device):
         param.requires_grad = False
         
     prompter = SAMBBoxPrompter().to(device)
+    
+    if worker_args.load_pretrained:
+        generator_path = os.path.join(worker_args.exp_dir, worker_args.pretrained_name)
+        if not os.path.exists(generator_path):
+            print(f"Pretrained weights for prompt generator not found at {generator_path}. Starting training from scratch.")
+            return climatesam, prompter
+        else:
+            phase_2_checkpoint = torch.load(generator_path, map_location=device, weights_only=False)
+            print(f"Pretrained weights for prompt generator from phase 2 loaded from {generator_path}")
+            prompter.load_state_dict(phase_2_checkpoint)
+            print(f"Prompt generator weights loaded from {generator_path}")
+
     return climatesam, prompter
 
 # ============================================================
