@@ -326,7 +326,7 @@ def validate_propose_and_score(train_dataloader,val_dataloader, ar_metrics, tc_m
                 batch_ar_preds.append(ar_pred)
 
                 # ---> ADDED: Use your utility function to plot the raw SAM output <---
-                if val_step == 0 and b < 2 and getattr(worker_args, 'wandb', False):
+                if val_step == 0 and b < 4 and getattr(worker_args, 'wandb', False):
                     gt_mask = batch['gt_mask'][b]
                     save_path = os.path.join(worker_args.exp_dir, f"raw_sam_masks_step{val_step}_img{b}.png")
                     
@@ -379,7 +379,13 @@ def main_worker(worker_id, worker_args):
     print(f"Worker {worker_id} initialized on device {device}.")
     
     # Dataset
-    val_dataset = ClimateDataset(data_dir=worker_args.data_dir, train_flag=False, augmented=False, generate_prompt=False)
+    train_dataset = ClimateDataset(
+        data_dir=worker_args.dataset_dir, train_flag=True, shot_num=worker_args.shot_num,
+        augmented=worker_args.augmented, generate_prompt=True
+    )
+    val_dataset = ClimateDataset(data_dir=worker_args.dataset_dir, train_flag=False, augmented=False, generate_prompt=True)
+    train_collate_fn = train_dataset.collate_fn
+    val_collate_fn = val_dataset.collate_fn
     
     if hasattr(worker_args, 'debugging') and worker_args.debugging:
         val_indices = list(range(min(getattr(worker_args, 'debug_val_size', 20), len(val_dataset))))
