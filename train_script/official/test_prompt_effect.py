@@ -643,10 +643,13 @@ def main_worker(worker_id, worker_args):
         {'enlarge_ratio': 0.0},
         {'enlarge_ratio': 0.1},
         {'enlarge_ratio': 0.2},
-        # {'enlarge_ratio': 0.3},
-        # {'enlarge_ratio': 0.5},
+        {'enlarge_ratio': 0.3},
+        {'enlarge_ratio': 0.4},
+        {'enlarge_ratio': 0.5},
+        {'enlarge_ratio': 0.6},
+        {'enlarge_ratio': 0.7},
         {'enlarge_ratio': -0.1},
-        # {'enlarge_ratio': -0.2},
+        {'enlarge_ratio': -0.2},
     ]
     
     # Configuration 3: Mask prompt (single config)
