@@ -212,7 +212,11 @@ class ProposeAndScorePipeline:
             
             # Format strictly for 1 Positive Point per prompt
             batch_labels = torch.ones((B, 1), dtype=torch.float32, device=self.device)
-            formatted_points = [(batch_pos.unsqueeze(0), batch_labels.unsqueeze(0))]
+            # `batch_pos` already has shape [B, 1, 2] and `batch_labels` has shape [B, 1].
+            # SAM expects a list with one entry per image; since we infer on a single image
+            # (set_infer_img was called with a single image), pass the tuple directly
+            # without adding an extra leading dimension.
+            formatted_points = [(batch_pos, batch_labels)]
             
             if prompt_type == 'TC':
                 tc_masks, _ = self.sam.infer(tc_point_prompts=formatted_points, ar_point_prompts=None)
