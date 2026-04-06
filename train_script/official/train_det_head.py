@@ -317,12 +317,21 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
         )
         
         # 3. Update Metrics
+        # 3. Update Metrics
         masks_gt = batch['gt_mask']
         masks_ar_gts = [(m == 2).to(torch.uint8)[None, None, :] for m in masks_gt]
         masks_tc_gts = [(m == 1).to(torch.uint8)[None, None, :] for m in masks_gt]
         
-        tc_metrics.update([[m] for m in tc_pred_masks], masks_tc_gts, batch['index_name'])
-        ar_metrics.update([[m] for m in ar_pred_masks], masks_ar_gts, batch['index_name'])
+        # Ensure predicted masks have the expected 4D shape [B, C, H, W] for the evaluator
+        for masks in [tc_pred_masks, ar_pred_masks]:
+            for i in range(len(masks)):
+                if len(masks[i].shape) == 2:
+                    masks[i] = masks[i][None, None, :]
+                elif len(masks[i].shape) == 3:
+                    masks[i] = masks[i][:, None, :]
+                    
+        tc_metrics.update(tc_pred_masks, masks_tc_gts, batch['index_name'])
+        ar_metrics.update(ar_pred_masks, masks_ar_gts, batch['index_name'])
 
         # 4. Visualization
         if val_step == 0 and worker_args.wandb:
