@@ -208,6 +208,7 @@ class CGNetBBoxPrompter:
 
     def train(self, train_dataloader, val_dataloader, epochs):
         best_val_loss = float('inf')
+        best_val_iou = 0.0
         
         for epoch in range(1, epochs + 1):
             self.cgnet_model.train()
