@@ -287,7 +287,7 @@ def validate_propose_and_score(train_dataloader, val_dataloader, ar_metrics, tc_
     # Generate points maintaining the [N, 1, 2] structure
     tc_pts_raw, _ = train_dataloader.dataset.generate_smart_grid_prompts('tc', grid_size=(32, 32), jitter_amount=0.5, threshold=0.20)
     ar_pts_raw, _ = train_dataloader.dataset.generate_smart_grid_prompts('ar', grid_size=(16, 16), jitter_amount=0.5, threshold=0.50)
-    bg_pts_raw, _ = train_dataloader.dataset.generate_smart_grid_prompts('bg', grid_size=(64, 64), jitter_amount=0.5, threshold=0.99)
+    bg_pts_raw, _ = train_dataloader.dataset.generate_smart_grid_prompts('bg', grid_size=(64, 64), jitter_amount=0.5, threshold=0.999)
 
     tc_points_vis = tc_pts_raw.to(device) if tc_pts_raw is not None else torch.empty((0, 1, 2), device=device)
     ar_points_vis = ar_pts_raw.to(device) if ar_pts_raw is not None else torch.empty((0, 1, 2), device=device)
@@ -403,6 +403,7 @@ def main_worker(worker_id, worker_args):
         data_dir=worker_args.data_dir, train_flag=True, shot_num=worker_args.shot_num,
         augmented=worker_args.augmented, generate_prompt=True
     )
+    train_dataset.calculate_spatial_priors()
     val_dataset = ClimateDataset(data_dir=worker_args.data_dir, train_flag=False, augmented=False, generate_prompt=True)
     train_collate_fn = train_dataset.collate_fn
     

@@ -526,8 +526,8 @@ class ClimateDataset(Dataset):
         Creates a 2D heatmap tracking the exact locations where TCs, ARs, 
         and pure Backgrounds occur across the entire training dataset.
         """
-        if os.path.exists(self.spatial_priors_path) and not self.reset_flag:
-            return np.load(self.spatial_priors_path, allow_pickle=True).item()
+        # if os.path.exists(self.spatial_priors_path) and not self.reset_flag:
+        #     return np.load(self.spatial_priors_path, allow_pickle=True).item()
 
         print("Building spatial occurrence heatmaps from training data... (This only happens once)")
         
