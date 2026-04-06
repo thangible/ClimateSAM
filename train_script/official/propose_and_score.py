@@ -326,7 +326,7 @@ def validate_propose_and_score(train_dataloader,val_dataloader, ar_metrics, tc_m
                 batch_ar_preds.append(ar_pred)
 
                 # ---> ADDED: Use your utility function to plot the raw SAM output <---
-                if val_step == 0 and b < 4 and getattr(worker_args, 'wandb', False):
+                if val_step == 0 and b < 4:
                     gt_mask = batch['gt_mask'][b]
                     save_path = os.path.join(worker_args.exp_dir, f"raw_sam_masks_step{val_step}_img{b}.png")
                     
@@ -341,8 +341,8 @@ def validate_propose_and_score(train_dataloader,val_dataloader, ar_metrics, tc_m
                         axis=False, 
                         title="Raw SAM Assembled Masks (No Filter)"
                     )
-                    
-                    wandb.log({f"visualizations/raw_sam_batch_{val_step}_img_{b}": wandb.Image(fig)})
+                    if getattr(worker_args, 'wandb', False):
+                        wandb.log({f"visualizations/raw_sam_batch_{val_step}_img_{b}": wandb.Image(fig)})
             
             masks_gt = batch['gt_mask']
             masks_ar_gts = [(mask == 2).to(torch.uint8)[None, None, :] for mask in masks_gt]
