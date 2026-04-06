@@ -296,12 +296,16 @@ def validate_propose_and_score(train_dataloader,val_dataloader, ar_metrics, tc_m
     total_samples = 0
     valid_pbar = tqdm(total=len(val_dataloader), desc='Propose & Score Eval', leave=False)
     
-    tc_pts_raw, _ = train_dataloader.dataset.generate_smart_grid_prompts('tc', grid_size=(32, 32), jitter_amount=0.0, min_occurrences=5)
-    ar_pts_raw, _ = train_dataloader.dataset.generate_smart_grid_prompts('ar', grid_size=(32, 32), jitter_amount=0.0, min_occurrences=5)
+    tc_pts_raw, _ = train_dataloader.dataset.generate_smart_grid_prompts('tc', grid_size=(32, 32), jitter_amount=1, min_occurrences=20)
+    ar_pts_raw, _ = train_dataloader.dataset.generate_smart_grid_prompts('ar', grid_size=(32, 32), jitter_amount=1, min_occurrences=50)
 
     # Squeeze from (N, 1, 2) to (N, 2) to match SAM's expected inference input format
     tc_points_vis = tc_pts_raw.squeeze(1).to(device) if tc_pts_raw is not None else torch.empty((0, 2), device=device)
     ar_points_vis = ar_pts_raw.squeeze(1).to(device) if ar_pts_raw is not None else torch.empty((0, 2), device=device)
+    
+    import copy
+    tc_points_vis_copy = copy.deepcopy(tc_points_vis)
+    ar_points_vis_copy = copy.deepcopy(ar_points_vis)
 
     with torch.no_grad():
         for val_step, batch in enumerate(val_dataloader):
@@ -348,11 +352,12 @@ def validate_propose_and_score(train_dataloader,val_dataloader, ar_metrics, tc_m
                     gt_mask = batch['gt_mask'][b]
                     save_path = os.path.join(worker_args.exp_dir, f"raw_sam_masks_step{val_step}_img{b}.png")
                     
+                    
                     # Call your utility function using the unfiltered masks
                     fig = plot_mask_with_points_and_bbox(
                         mask=gt_mask, 
-                        ar_points=ar_points_vis, 
-                        tc_points=tc_points_vis, 
+                        ar_points=ar_points_vis_copy, 
+                        tc_points=tc_points_vis_copy, 
                         tc_pred_mask=raw_tc, 
                         ar_pred_mask=raw_ar, 
                         save_path=save_path, 
