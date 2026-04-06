@@ -305,6 +305,9 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
             ar_logits, tc_logits, img_h, img_w, 
             conf_threshold=0.5, iou_threshold=0.4, enlarge_ratio=getattr(worker_args, 'prompt_enlarge_ratio', 0.0)
         )
+        
+        ar_bbox_prompt_copy = copy.deepcopy(prompt_dict['ar_bbox_prompts'])
+        tc_bbox_prompt_copy = copy.deepcopy(prompt_dict['tc_bbox_prompts'])
 
         # 2. Forward SAM using predicted bounding boxes
         tc_pred_masks, ar_pred_masks, _ = climatesam.forward(
@@ -315,6 +318,8 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
             ar_bbox_prompts=prompt_dict['ar_bbox_prompts'],
             tc_bbox_prompts=prompt_dict['tc_bbox_prompts']
         )
+        
+        
         
         # 3. Update Metrics
         # 3. Update Metrics
@@ -339,8 +344,8 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, climatesam
                 save_path = os.path.join(worker_args.exp_dir, worker_args.run_name, 'images', f"epoch_{epoch}_img_{i}.png")
                 fig = plot_mask_with_points_and_bbox(
                     mask=masks_gt[i], 
-                    ar_bbox=prompt_dict['ar_bbox_prompts'][i], 
-                    tc_bbox=prompt_dict['tc_bbox_prompts'][i],
+                    ar_bbox=ar_bbox_prompt_copy[i], 
+                    tc_bbox=tc_bbox_prompt_copy[i],
                     tc_pred_mask=tc_pred_masks[i], 
                     ar_pred_mask=ar_pred_masks[i], 
                     save_path=save_path, axis=True, title=f"Epoch {epoch} - Pred {i}"
