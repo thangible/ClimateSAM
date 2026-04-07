@@ -328,7 +328,8 @@ class CGNetBBoxPrompter:
             epoch_loss_count += 1
             
             # Get BBox Predictions
-            prompt_dict = self.get_prompts(features, conf_threshold=0.5, iou_threshold=0.4)
+            prompt_dict = self.get_prompts(features, conf_threshold=0.7, iou_threshold=0.4)
+        
             pred_ar_bboxes = prompt_dict['ar_bbox_prompts']
             pred_tc_bboxes = prompt_dict['tc_bbox_prompts']
             
@@ -499,3 +500,115 @@ class CGNetBBoxPrompter:
             'ar_bbox_prompts': ar_bbox_prompts,
             'tc_bbox_prompts': tc_bbox_prompts
         }
+    @torch.no_grad()
+    def quick_evaluate(self, dataloader, n_samples=5, save_dir="eval_plots", name = None):
+        """
+        Quickly validates the dataset, prints the AR and TC BBox IoU, 
+        and plots/logs GT vs Predicted bounding boxes for n_samples.
+        
+        Args:
+            dataloader: PyTorch DataLoader for validation/test set.
+            n_samples (int): Number of individual samples to plot and log.
+            save_dir (str): Directory to save the output plots.
+        """
+        self.cgnet_model.eval()
+        
+        ar_ious = []
+        tc_ious = []
+        plots_saved = 0
+        
+        os.makedirs(save_dir, exist_ok=True)
+        from utility import plot_mask_with_points_and_bbox
+        
+        print(f"\nStarting quick evaluation over {len(dataloader)} batches...")
+        
+        for batch in tqdm(dataloader, desc="Quick Eval"):
+            features = batch['cgnet_input'].to(device=self.device, dtype=torch.float32)
+            
+            raw_ar_boxes = batch['ar_bbox_prompts']
+            raw_tc_boxes = batch['tc_bbox_prompts']
+            
+            # Get BBox Predictions
+            prompt_dict = self.get_prompts(features, conf_threshold=0.5, iou_threshold=0.4)
+            pred_ar_bboxes = prompt_dict['ar_bbox_prompts']
+            pred_tc_bboxes = prompt_dict['tc_bbox_prompts']
+            
+            batch_size = features.shape[0]
+            
+            # Process each image in the batch individually for IoU and plotting
+            for b in range(batch_size):
+                # --------------------------------------------------------- #
+                # 1. Calculate AR BBox IoU
+                # --------------------------------------------------------- #
+                gt_ar = raw_ar_boxes[b] 
+                pr_ar = pred_ar_bboxes[b] 
+                
+                if gt_ar is not None and pr_ar is not None:
+                    gt_ar_flat = gt_ar.view(-1, 4).to(self.device)
+                    pr_ar_flat = pr_ar.view(-1, 4).to(self.device)
+                    ious = ops.box_iou(pr_ar_flat, gt_ar_flat)
+                    ar_ious.append(ious.max(dim=1)[0].mean().item()) 
+                elif gt_ar is None and pr_ar is None:
+                    ar_ious.append(1.0) 
+                else:
+                    ar_ious.append(0.0) 
+                    
+                # --------------------------------------------------------- #
+                # 2. Calculate TC BBox IoU
+                # --------------------------------------------------------- #
+                gt_tc = raw_tc_boxes[b]
+                pr_tc = pred_tc_bboxes[b]
+                
+                if gt_tc is not None and pr_tc is not None:
+                    gt_tc_flat = gt_tc.view(-1, 4).to(self.device)
+                    pr_tc_flat = pr_tc.view(-1, 4).to(self.device)
+                    ious = ops.box_iou(pr_tc_flat, gt_tc_flat)
+                    tc_ious.append(ious.max(dim=1)[0].mean().item())
+                elif gt_tc is None and pr_tc is None:
+                    tc_ious.append(1.0)
+                else:
+                    tc_ious.append(0.0)
+
+                # --------------------------------------------------------- #
+                # 3. Plot and Log n_samples
+                # --------------------------------------------------------- #
+                if plots_saved < n_samples:
+                    gt_mask = batch['gt_mask'][b]
+                    p_ar = pred_ar_bboxes[b]
+                    p_tc = pred_tc_bboxes[b]
+                    
+                    plot_path = os.path.join(save_dir, f"quick_eval_sample_{plots_saved + 1}.png")
+                    
+                    plot_mask_with_points_and_bbox(
+                        mask=gt_mask,
+                        ar_bbox=p_ar,
+                        tc_bbox=p_tc,
+                        save_path=plot_path,
+                        title=f"Eval Sample {plots_saved + 1}"
+                    )
+                    
+                    if self.wandb:
+                        try:
+                            wandb.log({f"eval_visuals/sample_{plots_saved + 1}_{name}": wandb.Image(plot_path)})
+                        except Exception as e:
+                            print(f"WandB image log failed: {e}")
+                            
+                    plots_saved += 1
+                    
+        # --------------------------------------------------------- #
+        # 4. Compute and Print Final Metrics
+        # --------------------------------------------------------- #
+        avg_ar_iou = np.mean(ar_ious) if len(ar_ious) > 0 else 0.0
+        avg_tc_iou = np.mean(tc_ious) if len(tc_ious) > 0 else 0.0
+        mean_overall_iou = (avg_ar_iou + avg_tc_iou) / 2.0
+        
+        print("\n" + "="*50)
+        print(f" QUICK EVALUATION RESULTS ({len(ar_ious)} samples)")
+        print("="*50)
+        print(f" AR BBox Average IoU: {avg_ar_iou:.4f}")
+        print(f" TC BBox Average IoU: {avg_tc_iou:.4f}")
+        print(f" Mean Overall IoU:    {mean_overall_iou:.4f}")
+        print(f" Saved {plots_saved} plots to '{save_dir}/'")
+        print("="*50 + "\n")
+        
+        return avg_ar_iou, avg_tc_iou

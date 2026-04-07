@@ -31,6 +31,58 @@ import wandb
 # Import the new BBox Prompter
 from model.prompt.cgnet_bbox import CGNetBBoxPrompter 
 
+
+import torchvision.ops as ops
+
+def profile_prompt_errors(gt_bboxes_list, pred_bboxes_list, iou_threshold=0.3):
+    """
+    Diagnoses bounding box error topologies.
+    """
+    stats = {
+        'total_gt_objects': 0,
+        'total_pred_prompts': 0,
+        'missed_objects': 0,      
+        'ghost_prompts': 0,       
+        'fragmented_objects': 0,  
+        'matched_bbox_iou': []    
+    }
+
+    for gt, pred in zip(gt_bboxes_list, pred_bboxes_list):
+        if gt is None or len(gt) == 0:
+            if pred is not None and len(pred) > 0:
+                stats['ghost_prompts'] += len(pred)
+                stats['total_pred_prompts'] += len(pred)
+            continue
+
+        gt = gt.view(-1, 4).float()
+        stats['total_gt_objects'] += len(gt)
+
+        if pred is None or len(pred) == 0:
+            stats['missed_objects'] += len(gt)
+            continue
+
+        pred = pred.view(-1, 4).float()
+        stats['total_pred_prompts'] += len(pred)
+
+        iou_matrix = ops.box_iou(gt, pred)
+
+        max_iou_per_gt, _ = iou_matrix.max(dim=1)
+        stats['missed_objects'] += (max_iou_per_gt < iou_threshold).sum().item()
+
+        max_iou_per_pred, _ = iou_matrix.max(dim=0)
+        stats['ghost_prompts'] += (max_iou_per_pred < iou_threshold).sum().item()
+
+        hits_per_gt = (iou_matrix > iou_threshold).sum(dim=1)
+        stats['fragmented_objects'] += (hits_per_gt > 1).sum().item()
+
+        valid_ious = max_iou_per_gt[max_iou_per_gt >= iou_threshold]
+        if len(valid_ious) > 0:
+            stats['matched_bbox_iou'].extend(valid_ious.tolist())
+
+    return stats
+
+
+
 def worker_init_fn(worker_id: int, base_seed: int, same_worker_seed: bool = True):
     """
     Set random seed for each worker in DataLoader to ensure the reproducibility.
@@ -210,6 +262,54 @@ def validate_cgnet_bboxes(
             # 1. Generate BBox prompts directly
             features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
             prompt_dict = prompter.get_prompts(features, conf_threshold=conf_threshold, iou_threshold=iou_threshold, enlarge_ratio=enlarge_ratio)
+            
+            # ================================================================= #
+            # NEW: GHOST CATCHER & VISUALIZER
+            # ================================================================= #
+            batch_size = features.shape[0]
+            ghost_save_dir = os.path.join('exp', "ghost_visualizations")
+            os.makedirs(ghost_save_dir, exist_ok=True)
+            
+            for b in range(batch_size):
+                gt_ar = batch['ar_bbox_prompts'][b]
+                pr_ar = prompt_dict['ar_bbox_prompts'][b]
+                
+                ghost_count = 0
+                
+                # Check if we predicted boxes
+                if pr_ar is not None and len(pr_ar) > 0:
+                    # If there is no Ground Truth at all, EVERY prediction is a ghost
+                    if gt_ar is None or len(gt_ar) == 0:
+                        ghost_count = len(pr_ar)
+                    # Otherwise, calculate IoU to find boxes hitting pure background
+                    else:
+                        gt_flat = gt_ar.view(-1, 4).float().to(device)
+                        pr_flat = pr_ar.view(-1, 4).float().to(device)
+                        
+                        iou_matrix = ops.box_iou(gt_flat, pr_flat)
+                        max_iou_per_pred, _ = iou_matrix.max(dim=0)
+                        
+                        # Count how many predicted boxes have < 0.3 overlap with any GT box
+                        ghost_count = (max_iou_per_pred < 0.3).sum().item()
+                
+                # Plot and save if this image has an aggressively high ghost count
+                # (You can change this threshold to >= 2 or 3 to only catch the worst offenders)
+                if ghost_count >= 1: 
+                    save_path = os.path.join(ghost_save_dir, f"ghost_ar_ratio_{enlarge_ratio}_step_{val_step}_img_{b}.png")
+                    
+                    # Plot using your existing utility
+                    plot_mask_with_points_and_bbox(
+                        mask=batch['gt_mask'][b].cpu().numpy() if isinstance(batch['gt_mask'][b], torch.Tensor) else batch['gt_mask'][b],
+                        ar_bbox=pr_ar.cpu().numpy() if pr_ar is not None else None,
+                        tc_bbox=prompt_dict['tc_bbox_prompts'][b].cpu().numpy() if prompt_dict['tc_bbox_prompts'][b] is not None else None,
+                        save_path=save_path,
+                        title=f"AR Ghosts Found: {ghost_count} (Ratio: {enlarge_ratio})"
+                    )
+                    
+                    # Optional: Log the worst offenders directly to WandB
+                    if wandb.run is not None and ghost_count >= 2:
+                        wandb.log({f"ghost_analysis/ratio_{enlarge_ratio}": wandb.Image(save_path)})
+            # ================================================================= #
             
             # --- RUN DIAGNOSTICS ---
             # Compare dataset GT boxes with predicted boxes
@@ -460,6 +560,8 @@ def main_worker(worker_id, worker_args):
     for bbox_config in bbox_configs:
         enlarge_ratio = bbox_config['enlarge_ratio']
         print(f"\nValidating with enlarge_ratio={enlarge_ratio}...")
+        # Validate quickly and plot 10 distinct samples
+        ar_iou, tc_iou = cgnetprompter.quick_evaluate(val_dataloader, n_samples=10, save_dir="my_test_plots", name = f"enlarge_{enlarge_ratio}")
         results = validate_cgnet_bboxes(
             val_dataloader=val_dataloader,
             ar_metrics=ar_metrics,
@@ -510,52 +612,3 @@ if __name__ == '__main__':
     if len(args.used_gpu) == 1:
         main_worker(worker_id=0, worker_args=args)
         
-
-import torchvision.ops as ops
-
-def profile_prompt_errors(gt_bboxes_list, pred_bboxes_list, iou_threshold=0.3):
-    """
-    Diagnoses bounding box error topologies.
-    """
-    stats = {
-        'total_gt_objects': 0,
-        'total_pred_prompts': 0,
-        'missed_objects': 0,      
-        'ghost_prompts': 0,       
-        'fragmented_objects': 0,  
-        'matched_bbox_iou': []    
-    }
-
-    for gt, pred in zip(gt_bboxes_list, pred_bboxes_list):
-        if gt is None or len(gt) == 0:
-            if pred is not None and len(pred) > 0:
-                stats['ghost_prompts'] += len(pred)
-                stats['total_pred_prompts'] += len(pred)
-            continue
-
-        gt = gt.view(-1, 4).float()
-        stats['total_gt_objects'] += len(gt)
-
-        if pred is None or len(pred) == 0:
-            stats['missed_objects'] += len(gt)
-            continue
-
-        pred = pred.view(-1, 4).float()
-        stats['total_pred_prompts'] += len(pred)
-
-        iou_matrix = ops.box_iou(gt, pred)
-
-        max_iou_per_gt, _ = iou_matrix.max(dim=1)
-        stats['missed_objects'] += (max_iou_per_gt < iou_threshold).sum().item()
-
-        max_iou_per_pred, _ = iou_matrix.max(dim=0)
-        stats['ghost_prompts'] += (max_iou_per_pred < iou_threshold).sum().item()
-
-        hits_per_gt = (iou_matrix > iou_threshold).sum(dim=1)
-        stats['fragmented_objects'] += (hits_per_gt > 1).sum().item()
-
-        valid_ious = max_iou_per_gt[max_iou_per_gt >= iou_threshold]
-        if len(valid_ious) > 0:
-            stats['matched_bbox_iou'].extend(valid_ious.tolist())
-
-    return stats
