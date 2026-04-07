@@ -77,10 +77,15 @@ def validate_one_epoch(epoch, val_dataloader, val_metrics, model, device, max_ep
             # Create a background mask (0) matching the ground truth shape
             pred = torch.zeros_like(masks_gt[i])
             
+            # Reshape the model outputs to match the ground truth (pred) shape exactly
+            # This strips away any extra channel dimensions (e.g., [1, H, W] -> [H, W])
+            tc_mask_matched = tc_masks[i].view_as(pred)
+            ar_mask_matched = ar_masks[i].view_as(pred)
+            
             # Assign class indices matching the ground truth logic
             # TC is class 1, AR is class 2
-            pred[tc_masks[i] == 1] = 1
-            pred[ar_masks[i] == 1] = 2
+            pred[tc_mask_matched == 1] = 1
+            pred[ar_mask_matched == 1] = 2
             
             combined_preds.append(pred)
         
