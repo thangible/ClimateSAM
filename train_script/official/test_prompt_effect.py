@@ -44,7 +44,6 @@ from model.prompt.prompt_maker import PromptMaker
 import pandas as pd
 import json
 from datetime import datetime
-
 import torchvision.ops as ops
 
 def profile_prompt_errors(gt_bboxes_list, pred_bboxes_list, iou_threshold=0.3):
@@ -113,143 +112,7 @@ def freeze_model_parameters(model, trainable_modules=None):
         param.requires_grad = is_trainable
     
     print(f"Trainable modules: {trainable_modules if trainable_modules else 'None (all frozen)'}")
-    
-    
-def validate_with_prompt_config(
-    val_dataloader, 
-    ar_metrics, 
-    tc_metrics, 
-    model, 
-    prompter, 
-    device, 
-    prompt_type,
-    positive_point_num,
-    negative_point_num,
-    enlarge_ratio,
-    centroid_ratio,
-    worker_args,
-    max_samples=None
-):
-    model.eval()
-    total_samples = 0
-    
-    # NEW: Initialize diagnostic accumulators
-    ar_diag_totals = {'gt': 0, 'pred': 0, 'missed': 0, 'ghosts': 0, 'fragmented': 0, 'ious': []}
-    tc_diag_totals = {'gt': 0, 'pred': 0, 'missed': 0, 'ghosts': 0, 'fragmented': 0, 'ious': []}
 
-    valid_pbar = tqdm(
-        total=len(val_dataloader), 
-        desc=f'Validation (prompt={prompt_type}, enlarge={enlarge_ratio})',
-        leave=False
-    )
-    
-    prompt_maker = PromptMaker(
-        prompt_type=prompt_type, 
-        positive_point_num=positive_point_num, 
-        negative_point_num=negative_point_num, 
-        centroid_ratio=centroid_ratio
-    )
-    
-    with torch.no_grad():
-        for val_step, batch in enumerate(val_dataloader):
-            if max_samples and total_samples >= max_samples:
-                break
-                
-            batch = batch_to_cuda(batch, device)
-            total_samples += batch['input'].shape[0]
-            
-            features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
-            aux_mask = prompter.get_aux_mask(features)
-            
-            prompt_dict = prompt_maker.make_prompts(
-                multiclass_mask=aux_mask,
-                prompt_type=prompt_type,
-                positive_point_num=positive_point_num,
-                negative_point_num=negative_point_num,
-                enlarge_ratio=enlarge_ratio,
-                centroid_ratio=centroid_ratio
-            )
-            
-            # --- NEW: GHOST CATCHER & DIAGNOSTICS FOR BBOX ---
-            if prompt_type == 'bbox':
-                # Diagnose AR and TC prompts
-                ar_stats = profile_prompt_errors(batch['ar_bbox_prompts'], prompt_dict['ar_bbox_prompts'])
-                tc_stats = profile_prompt_errors(batch['tc_bbox_prompts'], prompt_dict['tc_bbox_prompts'])
-
-                # Accumulate stats
-                for target, stats in [(ar_diag_totals, ar_stats), (tc_diag_totals, tc_stats)]:
-                    target['gt'] += stats['total_gt_objects']
-                    target['pred'] += stats['total_pred_prompts']
-                    target['missed'] += stats['missed_objects']
-                    target['ghosts'] += stats['ghost_prompts']
-                    target['fragmented'] += stats['fragmented_objects']
-                    target['ious'].extend(stats['matched_bbox_iou'])
-
-                # Optional: Ghost Visualization Logic
-                if val_step % 50 == 0: # Save every 50 steps to avoid disk bloat
-                    for b in range(features.shape[0]):
-                        pr_ar = prompt_dict['ar_bbox_prompts'][b]
-                        gt_ar = batch['ar_bbox_prompts'][b]
-                        
-                        # Find if any prediction has < 0.3 IoU with all GT
-                        is_ghost = False
-                        if pr_ar is not None and len(pr_ar) > 0:
-                            if gt_ar is None or len(gt_ar) == 0:
-                                is_ghost = True
-                            else:
-                                iou_m = ops.box_iou(gt_ar.view(-1, 4).float(), pr_ar.view(-1, 4).float())
-                                if (iou_m.max(dim=0)[0] < 0.3).any():
-                                    is_ghost = True
-                        
-                        if is_ghost:
-                            save_path = os.path.join(worker_args.exp_dir, "ghost_plots", f"ghost_{prompt_type}_r{enlarge_ratio}_s{val_step}_b{b}.png")
-                            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                            plot_mask_with_points_and_bbox(
-                                mask=batch['gt_mask'][b].cpu().numpy(),
-                                ar_bbox=pr_ar.cpu().numpy() if pr_ar is not None else None,
-                                save_path=save_path,
-                                title=f"Ghost Found: {prompt_type} Ratio {enlarge_ratio}"
-                            )
-
-            # --- PRECEDING SAM INFERENCE ---
-            prompt_dict = batch_to_cuda(prompt_dict, device)
-            model.set_infer_img(batch['input'])
-            tc_masks, ar_masks = model.infer(
-                ar_point_prompts=prompt_dict['ar_point_prompts'],
-                tc_point_prompts=prompt_dict['tc_point_prompts'],
-                ar_bbox_prompts=prompt_dict['ar_bbox_prompts'],
-                tc_bbox_prompts=prompt_dict['tc_bbox_prompts']
-            )
-            
-            # Metrics update logic...
-            # (Keep your existing gt_mask extraction and metrics.update code here)
-            valid_pbar.update(1)
-    
-    valid_pbar.close()
-    ar_metric_dict, _ = ar_metrics.compute()
-    tc_metric_dict, _ = tc_metrics.compute()
-    
-    # --- NEW: PACKAGE RESULTS WITH DIAGNOSTICS ---
-    results = {
-        'prompt_type': prompt_type,
-        'enlarge_ratio': enlarge_ratio,
-        'miou_ar': ar_metric_dict['Mean Foreground IoU'],
-        'miou_tc': tc_metric_dict['Mean Foreground IoU'],
-    }
-
-    if prompt_type == 'bbox':
-        results.update({
-            'diag_ar_avg_bbox_iou': np.mean(ar_diag_totals['ious']) if ar_diag_totals['ious'] else 0.0,
-            'diag_ar_missed_pct': ar_diag_totals['missed'] / max(1, ar_diag_totals['gt']),
-            'diag_ar_ghost_pct': ar_diag_totals['ghosts'] / max(1, ar_diag_totals['pred']),
-            'diag_tc_avg_bbox_iou': np.mean(tc_diag_totals['ious']) if tc_diag_totals['ious'] else 0.0,
-            'diag_tc_missed_pct': tc_diag_totals['missed'] / max(1, tc_diag_totals['gt']),
-            'diag_tc_ghost_pct': tc_diag_totals['ghosts'] / max(1, tc_diag_totals['pred']),
-        })
-    
-    ar_metrics.reset()
-    tc_metrics.reset()
-    return results
 
 @torch.no_grad()
 def validate_cgnet_baseline(val_dataloader, prompter, device, worker_args):
@@ -555,133 +418,185 @@ def validate_with_combined_prompts(
     
     return results
 
+def validate_with_prompt_config(
+    val_dataloader, ar_metrics, tc_metrics, model, prompter, device, 
+    prompt_type, positive_point_num, negative_point_num, enlarge_ratio,
+    centroid_ratio, worker_args, max_samples=None
+):
+    model.eval()
+    
+    total_samples = 0
+    valid_pbar = tqdm(
+        total=len(val_dataloader), 
+        desc=f'Validation (prompt={prompt_type}, pos={positive_point_num}, neg={negative_point_num}, enlarge={enlarge_ratio})',
+        leave=False
+    )
+    
+    prompt_maker = PromptMaker(
+        prompt_type=prompt_type, positive_point_num=positive_point_num, 
+        negative_point_num=negative_point_num, centroid_ratio=centroid_ratio
+    )
 
-# def validate_with_prompt_config(
-#     val_dataloader, 
-#     ar_metrics, 
-#     tc_metrics, 
-#     model, 
-#     prompter, 
-#     device, 
-#     prompt_type,
-#     positive_point_num,
-#     negative_point_num,
-#     enlarge_ratio,
-#     centroid_ratio,
-#     worker_args,
-#     max_samples=None
-# ):
-#     """
-#     Validate model with specific prompt configuration.
+    # Initialize diagnostic accumulators for bbox profiling
+    if prompt_type == 'bbox':
+        ar_diag_totals = {'gt': 0, 'pred': 0, 'missed': 0, 'ghosts': 0, 'fragmented': 0, 'ious': []}
+        tc_diag_totals = {'gt': 0, 'pred': 0, 'missed': 0, 'ghosts': 0, 'fragmented': 0, 'ious': []}
     
-#     Args:
-#         max_samples: Limit number of validation samples for faster testing
-    
-#     Returns:
-#         Dictionary with metrics
-#     """
-#     model.eval()
-    
-#     # ==================== PROMPT-BASED VALIDATION ====================
-#     total_samples = 0
-#     valid_pbar = tqdm(
-#         total=len(val_dataloader), 
-#         desc=f'Validation (prompt={prompt_type}, pos={positive_point_num}, neg={negative_point_num}, enlarge={enlarge_ratio})',
-#         leave=False
-#     )
-    
-#     prompt_maker = PromptMaker(
-#         prompt_type=prompt_type, 
-#         positive_point_num=positive_point_num, 
-#         negative_point_num=negative_point_num, 
-#         centroid_ratio=centroid_ratio
-#     )
-    
-#     with torch.no_grad():
-#         for val_step, batch in enumerate(val_dataloader):
-#             # Break early if max_samples is reached
-#             if max_samples and total_samples >= max_samples:
-#                 break
+    with torch.no_grad():
+        for val_step, batch in enumerate(val_dataloader):
+            if max_samples and total_samples >= max_samples:
+                break
                 
-#             batch = batch_to_cuda(batch, device)
-#             total_samples += batch['input'].shape[0]
+            batch = batch_to_cuda(batch, device)
+            total_samples += batch['input'].shape[0]
             
-#             # Generate prompts using CGNet
-#             features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
-#             aux_mask = prompter.get_aux_mask(features)
+            features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
+            aux_mask = prompter.get_aux_mask(features)
             
-#             prompt_dict = prompt_maker.make_prompts(
-#                 multiclass_mask=aux_mask,
-#                 prompt_type=prompt_type,
-#                 positive_point_num=positive_point_num,
-#                 negative_point_num=negative_point_num,
-#                 enlarge_ratio=enlarge_ratio,
-#                 centroid_ratio=centroid_ratio
-#             )
+            prompt_dict = prompt_maker.make_prompts(
+                multiclass_mask=aux_mask, prompt_type=prompt_type,
+                positive_point_num=positive_point_num, negative_point_num=negative_point_num,
+                enlarge_ratio=enlarge_ratio, centroid_ratio=centroid_ratio
+            )
             
-#             prompt_dict = batch_to_cuda(prompt_dict, device)
+            prompt_dict = batch_to_cuda(prompt_dict, device)
+
+            # ================================================================= #
+            # GHOST CATCHER & DIAGNOSTICS (Only run for bbox tests)
+            # ================================================================= #
+            if prompt_type == 'bbox' and 'ar_bbox_prompts' in batch:
+                batch_size = features.shape[0]
+                exp_dir = getattr(worker_args, 'exp_dir', 'exp')
+                ghost_save_dir = os.path.join(exp_dir, "ghost_visualizations")
+                os.makedirs(ghost_save_dir, exist_ok=True)
+                
+                for b in range(batch_size):
+                    gt_ar = batch['ar_bbox_prompts'][b]
+                    pr_ar = prompt_dict['ar_bbox_prompts'][b]
+                    
+                    ghost_count = 0
+                    if pr_ar is not None and len(pr_ar) > 0:
+                        if gt_ar is None or len(gt_ar) == 0:
+                            ghost_count = len(pr_ar)
+                        else:
+                            gt_flat = gt_ar.view(-1, 4).float().to(device)
+                            pr_flat = pr_ar.view(-1, 4).float().to(device)
+                            iou_matrix = ops.box_iou(gt_flat, pr_flat)
+                            max_iou_per_pred, _ = iou_matrix.max(dim=0)
+                            ghost_count = (max_iou_per_pred < 0.3).sum().item()
+                    
+                    if ghost_count >= 1: 
+                        save_path = os.path.join(ghost_save_dir, f"ghost_ar_ratio_{enlarge_ratio}_step_{val_step}_img_{b}.png")
+                        
+                        plot_mask_with_points_and_bbox(
+                            mask=batch['gt_mask'][b].cpu().numpy() if isinstance(batch['gt_mask'][b], torch.Tensor) else batch['gt_mask'][b],
+                            ar_bbox=pr_ar.cpu().numpy() if pr_ar is not None else None,
+                            tc_bbox=prompt_dict['tc_bbox_prompts'][b].cpu().numpy() if prompt_dict['tc_bbox_prompts'][b] is not None else None,
+                            save_path=save_path,
+                            title=f"AR Ghosts Found: {ghost_count} (Ratio: {enlarge_ratio})"
+                        )
+                        
+                        if hasattr(worker_args, 'wandb') and worker_args.wandb and wandb.run is not None and ghost_count >= 2:
+                            wandb.log({f"ghost_analysis/ratio_{enlarge_ratio}": wandb.Image(save_path)})
+
+                # --- RUN DIAGNOSTICS ---
+                ar_stats = profile_prompt_errors(batch['ar_bbox_prompts'], prompt_dict['ar_bbox_prompts'], iou_threshold=0.3)
+                tc_stats = profile_prompt_errors(batch['tc_bbox_prompts'], prompt_dict['tc_bbox_prompts'], iou_threshold=0.3)
+
+                ar_diag_totals['gt'] += ar_stats['total_gt_objects']
+                ar_diag_totals['pred'] += ar_stats['total_pred_prompts']
+                ar_diag_totals['missed'] += ar_stats['missed_objects']
+                ar_diag_totals['ghosts'] += ar_stats['ghost_prompts']
+                ar_diag_totals['fragmented'] += ar_stats['fragmented_objects']
+                ar_diag_totals['ious'].extend(ar_stats['matched_bbox_iou'])
+
+                tc_diag_totals['gt'] += tc_stats['total_gt_objects']
+                tc_diag_totals['pred'] += tc_stats['total_pred_prompts']
+                tc_diag_totals['missed'] += tc_stats['missed_objects']
+                tc_diag_totals['ghosts'] += tc_stats['ghost_prompts']
+                tc_diag_totals['fragmented'] += tc_stats['fragmented_objects']
+                tc_diag_totals['ious'].extend(tc_stats['matched_bbox_iou'])
+            # ================================================================= #
             
-#             # Set inference images
-#             images = model.set_infer_img(batch['input'])
+            # Set inference images
+            images = model.set_infer_img(batch['input'])
             
-#             # Perform inference with prompts
-#             tc_masks, ar_masks = model.infer(
-#                 ar_point_prompts=prompt_dict['ar_point_prompts'],
-#                 tc_point_prompts=prompt_dict['tc_point_prompts'],
-#                 ar_bbox_prompts=prompt_dict['ar_bbox_prompts'],
-#                 tc_bbox_prompts=prompt_dict['tc_bbox_prompts']
-#             )
+            tc_masks, ar_masks = model.infer(
+                ar_point_prompts=prompt_dict.get('ar_point_prompts'),
+                tc_point_prompts=prompt_dict.get('tc_point_prompts'),
+                ar_bbox_prompts=prompt_dict.get('ar_bbox_prompts'),
+                tc_bbox_prompts=prompt_dict.get('tc_bbox_prompts')
+            )
             
-#             # Extract ground truth masks
-#             masks_gt = batch['gt_mask']
-#             masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt]
-#             masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt]
+            masks_gt = batch['gt_mask']
+            masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt]
+            masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt]
             
-#             # Ensure correct shape for metrics
-#             for masks in [masks_ar_gts, masks_tc_gts, ar_masks, tc_masks]:
-#                 for i in range(len(masks)):
-#                     if len(masks[i].shape) == 2:
-#                         masks[i] = masks[i][None, None, :]
-#                     if len(masks[i].shape) == 3:
-#                         masks[i] = masks[i][:, None, :]
-#                     if len(masks[i].shape) != 4:
-#                         raise RuntimeError(f"Unexpected mask shape: {masks[i].shape}")
+            for masks in [masks_ar_gts, masks_tc_gts, ar_masks, tc_masks]:
+                for i in range(len(masks)):
+                    if len(masks[i].shape) == 2:
+                        masks[i] = masks[i][None, None, :]
+                    if len(masks[i].shape) == 3:
+                        masks[i] = masks[i][:, None, :]
+                    if len(masks[i].shape) != 4:
+                        raise RuntimeError(f"Unexpected mask shape: {masks[i].shape}")
             
-#             # Update metrics
-#             tc_metrics.update(tc_masks, masks_tc_gts, batch['index_name'])
-#             ar_metrics.update(ar_masks, masks_ar_gts, batch['index_name'])
+            tc_metrics.update(tc_masks, masks_tc_gts, batch['index_name'])
+            ar_metrics.update(ar_masks, masks_ar_gts, batch['index_name'])
             
-#             valid_pbar.update(1)
+            valid_pbar.update(1)
     
-#     valid_pbar.close()
+    valid_pbar.close()
     
-#     # Compute metrics
-#     ar_metric_dict, _ = ar_metrics.compute()
-#     tc_metric_dict, _ = tc_metrics.compute()
+    ar_metric_dict, _ = ar_metrics.compute()
+    tc_metric_dict, _ = tc_metrics.compute()
     
-#     results = {
-#         'prompt_type': prompt_type,
-#         'positive_point_num': positive_point_num,
-#         'negative_point_num': negative_point_num,
-#         'enlarge_ratio': enlarge_ratio,
-#         'centroid_ratio': centroid_ratio,
-#         'miou_ar': ar_metric_dict['Mean Foreground IoU'],
-#         'miou_tc': tc_metric_dict['Mean Foreground IoU'],
-#         'mean_acc_ar': ar_metric_dict['Mean Acc'],
-#         'mean_acc_tc': tc_metric_dict['Mean Acc'],
-#         'overall_acc_ar': ar_metric_dict['Overall Acc'],
-#         'overall_acc_tc': ar_metric_dict['Overall Acc'],
-#         'freqw_acc_ar': ar_metric_dict['FreqW Acc'],
-#         'freqw_acc_tc': tc_metric_dict['FreqW Acc'],
-#         'miou_including_bg_ar': ar_metric_dict['Mean IoU'],
-#         'miou_including_bg_tc': tc_metric_dict['Mean IoU'],
-#     }
+    results = {
+        'prompt_type': prompt_type,
+        'positive_point_num': positive_point_num,
+        'negative_point_num': negative_point_num,
+        'enlarge_ratio': enlarge_ratio,
+        'centroid_ratio': centroid_ratio,
+        'miou_ar': ar_metric_dict['Mean Foreground IoU'],
+        'miou_tc': tc_metric_dict['Mean Foreground IoU'],
+        'mean_acc_ar': ar_metric_dict['Mean Acc'],
+        'mean_acc_tc': tc_metric_dict['Mean Acc'],
+        'overall_acc_ar': ar_metric_dict['Overall Acc'],
+        'overall_acc_tc': tc_metric_dict['Overall Acc'],
+        'freqw_acc_ar': ar_metric_dict['FreqW Acc'],
+        'freqw_acc_tc': tc_metric_dict['FreqW Acc'],
+        'miou_including_bg_ar': ar_metric_dict['Mean IoU'],
+        'miou_including_bg_tc': tc_metric_dict['Mean IoU'],
+    }
+
+    # Append the BBox diagnostics if applicable
+    if prompt_type == 'bbox' and 'ar_diag_totals' in locals():
+        avg_ar_bbox_iou = np.mean(ar_diag_totals['ious']) if ar_diag_totals['ious'] else 0.0
+        avg_tc_bbox_iou = np.mean(tc_diag_totals['ious']) if tc_diag_totals['ious'] else 0.0
+        
+        results.update({
+            'diag_ar_avg_bbox_iou': avg_ar_bbox_iou,
+            'diag_ar_missed_pct': ar_diag_totals['missed'] / max(1, ar_diag_totals['gt']),
+            'diag_ar_ghost_pct': ar_diag_totals['ghosts'] / max(1, ar_diag_totals['pred']),
+            'diag_tc_avg_bbox_iou': avg_tc_bbox_iou,
+            'diag_tc_missed_pct': tc_diag_totals['missed'] / max(1, tc_diag_totals['gt']),
+            'diag_tc_ghost_pct': tc_diag_totals['ghosts'] / max(1, tc_diag_totals['pred']),
+        })
+
+        if hasattr(worker_args, 'wandb') and worker_args.wandb and wandb.run is not None:
+            wandb.log({
+                f"diag/ar_bbox_iou_ratio_{enlarge_ratio}": results['diag_ar_avg_bbox_iou'],
+                f"diag/ar_missed_pct_ratio_{enlarge_ratio}": results['diag_ar_missed_pct'],
+                f"diag/ar_ghost_pct_ratio_{enlarge_ratio}": results['diag_ar_ghost_pct'],
+                f"diag/tc_bbox_iou_ratio_{enlarge_ratio}": results['diag_tc_avg_bbox_iou'],
+                f"diag/tc_missed_pct_ratio_{enlarge_ratio}": results['diag_tc_missed_pct'],
+                f"diag/tc_ghost_pct_ratio_{enlarge_ratio}": results['diag_tc_ghost_pct'],
+            })
     
-#     # Reset metrics for next validation
-#     ar_metrics.reset()
-#     tc_metrics.reset()
+    ar_metrics.reset()
+    tc_metrics.reset()
     
-#     return results
+    return results
 
 
 def main_worker(worker_id, worker_args):
@@ -702,6 +617,7 @@ def main_worker(worker_id, worker_args):
         data_dir=dataset_dir, 
         train_flag=False, 
         augmented=False, 
+        prompt_type='bbox',
         generate_prompt=False
     )
     val_collate_fn = val_dataset.collate_fn
@@ -798,8 +714,8 @@ def main_worker(worker_id, worker_args):
     )
     
     # ==================== VALIDATE CGNET BASELINE ====================
-    baseline_result = validate_cgnet_baseline(val_dataloader, prompter, device, worker_args)
-    all_results = [baseline_result]
+    # baseline_result = validate_cgnet_baseline(val_dataloader, prompter, device, worker_args)
+    all_results = []
     
     # ==================== DEFINE PROMPT CONFIGURATIONS ====================
     print("\n" + "="*60)
@@ -827,13 +743,10 @@ def main_worker(worker_id, worker_args):
         {'enlarge_ratio': 0.0},
         {'enlarge_ratio': 0.1},
         {'enlarge_ratio': 0.2},
-        {'enlarge_ratio': 0.3},
-        {'enlarge_ratio': 0.4},
-        {'enlarge_ratio': 0.5},
-        {'enlarge_ratio': 0.6},
-        {'enlarge_ratio': 0.7},
+        # {'enlarge_ratio': 0.3},
+        # {'enlarge_ratio': 0.5},
         {'enlarge_ratio': -0.1},
-        {'enlarge_ratio': -0.2},
+        # {'enlarge_ratio': -0.2},
     ]
     
     # Configuration 3: Mask prompt (single config)
@@ -906,22 +819,6 @@ def main_worker(worker_id, worker_args):
         all_results.append(results)
         print(f"  mIoU TC: {results['miou_tc']:.4f}, mIoU AR: {results['miou_ar']:.4f}")
         
-        # Inside the bbox_configs loop in main_worker:
-        if worker_args.wandb:
-            log_dict = {
-                'bbox_prompt/miou_tc': results['miou_tc'],
-                'bbox_prompt/miou_ar': results['miou_ar'],
-                'bbox_prompt/enlarge_ratio': config['enlarge_ratio']
-            }
-            # Add diagnostic stats if they exist
-            if 'diag_ar_ghost_pct' in results:
-                log_dict.update({
-                    'diag/ar_ghost_pct': results['diag_ar_ghost_pct'],
-                    'diag/ar_missed_pct': results['diag_ar_missed_pct'],
-                    'diag/ar_bbox_iou': results['diag_ar_avg_bbox_iou']
-                })
-            wandb.log(log_dict)
-            
         if worker_args.wandb:
             wandb.log({
                 'bbox_prompt/miou_tc': results['miou_tc'],
