@@ -18,7 +18,7 @@ import torch.nn.functional as F
 from functools import partial
 from torch.utils.data import DataLoader
 from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug, print_param_stats, setup_device_and_distributed
-from loss_function import ClimateLoss, compute_climate_loss
+from loss_function import ClimateLoss, compute_climate_loss_unified
 from tqdm import tqdm
 from contextlib import nullcontext
 from parser_config import parse
@@ -109,7 +109,7 @@ def train_one_epoch(epoch, train_dataloader, model, prompter, optimizer, schedul
             masks_ar_gt = batch['ar_object_masks']
             masks_tc_gt = batch['tc_object_masks']
             
-            loss_dict = compute_climate_loss(
+            loss_dict = compute_climate_loss_unified(
                 ar_masks=ar_mask,
                 tc_masks=tc_mask,
                 ar_masks_gt=masks_ar_gt,
@@ -447,3 +447,5 @@ if __name__ == '__main__':
 
     if len(args.used_gpu) == 1:
         main_worker(worker_id=0, worker_args=args)
+        
+

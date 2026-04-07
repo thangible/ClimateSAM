@@ -768,3 +768,84 @@ def calculate_generator_token_centroid_loss(
     merged['gen_centroid_loss'] = total_cent_loss.detach()
     
     return merged
+
+def compute_climate_loss_unified(
+    ar_masks: List[torch.Tensor],
+    tc_masks: List[torch.Tensor], 
+    ar_masks_gt: List[torch.Tensor],
+    tc_masks_gt: List[torch.Tensor],
+    device: torch.device,
+    worker_args,
+    theta_tc: float = 5.0
+) -> Dict[str, torch.Tensor]:
+    """
+    Computes climate loss by unifying all predicted object masks and all ground truth
+    object masks into a single semantic mask per image. This allows SAM to train on
+    noisy prompts where the number of predicted masks doesn't match the number of GT objects.
+    """
+    
+    def merge_masks(mask_tensor):
+        # mask_tensor is expected to be [N, 1, H, W] or [N, H, W] for a single image
+        if mask_tensor is None or mask_tensor.numel() == 0:
+            return None
+        mask_tensor = mask_tensor.to(device)
+        # Take the union (max logit/value) over the object dimension (dim=0)
+        merged, _ = torch.max(mask_tensor, dim=0, keepdim=True)
+        return merged
+
+    # Find a reference shape to handle edge cases where a prompter predicts 0 boxes
+    ref_shape_pred = None
+    for m in ar_masks + tc_masks:
+        if m is not None and m.numel() > 0:
+            ref_shape_pred = (1, 1, m.shape[-2], m.shape[-1])
+            break
+            
+    ref_shape_gt = None
+    for m in ar_masks_gt + tc_masks_gt:
+        if m is not None and m.numel() > 0:
+            ref_shape_gt = (1, 1, m.shape[-2], m.shape[-1]) if m.dim() >= 3 else (1, m.shape[-2], m.shape[-1])
+            break
+
+    unified_ar_preds, unified_tc_preds = [], []
+    unified_ar_gts, unified_tc_gts = [], []
+
+    batch_size = max(len(ar_masks_gt), len(tc_masks_gt))
+    for i in range(batch_size):
+        # If prediction is empty (0 boxes), fill with -20.0 logits (sigmoid(-20) ≈ 0)
+        empty_pred = torch.full(ref_shape_pred, -20.0, device=device) if ref_shape_pred else None
+        # If GT is empty, fill with 0s
+        empty_gt = torch.zeros(ref_shape_gt, device=device) if ref_shape_gt else None
+
+        # Safely extract and merge
+        ar_p = merge_masks(ar_masks[i] if i < len(ar_masks) else None)
+        tc_p = merge_masks(tc_masks[i] if i < len(tc_masks) else None)
+        ar_g = merge_masks(ar_masks_gt[i] if i < len(ar_masks_gt) else None)
+        tc_g = merge_masks(tc_masks_gt[i] if i < len(tc_masks_gt) else None)
+
+        unified_ar_preds.append(ar_p if ar_p is not None else empty_pred)
+        unified_tc_preds.append(tc_p if tc_p is not None else empty_pred)
+        unified_ar_gts.append(ar_g if ar_g is not None else empty_gt)
+        unified_tc_gts.append(tc_g if tc_g is not None else empty_gt)
+
+    # Initialize the standard ClimateLoss class
+    loss_computer = ClimateLoss(
+        device, 
+        theta_tc=theta_tc, 
+        focal_weight=worker_args.focal_weight, 
+        tversky_weight=worker_args.tversky_weight,
+        bce_weight= worker_args.bce_weight,
+        smooth_label=worker_args.smooth_label,
+        ar_kernel_size=worker_args.ar_kernel_size,
+        tc_kernel_size=worker_args.tc_kernel_size,
+        ar_sigma=worker_args.ar_sigma,
+        tc_sigma=worker_args.tc_sigma
+    )
+    
+    # Compute loss against the unified lists
+    return loss_computer.compute_loss(
+        unified_ar_preds, 
+        unified_tc_preds, 
+        unified_ar_gts, 
+        unified_tc_gts, 
+        worker_args
+    )
