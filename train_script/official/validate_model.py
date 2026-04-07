@@ -296,18 +296,18 @@ def main_worker(worker_id, worker_args):
         {"mode": "lora_single", "save_path": make_save_path(worker_args, 'lora_single_vit_b_rank_64_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1, "lora_r": 64}
     ]
     
-    configs_nonlinear = [
-        {"mode": "infused", "save_path": make_save_path(worker_args, 'infused_vit_b_mlp1_nonlinear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1},
-        {"mode": "infused", "save_path": make_save_path(worker_args, 'infused_vit_b_mlp05_nonlinear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 0.5},
-        {"mode": "concat", "save_path": make_save_path(worker_args, 'concat_vit_b_mlp1_nonlinear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1},
-        {"mode": "concat", "save_path": make_save_path(worker_args, 'concat_vit_b_mlp05_nonlinear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 0.5},
-        {"mode": "single", "save_path": make_save_path(worker_args, 'single_vit_b_mlp1_nonlinear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1},
-        {"mode": "single", "save_path": make_save_path(worker_args, 'single_vit_b_mlp05_nonlinear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 0.5},
-        {"mode": "lora_dual", "save_path": make_save_path(worker_args, 'lora_dual_vit_b_rank_32_nonlinear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1, "lora_r": 32},
-        {"mode": "lora_dual", "save_path": make_save_path(worker_args, 'lora_dual_vit_b_rank_64_nonlinear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1, "lora_r": 64},
-        {"mode": "lora_single", "save_path": make_save_path(worker_args, 'lora_single_vit_b_rank_32_nonlinear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1, "lora_r": 32},
-        {"mode": "lora_single", "save_path": make_save_path(worker_args, 'lora_single_vit_b_rank_64_nonlinear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1, "lora_r": 64}
-    ]
+    # configs_nonlinear = [
+    #     {"mode": "infused", "save_path": make_save_path(worker_args, 'infused_vit_b_mlp1_nonlinear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1},
+    #     {"mode": "infused", "save_path": make_save_path(worker_args, 'infused_vit_b_mlp05_nonlinear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 0.5},
+    #     {"mode": "concat", "save_path": make_save_path(worker_args, 'concat_vit_b_mlp1_nonlinear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1},
+    #     {"mode": "concat", "save_path": make_save_path(worker_args, 'concat_vit_b_mlp05_nonlinear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 0.5},
+    #     {"mode": "single", "save_path": make_save_path(worker_args, 'single_vit_b_mlp1_nonlinear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1},
+    #     {"mode": "single", "save_path": make_save_path(worker_args, 'single_vit_b_mlp05_nonlinear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 0.5},
+    #     {"mode": "lora_dual", "save_path": make_save_path(worker_args, 'lora_dual_vit_b_rank_32_nonlinear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1, "lora_r": 32},
+    #     {"mode": "lora_dual", "save_path": make_save_path(worker_args, 'lora_dual_vit_b_rank_64_nonlinear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1, "lora_r": 64},
+    #     {"mode": "lora_single", "save_path": make_save_path(worker_args, 'lora_single_vit_b_rank_32_nonlinear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1, "lora_r": 32},
+    #     {"mode": "lora_single", "save_path": make_save_path(worker_args, 'lora_single_vit_b_rank_64_nonlinear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1, "lora_r": 64}
+    # ]
     
     prompt_configs = ['bbox', 'point', 'random']
     
@@ -315,7 +315,7 @@ def main_worker(worker_id, worker_args):
     metrics_data = []
 
     # Combine configurations to evaluate everything
-    all_configs = configs_linear + configs_nonlinear
+    all_configs = configs_linear 
     
     for config in all_configs:
         print(f"\nValidating {config['mode']} model..., with MLP ratio {config['image_encoder_mlp_ratio']}, SAM type {config['sam_type']}, and LoRA rank {config.get('lora_r', 'N/A')}")
@@ -339,6 +339,10 @@ def main_worker(worker_id, worker_args):
             iou_tc, iou_ar, iou_bg, mean_iou, mean_foreground_iou = validate_one_epoch(
                 0, val_dataloader, val_metrics, model, device, max_epoch_num, worker_args
             )
+            
+            print(f"Results for {config['mode']} model with {prompt_config} prompts:")
+            print(f"TC IoU: {iou_tc:.4f}, AR IoU: {iou_ar:.4f}, BG IoU: {iou_bg:.4f}, Mean IoU: {mean_iou:.4f}, Mean FG IoU: {mean_foreground_iou:.4f}")    
+            
             
             # Save the information to the metrics data list
             metrics_data.append({
