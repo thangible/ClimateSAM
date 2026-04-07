@@ -106,13 +106,19 @@ def validate_one_epoch(epoch, val_dataloader, val_metrics, model, device, max_ep
             tc_masks_copy = copy.deepcopy(tc_masks)
             ar_masks_copy = copy.deepcopy(ar_masks)
             for i in range(len(masks_gt)):
-                mask = masks_gt_copy[i]
+                
+                # Add .squeeze() to remove the 1-sized dimensions: (1, 1, H, W) -> (H, W)
+                mask = masks_gt_copy[i].squeeze()
+                
                 ar_points = ar_point_prompts_copy[i]
                 tc_points = tc_point_prompts_copy[i]
                 ar_bbox = ar_bbox_prompts_copy[i]
                 tc_bbox = tc_bbox_prompts_copy[i]
-                tc_pred_mask = tc_masks_copy[i]
-                ar_pred_mask = ar_masks_copy[i]
+                
+                # Squeeze predicted masks as well to prevent similar dimension errors
+                tc_pred_mask = tc_masks_copy[i].squeeze()
+                ar_pred_mask = ar_masks_copy[i].squeeze()
+                
                 save_path = os.path.join(worker_args.exp_dir, worker_args.run_name, 'images', f"epoch_{epoch}_step_{val_step}_image_{i}.png")
                 
                 # Make sure the directory exists
