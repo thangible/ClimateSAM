@@ -12,7 +12,26 @@ import wandb
 class CGNetPrompter:
     def __init__(self, weights_path, device, worker_args):
         self.cgnet_model = CGNetModule(classes=3, channels=4)
-        self.cgnet_model.load_state_dict(torch.load(weights_path, map_location=device))
+        if weights_path and os.path.exists(weights_path):
+            # 1. Load the old weights
+            pretrained_dict = torch.load(weights_path, map_location=device)
+            # 2. Get the current model's dictionary
+            model_dict = self.cgnet_model.state_dict()
+            
+            # 3. Filter out the classifier layer (and any other size mismatches)
+            filtered_dict = {
+                k: v for k, v in pretrained_dict.items() 
+                if k in model_dict and v.size() == model_dict[k].size()
+            }
+            
+            # 4. Overwrite the randomized model dict with the matched pretrained weights
+            model_dict.update(filtered_dict)
+            self.cgnet_model.load_state_dict(model_dict)
+            
+            print(f"Salvaged {len(filtered_dict)}/{len(model_dict)} matching layers from {weights_path}")
+        else:
+            print(f"CGNet weights not found at {weights_path}, using random initialization.")
+
         self.cgnet_model.to(device) 
         self.exp_dir = worker_args.exp_dir
         self.device = device
