@@ -139,6 +139,77 @@ class CGNetPrompter:
         pred_masks = self.get_aux_mask(batch_input)
         prompt_dict = self.prompt_maker.make_prompts(pred_masks)
         return prompt_dict
+    
+    @torch.no_grad()
+    def quick_evaluate(self, dataloader, n_samples=5, save_dir="eval_plots"):
+        """
+        Quickly validates the dataset, prints the per-class IoU, 
+        and plots/logs GT vs Predicted masks for n_samples.
+        
+        Args:
+            dataloader: PyTorch DataLoader for validation/test set.
+            n_samples (int): Number of individual samples to plot and log.
+            save_dir (str): Directory to save the output plots.
+        """
+        self.cgnet_model.eval()
+        os.makedirs(save_dir, exist_ok=True)
+        
+        aggregate_cm = np.zeros((3, 3))
+        plots_saved = 0
+        
+        print(f"\nStarting quick evaluation over {len(dataloader)} batches...")
+        import matplotlib.pyplot as plt
+        
+        for batch in tqdm(dataloader, desc="Quick Eval"):
+            features = batch['cgnet_input'].to(device=self.device, dtype=torch.float32)
+            labels = torch.stack([x.to(self.device, dtype=torch.long) for x in batch['gt_mask']])
+            
+            outputs = torch.softmax(self.cgnet_model(features), 1)
+            predictions = torch.max(outputs, 1)[1]
+            
+            # Update aggregate confusion matrix
+            aggregate_cm += get_cm(predictions, labels, 3)
+            
+            batch_size = features.shape[0]
+            
+            # Plot and log individual samples
+            for b in range(batch_size):
+                if plots_saved < n_samples:
+                    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+                    axes[0].imshow(labels[b].cpu().numpy(), cmap='viridis')
+                    axes[0].set_title(f'Ground Truth (Sample {plots_saved + 1})')
+                    axes[1].imshow(predictions[b].cpu().numpy(), cmap='viridis')
+                    axes[1].set_title(f'Prediction (Sample {plots_saved + 1})')
+                    
+                    plot_path = os.path.join(save_dir, f"quick_eval_sample_{plots_saved + 1}.png")
+                    fig.savefig(plot_path)
+                    plt.close(fig)
+                    
+                    if self.wandb:
+                        try:
+                            import wandb
+                            wandb.log({f"eval_visuals/sample_{plots_saved + 1}": wandb.Image(plot_path)})
+                        except Exception as e:
+                            print(f"WandB image log failed: {e}")
+                            
+                    plots_saved += 1
+
+        # Calculate metrics (matches training logic: mean IoU over classes 1 & 2)
+        all_ious = get_iou_perClass(aggregate_cm)
+        fg_ious = all_ious[1:] 
+        mean_iou = fg_ious.mean()
+        
+        print("\n" + "="*50)
+        print(f" QUICK EVALUATION RESULTS")
+        print("="*50)
+        print(f" Background (Class 0) IoU: {all_ious[0]:.4f}")
+        print(f" Class 1 IoU:              {all_ious[1]:.4f}")
+        print(f" Class 2 IoU:              {all_ious[2]:.4f}")
+        print(f" Mean Foreground IoU:      {mean_iou:.4f}")
+        print(f" Saved {plots_saved} plots to '{save_dir}/'")
+        print("="*50 + "\n")
+        
+        return mean_iou, all_ious
 
 
 
