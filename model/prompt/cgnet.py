@@ -41,94 +41,97 @@ class CGNetPrompter:
         self.wandb = getattr(worker_args, 'wandb', False)
         self.run_name = getattr(worker_args, 'run_name', None)
 
-    def train(self, dataloader, epochs):
-        self.cgnet_model.train()
-        best_ious = 0
-        for epoch in range(1, epochs):
-            print(f'Epoch {epoch}:')
-            epoch_loader = tqdm(dataloader)
+    def train(self, train_dataloader, val_dataloader, epochs):
+        best_val_iou = 0.0
+        
+        for epoch in range(1, epochs + 1):
+            self.cgnet_model.train()
+            print(f'\nEpoch {epoch}/{epochs}:')
+            epoch_loader = tqdm(train_dataloader, desc="Training")
+            
             aggregate_cm = np.zeros((3,3))
             epoch_loss_sum = 0.0
             epoch_loss_count = 0
 
             for batch in epoch_loader:
-                
                 features = batch['cgnet_input'].to(device=self.device, dtype=torch.float32)
-                # labels = [x.to(device=self.device, dtype=torch.float32) for x in batch['gt_mask']]
                 labels = torch.stack([x.to(self.device, dtype=torch.long) for x in batch['gt_mask']])
-                outputs = torch.softmax(self.cgnet_model(features), 1)
+                
+                # Forward pass: get raw logits for loss, softmax for predictions
+                raw_outputs = self.cgnet_model(features)
+                outputs = torch.softmax(raw_outputs, 1)
 
                 # Update training CM
                 predictions = torch.max(outputs, 1)[1]
                 aggregate_cm += get_cm(predictions, labels, 3)
 
-                # Pass backward
-                loss = jaccard_loss(outputs, labels)
-                epoch_loader.set_description(f'Loss: {loss.item()}')
+                # Pass backward using raw logits
+                loss = jaccard_loss(raw_outputs, labels)
+                
+                epoch_loader.set_description(f'Train Loss: {loss.item():.4f}')
+                
                 loss.backward()
                 self.optimizer.step()
                 self.optimizer.zero_grad() 
 
-                # accumulate loss for epoch logging
-                try:
-                    epoch_loss_sum += float(loss.item())
-                except:
-                    epoch_loss_sum += loss.detach().cpu().item()
+                # Accumulate loss
+                epoch_loss_sum += float(loss.item())
                 epoch_loss_count += 1
 
             avg_epoch_loss = epoch_loss_sum / epoch_loss_count if epoch_loss_count > 0 else 0.0
+            
+            # Calculate Training IoU
+            train_ious = get_iou_perClass(aggregate_cm)[1:]
+            mean_train_iou = train_ious.mean()
 
-            if epoch % 5 == 1:
-                import matplotlib.pyplot as plt
-                fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-                axes[0].imshow(labels[0].cpu().numpy(), cmap='viridis')
-                axes[0].set_title('Ground Truth')
-                axes[1].imshow(predictions[0].cpu().numpy(), cmap='viridis')
-                axes[1].set_title('Predictions')
-                plt.show()
-                plot_path = os.path.join(self.exp_dir, f"epoch_{epoch}_plot.png")
-                fig.savefig(plot_path)
-                plt.close(fig)
-                print(f"Saved image at {plot_path}")
-
-                # Log example image to WandB
-                if self.wandb:
-                    try:
-                        wandb.log({"train/example_prediction": wandb.Image(plot_path)}, step=epoch)
-                    except Exception as e:
-                        print(f"WandB image log failed: {e}")
-                
-                
-            print('Epoch stats:')
-            print(aggregate_cm)
-            ious = get_iou_perClass(aggregate_cm)[1:]
-            mean_iou = ious.mean()
-            if mean_iou > best_ious and epoch > 10:
-                best_ious = mean_iou
-                self.save_model()
-                print(f"New best model saved with mean IoU: {best_ious}")
-                if self.wandb:
-                    try:
-                        save_path = os.path.join(self.exp_dir, f"cgnet_weight.pth")
-                        wandb.save(save_path)
-                    except Exception as e:
-                        print(f"WandB save failed: {e}")
+            print(f"Train Stats: Avg Loss {avg_epoch_loss:.4f} | Mean Train IoU: {mean_train_iou:.4f} (Class 1: {train_ious[0]:.4f}, Class 2: {train_ious[1]:.4f})")
 
             # Log epoch scalars to WandB
             if self.wandb:
                 log_dict = {
                     "train/avg_loss": avg_epoch_loss,
-                    "train/mean_iou": float(mean_iou),
+                    "train/mean_iou": float(mean_train_iou),
+                    "train/iou_class_1": float(train_ious[0]),
+                    "train/iou_class_2": float(train_ious[1]),
                     "epoch": epoch,
-                    "train/iou_class_1": float(ious[0]),
-                    "train/iou_class_2": float(ious[1])
                 }
                 try:
+                    import wandb
                     wandb.log(log_dict, step=epoch)
                 except Exception as e:
                     print(f"WandB scalar log failed: {e}")
 
-            print('IOUs: ', ious, ', mean: ', ious.mean())
+            # ========================================================= #
+            # Validation every 5 epochs or on the final epoch           #
+            # ========================================================= #
+            if epoch % 5 == 0 or epoch == epochs:
+                # Use quick_evaluate for validation
+                val_mean_iou, val_all_ious = self.quick_evaluate(val_dataloader, n_samples=2, save_dir=self.exp_dir)
+                print(f"Validation Stats: Mean IoU {val_mean_iou:.4f} | Class 1 IoU: {val_all_ious[1]:.4f} | Class 2 IoU: {val_all_ious[2]:.4f}")
+                
+                if self.wandb:
+                    try:
+                        wandb.log({
+                            "val/mean_iou": float(val_mean_iou),
+                            "val/iou_class_1": float(val_all_ious[1]),
+                            "val/iou_class_2": float(val_all_ious[2]),
+                            "epoch": epoch
+                        }, step=epoch)
+                    except Exception as e:
+                        print(f"WandB validation log failed: {e}")
+
+                # Save best model based on validation IoU
+                if val_mean_iou > best_val_iou:
+                    best_val_iou = val_mean_iou
+                    self.save_model()
+                    print(f"*** New best model saved with Mean Val IoU: {best_val_iou:.4f} ***")
+                    
+                    if self.wandb:
+                        try:
+                            save_path = os.path.join(self.exp_dir, f"cgnet_weight.pth")
+                            wandb.save(save_path)
+                        except Exception as e:
+                            print(f"WandB save failed: {e}")
             
     def save_model(self,):
         '''

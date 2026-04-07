@@ -158,8 +158,8 @@ def main_worker(worker_id, worker_args):
     else:
         weights_path = 'pretrained/exp_cgnet_weight.pth'
     cgnetprompter = CGNetPrompter(weights_path=weights_path, device=device, worker_args=worker_args)
-    cgnetprompter.train(dataloader=train_dataloader, epochs=100)
-    
+    cgnetprompter.train(dataloader=train_dataloader,val_dataloader=val_dataloader, epochs=100)
+
     # count = 0
     # for batch in val_dataloader:
 
