@@ -61,6 +61,113 @@ def setup_optimizer_and_scheduler(model, worker_args):
     )
     return optimizer, scheduler
 
+# @torch.no_grad()
+# def validate_cgnet_bboxes(
+#     val_dataloader, 
+#     ar_metrics, 
+#     tc_metrics, 
+#     model, 
+#     prompter, 
+#     device, 
+#     conf_threshold=0.5,
+#     iou_threshold=0.4,
+#     max_samples=None,
+#     enlarge_ratio=0
+# ):
+#     """
+#     Validate model using direct BBox predictions from CGNetBBoxPrompter.
+#     """
+#     model.eval()
+#     prompter.cgnet_model.eval()
+    
+#     total_samples = 0
+#     valid_pbar = tqdm(
+#         total=len(val_dataloader), 
+#         desc=f'Validation (BBox conf={conf_threshold}, iou={iou_threshold})',
+#         leave=False
+#     )
+    
+#     with torch.no_grad():
+#         for val_step, batch in enumerate(val_dataloader):
+#             if max_samples and total_samples >= max_samples:
+#                 break
+                
+#             batch = batch_to_cuda(batch, device)
+#             total_samples += batch['input'].shape[0]
+            
+#             # 1. Generate BBox prompts directly using the NEW CGNetBBoxPrompter
+#             features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
+#             prompt_dict = prompter.get_prompts(features, conf_threshold=conf_threshold, iou_threshold=iou_threshold, enlarge_ratio=enlarge_ratio)
+            
+#             # 2. Package for SAM
+#             combined_prompt_dict = {
+#                 'ar_point_prompts': None,
+#                 'tc_point_prompts': None,
+#                 'ar_bbox_prompts': prompt_dict['ar_bbox_prompts'],
+#                 'tc_bbox_prompts': prompt_dict['tc_bbox_prompts']
+#             }
+            
+#             # 3. Set inference images
+#             images = model.set_infer_img(batch['input'])
+            
+#             # 4. Perform inference with combined prompts - all at once
+#             tc_masks, ar_masks = model.infer(
+#                 ar_point_prompts=combined_prompt_dict['ar_point_prompts'],
+#                 tc_point_prompts=combined_prompt_dict['tc_point_prompts'],
+#                 ar_bbox_prompts=combined_prompt_dict['ar_bbox_prompts'],
+#                 tc_bbox_prompts=combined_prompt_dict['tc_bbox_prompts']
+#             )
+            
+#             # 5. Extract ground truth masks
+#             masks_gt = batch['gt_mask']
+#             masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt]
+#             masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt]
+            
+#             # Ensure correct shape for metrics [B, 1, 1, H, W]
+#             for masks in [masks_ar_gts, masks_tc_gts, ar_masks, tc_masks]:
+#                 for i in range(len(masks)):
+#                     if len(masks[i].shape) == 2:
+#                         masks[i] = masks[i][None, None, :]
+#                     if len(masks[i].shape) == 3:
+#                         masks[i] = masks[i][:, None, :]
+#                     if len(masks[i].shape) != 4:
+#                         raise RuntimeError(f"Unexpected mask shape: {masks[i].shape}")
+            
+#             # 6. Update metrics
+#             tc_metrics.update(tc_masks, masks_tc_gts, batch['index_name'])
+#             ar_metrics.update(ar_masks, masks_ar_gts, batch['index_name'])
+            
+#             valid_pbar.update(1)
+    
+#     valid_pbar.close()
+    
+#     # Compute metrics
+#     ar_metric_dict, _ = ar_metrics.compute()
+#     tc_metric_dict, _ = tc_metrics.compute()
+    
+#     results = {
+#         'prompt_type': 'bbox_direct',
+#         'conf_threshold': conf_threshold,
+#         'iou_threshold': iou_threshold,
+#         'miou_ar': ar_metric_dict['Mean Foreground IoU'],
+#         'miou_tc': tc_metric_dict['Mean Foreground IoU'],
+#         'mean_acc_ar': ar_metric_dict['Mean Acc'],
+#         'mean_acc_tc': tc_metric_dict['Mean Acc'],
+#         'overall_acc_ar': ar_metric_dict['Overall Acc'],
+#         'overall_acc_tc': tc_metric_dict['Overall Acc'],
+#         'freqw_acc_ar': ar_metric_dict['FreqW Acc'],
+#         'freqw_acc_tc': tc_metric_dict['FreqW Acc'],
+#         'miou_including_bg_ar': ar_metric_dict['Mean IoU'],
+#         'miou_including_bg_tc': tc_metric_dict['Mean IoU'],
+#     }
+    
+#     # Reset metrics for next validation
+#     ar_metrics.reset()
+#     tc_metrics.reset()
+    
+#     return results
+
+
 @torch.no_grad()
 def validate_cgnet_bboxes(
     val_dataloader, 
@@ -75,7 +182,8 @@ def validate_cgnet_bboxes(
     enlarge_ratio=0
 ):
     """
-    Validate model using direct BBox predictions from CGNetBBoxPrompter.
+    Validate model using direct BBox predictions from CGNetBBoxPrompter
+    with added diagnostic profiling.
     """
     model.eval()
     prompter.cgnet_model.eval()
@@ -87,6 +195,10 @@ def validate_cgnet_bboxes(
         leave=False
     )
     
+    # Initialize diagnostic accumulators
+    ar_diag_totals = {'gt': 0, 'pred': 0, 'missed': 0, 'ghosts': 0, 'fragmented': 0, 'ious': []}
+    tc_diag_totals = {'gt': 0, 'pred': 0, 'missed': 0, 'ghosts': 0, 'fragmented': 0, 'ious': []}
+
     with torch.no_grad():
         for val_step, batch in enumerate(val_dataloader):
             if max_samples and total_samples >= max_samples:
@@ -95,10 +207,32 @@ def validate_cgnet_bboxes(
             batch = batch_to_cuda(batch, device)
             total_samples += batch['input'].shape[0]
             
-            # 1. Generate BBox prompts directly using the NEW CGNetBBoxPrompter
+            # 1. Generate BBox prompts directly
             features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
             prompt_dict = prompter.get_prompts(features, conf_threshold=conf_threshold, iou_threshold=iou_threshold, enlarge_ratio=enlarge_ratio)
             
+            # --- RUN DIAGNOSTICS ---
+            # Compare dataset GT boxes with predicted boxes
+            ar_stats = profile_prompt_errors(batch['ar_bbox_prompts'], prompt_dict['ar_bbox_prompts'], iou_threshold=0.3)
+            tc_stats = profile_prompt_errors(batch['tc_bbox_prompts'], prompt_dict['tc_bbox_prompts'], iou_threshold=0.3)
+
+            # Accumulate AR stats
+            ar_diag_totals['gt'] += ar_stats['total_gt_objects']
+            ar_diag_totals['pred'] += ar_stats['total_pred_prompts']
+            ar_diag_totals['missed'] += ar_stats['missed_objects']
+            ar_diag_totals['ghosts'] += ar_stats['ghost_prompts']
+            ar_diag_totals['fragmented'] += ar_stats['fragmented_objects']
+            ar_diag_totals['ious'].extend(ar_stats['matched_bbox_iou'])
+
+            # Accumulate TC stats
+            tc_diag_totals['gt'] += tc_stats['total_gt_objects']
+            tc_diag_totals['pred'] += tc_stats['total_pred_prompts']
+            tc_diag_totals['missed'] += tc_stats['missed_objects']
+            tc_diag_totals['ghosts'] += tc_stats['ghost_prompts']
+            tc_diag_totals['fragmented'] += tc_stats['fragmented_objects']
+            tc_diag_totals['ious'].extend(tc_stats['matched_bbox_iou'])
+            # -----------------------
+
             # 2. Package for SAM
             combined_prompt_dict = {
                 'ar_point_prompts': None,
@@ -110,7 +244,7 @@ def validate_cgnet_bboxes(
             # 3. Set inference images
             images = model.set_infer_img(batch['input'])
             
-            # 4. Perform inference with combined prompts - all at once
+            # 4. Perform inference with combined prompts
             tc_masks, ar_masks = model.infer(
                 ar_point_prompts=combined_prompt_dict['ar_point_prompts'],
                 tc_point_prompts=combined_prompt_dict['tc_point_prompts'],
@@ -123,7 +257,6 @@ def validate_cgnet_bboxes(
             masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt]
             masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt]
             
-            # Ensure correct shape for metrics [B, 1, 1, H, W]
             for masks in [masks_ar_gts, masks_tc_gts, ar_masks, tc_masks]:
                 for i in range(len(masks)):
                     if len(masks[i].shape) == 2:
@@ -144,28 +277,43 @@ def validate_cgnet_bboxes(
     # Compute metrics
     ar_metric_dict, _ = ar_metrics.compute()
     tc_metric_dict, _ = tc_metrics.compute()
+
+    # Compute Diagnostic Averages
+    avg_ar_bbox_iou = np.mean(ar_diag_totals['ious']) if ar_diag_totals['ious'] else 0.0
+    avg_tc_bbox_iou = np.mean(tc_diag_totals['ious']) if tc_diag_totals['ious'] else 0.0
     
     results = {
         'prompt_type': 'bbox_direct',
-        'conf_threshold': conf_threshold,
-        'iou_threshold': iou_threshold,
+        'enlarge_ratio': enlarge_ratio,
         'miou_ar': ar_metric_dict['Mean Foreground IoU'],
         'miou_tc': tc_metric_dict['Mean Foreground IoU'],
-        'mean_acc_ar': ar_metric_dict['Mean Acc'],
-        'mean_acc_tc': tc_metric_dict['Mean Acc'],
-        'overall_acc_ar': ar_metric_dict['Overall Acc'],
-        'overall_acc_tc': tc_metric_dict['Overall Acc'],
-        'freqw_acc_ar': ar_metric_dict['FreqW Acc'],
-        'freqw_acc_tc': tc_metric_dict['FreqW Acc'],
-        'miou_including_bg_ar': ar_metric_dict['Mean IoU'],
-        'miou_including_bg_tc': tc_metric_dict['Mean IoU'],
+        # Add Diagnostics to results
+        'diag_ar_avg_bbox_iou': avg_ar_bbox_iou,
+        'diag_ar_missed_pct': ar_diag_totals['missed'] / max(1, ar_diag_totals['gt']),
+        'diag_ar_ghost_pct': ar_diag_totals['ghosts'] / max(1, ar_diag_totals['pred']),
+        'diag_tc_avg_bbox_iou': avg_tc_bbox_iou,
+        'diag_tc_missed_pct': tc_diag_totals['missed'] / max(1, tc_diag_totals['gt']),
+        'diag_tc_ghost_pct': tc_diag_totals['ghosts'] / max(1, tc_diag_totals['pred']),
     }
+
+    # Log to WandB
+    if wandb.run is not None:
+        wandb.log({
+            f"eval/ar_seg_iou_ratio_{enlarge_ratio}": results['miou_ar'],
+            f"eval/tc_seg_iou_ratio_{enlarge_ratio}": results['miou_tc'],
+            f"diag/ar_bbox_iou_ratio_{enlarge_ratio}": results['diag_ar_avg_bbox_iou'],
+            f"diag/ar_missed_pct_ratio_{enlarge_ratio}": results['diag_ar_missed_pct'],
+            f"diag/ar_ghost_pct_ratio_{enlarge_ratio}": results['diag_ar_ghost_pct'],
+            f"diag/tc_bbox_iou_ratio_{enlarge_ratio}": results['diag_tc_avg_bbox_iou'],
+            f"diag/tc_missed_pct_ratio_{enlarge_ratio}": results['diag_tc_missed_pct'],
+            f"diag/tc_ghost_pct_ratio_{enlarge_ratio}": results['diag_tc_ghost_pct'],
+        })
     
-    # Reset metrics for next validation
     ar_metrics.reset()
     tc_metrics.reset()
     
     return results
+
 
 def setup_device_and_distributed(worker_id, worker_args):
     gpu_num = len(worker_args.used_gpu)
@@ -361,3 +509,53 @@ if __name__ == '__main__':
 
     if len(args.used_gpu) == 1:
         main_worker(worker_id=0, worker_args=args)
+        
+
+import torchvision.ops as ops
+
+def profile_prompt_errors(gt_bboxes_list, pred_bboxes_list, iou_threshold=0.3):
+    """
+    Diagnoses bounding box error topologies.
+    """
+    stats = {
+        'total_gt_objects': 0,
+        'total_pred_prompts': 0,
+        'missed_objects': 0,      
+        'ghost_prompts': 0,       
+        'fragmented_objects': 0,  
+        'matched_bbox_iou': []    
+    }
+
+    for gt, pred in zip(gt_bboxes_list, pred_bboxes_list):
+        if gt is None or len(gt) == 0:
+            if pred is not None and len(pred) > 0:
+                stats['ghost_prompts'] += len(pred)
+                stats['total_pred_prompts'] += len(pred)
+            continue
+
+        gt = gt.view(-1, 4).float()
+        stats['total_gt_objects'] += len(gt)
+
+        if pred is None or len(pred) == 0:
+            stats['missed_objects'] += len(gt)
+            continue
+
+        pred = pred.view(-1, 4).float()
+        stats['total_pred_prompts'] += len(pred)
+
+        iou_matrix = ops.box_iou(gt, pred)
+
+        max_iou_per_gt, _ = iou_matrix.max(dim=1)
+        stats['missed_objects'] += (max_iou_per_gt < iou_threshold).sum().item()
+
+        max_iou_per_pred, _ = iou_matrix.max(dim=0)
+        stats['ghost_prompts'] += (max_iou_per_pred < iou_threshold).sum().item()
+
+        hits_per_gt = (iou_matrix > iou_threshold).sum(dim=1)
+        stats['fragmented_objects'] += (hits_per_gt > 1).sum().item()
+
+        valid_ious = max_iou_per_gt[max_iou_per_gt >= iou_threshold]
+        if len(valid_ious) > 0:
+            stats['matched_bbox_iou'].extend(valid_ious.tolist())
+
+    return stats
