@@ -153,9 +153,12 @@ def main_worker(worker_id, worker_args):
         drop_last=False, collate_fn=val_collate_fn, worker_init_fn=partial(worker_init_fn, base_seed=3407), generator=g
     )
     
-
-    cgnetprompter = CGNetPrompter(weights_path='pretrained/exp_cgnet_weight.pth', device=device, worker_args=worker_args)
-    # cgnetprompter.train(dataloader=train_dataloader, epochs=100)
+    if worker_args.load_pretrained:
+        weights_path = worker_args.pretrained_name
+    else:
+        weights_path = 'pretrained/exp_cgnet_weight.pth'
+    cgnetprompter = CGNetPrompter(weights_path=weights_path, device=device, worker_args=worker_args)
+    cgnetprompter.train(dataloader=train_dataloader, epochs=100)
     
     # count = 0
     # for batch in val_dataloader:
