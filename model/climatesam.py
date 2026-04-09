@@ -13,7 +13,7 @@ import numpy as np
 import torch.utils.checkpoint as checkpoint
 import wandb
 import matplotlib.pyplot as plt
-from model.input_adapter import ClimateInputAdapter, LinearClimateInputAdapter
+from model.input_adapter import ClimateInputAdapter, LinearClimateInputAdapter, NonlinearClimateInputAdapter
 
 sam_ckpt_path_dict = dict(
     vit_b='./pretrained/sam_vit_b_01ec64.pth',
@@ -27,7 +27,7 @@ class ClimateSAM(nn.Module):
     It includes a Vision Transformer (ViT) encoder and a mask decoder, with additional features for climate data processing.
     """
 
-    def __init__(self, model_type: str, input_weights: List[float] = None, verbose = False, use_prompt_generator = False, mlp_ratio = 0.25, use_checkpoint = True, enable_wandb_logging = False):
+    def __init__(self, model_type: str, input_weights: List[float] = None, verbose = False, use_prompt_generator = False, mlp_ratio = 0.25, use_checkpoint = True, enable_wandb_logging = False, input_adapter_type = 'linear'):
         
         super(ClimateSAM, self).__init__()
         
@@ -41,7 +41,10 @@ class ClimateSAM(nn.Module):
         self.sam_img_size = (self.ori_sam.image_encoder.img_size, self.ori_sam.image_encoder.img_size)
         
         # ClimateSAM model
-        self.input_adapter = LinearClimateInputAdapter(in_channels=16, out_channels=3)
+        if input_adapter_type == 'linear':
+            self.input_adapter = LinearClimateInputAdapter(in_channels=16, out_channels=3)
+        else:
+            self.input_adapter = NonlinearClimateInputAdapter(in_channels=16, out_channels=3)
         
         self.mask_decoder = MaskDecoderHQ(
             model_type, self.ori_sam.mask_decoder.state_dict()

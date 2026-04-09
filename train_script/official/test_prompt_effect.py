@@ -23,7 +23,6 @@ for p in (PROJECT_ROOT, TRAIN_SCRIPT_DIR):
 import random
 import numpy as np
 import torch
-import os
 import torch.distributed as dist
 import torch.multiprocessing as mp
 import torch.nn.functional as F
@@ -45,6 +44,7 @@ import pandas as pd
 import json
 from datetime import datetime
 import torchvision.ops as ops
+
 
 def profile_prompt_errors(gt_bboxes_list, pred_bboxes_list, iou_threshold=0.3):
     """
@@ -94,6 +94,66 @@ def profile_prompt_errors(gt_bboxes_list, pred_bboxes_list, iou_threshold=0.3):
     return stats
 
 
+def analyze_scale_ratios(gt_bboxes_list, pred_bboxes_list, device, iou_threshold=0.5):
+    """
+    Analyzes the empirical scale expansion of predicted bounding boxes 
+    compared to ground truth boxes to find the optimal jitter ratio.
+    """
+    import torchvision.ops as ops
+    import numpy as np
+    
+    all_ratios = []
+
+    for gt, pred in zip(gt_bboxes_list, pred_bboxes_list):
+        # Skip if either ground truth or prediction is missing
+        if gt is None or len(gt) == 0 or pred is None or len(pred) == 0:
+            continue
+
+        # Ensure tensors are 2D [N, 4] and float
+        gt = gt.view(-1, 4).float().to(device)
+        pred = pred.view(-1, 4).float().to(device)
+
+        # Calculate IoU between all GT and Pred boxes
+        iou_matrix = ops.box_iou(gt, pred)
+        
+        # For each GT, find the best matching prediction
+        max_iou_per_gt, best_pred_idx = iou_matrix.max(dim=1)
+        
+        for i, iou in enumerate(max_iou_per_gt):
+            if iou >= iou_threshold:
+                matched_gt = gt[i]
+                matched_pred = pred[best_pred_idx[i]]
+                
+                # Calculate widths and heights
+                w_gt = matched_gt[2] - matched_gt[0]
+                h_gt = matched_gt[3] - matched_gt[1]
+                
+                w_pr = matched_pred[2] - matched_pred[0]
+                h_pr = matched_pred[3] - matched_pred[1]
+                
+                # Avoid division by zero
+                if w_gt > 0 and h_gt > 0:
+                    # We only care about expansion (how much LARGER the prediction is)
+                    r_w = max(0, (w_pr / w_gt).item() - 1.0)
+                    r_h = max(0, (h_pr / h_gt).item() - 1.0)
+                    
+                    all_ratios.extend([r_w, r_h])
+
+    stats = {
+        'mean': 0.0,
+        'p90': 0.0,
+        'p95': 0.0,
+        'raw_ratios': all_ratios
+    }
+
+    if all_ratios:
+        stats['mean'] = float(np.mean(all_ratios))
+        stats['p90'] = float(np.percentile(all_ratios, 90))
+        stats['p95'] = float(np.percentile(all_ratios, 95))
+        
+    return stats
+
+
 def freeze_model_parameters(model, trainable_modules=None):
     """
     Freeze all model parameters except those in trainable_modules.
@@ -128,9 +188,9 @@ def validate_cgnet_baseline(val_dataloader, prompter, device, worker_args):
     Returns:
         Dictionary with baseline metrics
     """
-    print("\n" + "-"*60)
+    print("\n" + "="*60)
     print("VALIDATING CGNET BASELINE")
-    print("-"*60)
+    print("="*60)
     
     # Initialize metrics for baseline (using CGNet aux_mask directly)
     ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
@@ -441,6 +501,9 @@ def validate_with_prompt_config(
     if prompt_type == 'bbox':
         ar_diag_totals = {'gt': 0, 'pred': 0, 'missed': 0, 'ghosts': 0, 'fragmented': 0, 'ious': []}
         tc_diag_totals = {'gt': 0, 'pred': 0, 'missed': 0, 'ghosts': 0, 'fragmented': 0, 'ious': []}
+        
+        ar_scale_ratios = []
+        tc_scale_ratios = []
     
     with torch.no_grad():
         for val_step, batch in enumerate(val_dataloader):
@@ -502,6 +565,12 @@ def validate_with_prompt_config(
                 # --- RUN DIAGNOSTICS ---
                 ar_stats = profile_prompt_errors(batch['ar_bbox_prompts'], prompt_dict['ar_bbox_prompts'], iou_threshold=0.3)
                 tc_stats = profile_prompt_errors(batch['tc_bbox_prompts'], prompt_dict['tc_bbox_prompts'], iou_threshold=0.3)
+                
+                ar_scale_stats = analyze_scale_ratios(batch['ar_bbox_prompts'], prompt_dict['ar_bbox_prompts'], device, iou_threshold=0.3)
+                tc_scale_stats = analyze_scale_ratios(batch['tc_bbox_prompts'], prompt_dict['tc_bbox_prompts'], device, iou_threshold=0.3)
+
+                ar_scale_ratios.extend(ar_scale_stats['raw_ratios'])
+                tc_scale_ratios.extend(tc_scale_stats['raw_ratios'])
 
                 ar_diag_totals['gt'] += ar_stats['total_gt_objects']
                 ar_diag_totals['pred'] += ar_stats['total_pred_prompts']
@@ -573,12 +642,16 @@ def validate_with_prompt_config(
     if prompt_type == 'bbox' and 'ar_diag_totals' in locals():
         avg_ar_bbox_iou = np.mean(ar_diag_totals['ious']) if ar_diag_totals['ious'] else 0.0
         avg_tc_bbox_iou = np.mean(tc_diag_totals['ious']) if tc_diag_totals['ious'] else 0.0
+        avg_ar_scale = float(np.mean(ar_scale_ratios)) if ar_scale_ratios else 0.0
+        avg_tc_scale = float(np.mean(tc_scale_ratios)) if tc_scale_ratios else 0.0
         
         results.update({
             'diag_ar_avg_bbox_iou': avg_ar_bbox_iou,
+            'diag_ar_avg_scale': avg_ar_scale,
             'diag_ar_missed_pct': ar_diag_totals['missed'] / max(1, ar_diag_totals['gt']),
             'diag_ar_ghost_pct': ar_diag_totals['ghosts'] / max(1, ar_diag_totals['pred']),
             'diag_tc_avg_bbox_iou': avg_tc_bbox_iou,
+            'diag_tc_avg_scale': avg_tc_scale,
             'diag_tc_missed_pct': tc_diag_totals['missed'] / max(1, tc_diag_totals['gt']),
             'diag_tc_ghost_pct': tc_diag_totals['ghosts'] / max(1, tc_diag_totals['pred']),
         })
@@ -586,9 +659,11 @@ def validate_with_prompt_config(
         if hasattr(worker_args, 'wandb') and worker_args.wandb and wandb.run is not None:
             wandb.log({
                 f"diag/ar_bbox_iou_ratio_{enlarge_ratio}": results['diag_ar_avg_bbox_iou'],
+                f"diag/ar_scale_ratio_{enlarge_ratio}": results['diag_ar_avg_scale'],
                 f"diag/ar_missed_pct_ratio_{enlarge_ratio}": results['diag_ar_missed_pct'],
                 f"diag/ar_ghost_pct_ratio_{enlarge_ratio}": results['diag_ar_ghost_pct'],
                 f"diag/tc_bbox_iou_ratio_{enlarge_ratio}": results['diag_tc_avg_bbox_iou'],
+                f"diag/tc_scale_ratio_{enlarge_ratio}": results['diag_tc_avg_scale'],
                 f"diag/tc_missed_pct_ratio_{enlarge_ratio}": results['diag_tc_missed_pct'],
                 f"diag/tc_ghost_pct_ratio_{enlarge_ratio}": results['diag_tc_ghost_pct'],
             })
@@ -724,18 +799,18 @@ def main_worker(worker_id, worker_args):
     
     # Configuration 1: Point prompts with different (pos, neg) pairs
     point_configs = [
-        # {'positive_point_num': 1, 'negative_point_num': 1},
-        # {'positive_point_num': 1, 'negative_point_num': 2},
-        # {'positive_point_num': 2, 'negative_point_num': 2},
-        # {'positive_point_num': 1, 'negative_point_num': 3},
-        # {'positive_point_num': 5, 'negative_point_num': 5},
-        # {'positive_point_num': 10, 'negative_point_num': 10},
-        # {'positive_point_num': 5, 'negative_point_num': 10},
-        # {'positive_point_num': 15, 'negative_point_num': 5},
-        # {'positive_point_num': 10, 'negative_point_num': 5},
-        # {'positive_point_num': 20, 'negative_point_num': 10},
-        # {'positive_point_num': 20, 'negative_point_num': 5},
-        # {'positive_point_num': 20, 'negative_point_num': 20},
+        {'positive_point_num': 1, 'negative_point_num': 1},
+        {'positive_point_num': 1, 'negative_point_num': 2},
+        {'positive_point_num': 2, 'negative_point_num': 2},
+        {'positive_point_num': 1, 'negative_point_num': 3},
+        {'positive_point_num': 5, 'negative_point_num': 5},
+        {'positive_point_num': 10, 'negative_point_num': 10},
+        {'positive_point_num': 5, 'negative_point_num': 10},
+        {'positive_point_num': 15, 'negative_point_num': 5},
+        {'positive_point_num': 10, 'negative_point_num': 5},
+        {'positive_point_num': 20, 'negative_point_num': 10},
+        {'positive_point_num': 20, 'negative_point_num': 5},
+        {'positive_point_num': 20, 'negative_point_num': 20},
     ]
     
     # Configuration 2: BBox prompts with different enlarge ratios
@@ -743,56 +818,57 @@ def main_worker(worker_id, worker_args):
         {'enlarge_ratio': 0.0},
         {'enlarge_ratio': 0.1},
         {'enlarge_ratio': 0.2},
-        # {'enlarge_ratio': 0.3},
-        # {'enlarge_ratio': 0.5},
+        {'enlarge_ratio': 0.3},
+        {'enlarge_ratio': 0.4},
+        {'enlarge_ratio': 0.5},
         {'enlarge_ratio': -0.1},
-        # {'enlarge_ratio': -0.2},
+        {'enlarge_ratio': -0.2},
     ]
     
     # Configuration 3: Mask prompt (single config)
     mask_configs = [{}]
     
-    # # ==================== TEST POINT PROMPTS ====================
-    # print("\n" + "-"*60)
-    # print("TESTING POINT PROMPTS")
-    # print("-"*60)
+    # ==================== TEST POINT PROMPTS ====================
+    print("\n" + "="*60)
+    print("TESTING POINT PROMPTS")
+    print("="*60)
     
-    # for config in point_configs:
-    #     print(f"\nTesting Point Prompt: pos={config['positive_point_num']}, neg={config['negative_point_num']}")
+    for config in point_configs:
+        print(f"\nTesting Point Prompt: pos={config['positive_point_num']}, neg={config['negative_point_num']}")
         
-    #     ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
-    #     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+        ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+        tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
         
-    #     results = validate_with_prompt_config(
-    #         val_dataloader=val_dataloader,
-    #         ar_metrics=ar_metrics,
-    #         tc_metrics=tc_metrics,
-    #         model=climatesam,
-    #         prompter=prompter,
-    #         device=device,
-    #         prompt_type='point',
-    #         positive_point_num=config['positive_point_num'],
-    #         negative_point_num=config['negative_point_num'],
-    #         enlarge_ratio=0,
-    #         centroid_ratio=0,
-    #         worker_args=worker_args,
-    #         max_samples=None
-    #     )
+        results = validate_with_prompt_config(
+            val_dataloader=val_dataloader,
+            ar_metrics=ar_metrics,
+            tc_metrics=tc_metrics,
+            model=climatesam,
+            prompter=prompter,
+            device=device,
+            prompt_type='point',
+            positive_point_num=config['positive_point_num'],
+            negative_point_num=config['negative_point_num'],
+            enlarge_ratio=0,
+            centroid_ratio=0,
+            worker_args=worker_args,
+            max_samples=None
+        )
         
-    #     all_results.append(results)
-    #     print(f"  mIoU TC: {results['miou_tc']:.4f}, mIoU AR: {results['miou_ar']:.4f}")
+        all_results.append(results)
+        print(f"  mIoU TC: {results['miou_tc']:.4f}, mIoU AR: {results['miou_ar']:.4f}")
         
-    #     if worker_args.wandb:
-    #         wandb.log({
-    #             'point_prompt/miou_tc': results['miou_tc'],
-    #             'point_prompt/miou_ar': results['miou_ar'],
-    #             'point_prompt/config': f"pos={config['positive_point_num']}_neg={config['negative_point_num']}"
-    #         })
+        if worker_args.wandb:
+            wandb.log({
+                'point_prompt/miou_tc': results['miou_tc'],
+                'point_prompt/miou_ar': results['miou_ar'],
+                'point_prompt/config': f"pos={config['positive_point_num']}_neg={config['negative_point_num']}"
+            })
     
     # ==================== TEST BBOX PROMPTS ====================
-    print("\n" + "-"*60)
+    print("\n" + "="*60)
     print("TESTING BBOX PROMPTS")
-    print("-"*60)
+    print("="*60)
     
     for config in bbox_configs:
         print(f"\nTesting BBox Prompt: enlarge_ratio={config['enlarge_ratio']}")
@@ -826,72 +902,72 @@ def main_worker(worker_id, worker_args):
                 'bbox_prompt/enlarge_ratio': config['enlarge_ratio']
             })
     
-    # # ==================== TEST MASK PROMPTS ====================
-    # print("\n" + "-"*60)
-    # print("TESTING MASK PROMPTS")
-    # print("-"*60)
+    # ==================== TEST MASK PROMPTS ====================
+    print("\n" + "="*60)
+    print("TESTING MASK PROMPTS")
+    print("="*60)
     
-    # for config in mask_configs:
-    #     print(f"\nTesting Mask Prompt")
+    for config in mask_configs:
+        print(f"\nTesting Mask Prompt")
         
-    #     ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
-    #     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+        ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+        tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
         
-    #     results = validate_with_prompt_config(
-    #         val_dataloader=val_dataloader,
-    #         ar_metrics=ar_metrics,
-    #         tc_metrics=tc_metrics,
-    #         model=climatesam,
-    #         prompter=prompter,
-    #         device=device,
-    #         prompt_type='mask',
-    #         positive_point_num=0,
-    #         negative_point_num=0,
-    #         enlarge_ratio=0,
-    #         centroid_ratio=0,
-    #         worker_args=worker_args,
-    #         max_samples=None
-    #     )
+        results = validate_with_prompt_config(
+            val_dataloader=val_dataloader,
+            ar_metrics=ar_metrics,
+            tc_metrics=tc_metrics,
+            model=climatesam,
+            prompter=prompter,
+            device=device,
+            prompt_type='mask',
+            positive_point_num=0,
+            negative_point_num=0,
+            enlarge_ratio=0,
+            centroid_ratio=0,
+            worker_args=worker_args,
+            max_samples=None
+        )
         
-    #     all_results.append(results)
-    #     print(f"  mIoU TC: {results['miou_tc']:.4f}, mIoU AR: {results['miou_ar']:.4f}")
+        all_results.append(results)
+        print(f"  mIoU TC: {results['miou_tc']:.4f}, mIoU AR: {results['miou_ar']:.4f}")
         
-    #     if worker_args.wandb:
-    #         wandb.log({
-    #             'mask_prompt/miou_tc': results['miou_tc'],
-    #             'mask_prompt/miou_ar': results['miou_ar'],
-    #         })
+        if worker_args.wandb:
+            wandb.log({
+                'mask_prompt/miou_tc': results['miou_tc'],
+                'mask_prompt/miou_ar': results['miou_ar'],
+            })
     
-    # # ==================== TEST COMBINED PROMPTS ====================
-    # print("\n" + "-"*60)
-    # print("TESTING COMBINED PROMPTS (Point + BBox + Mask)")
-    # print("-"*60)
+    # ==================== TEST COMBINED PROMPTS ====================
+    print("\n" + "="*60)
+    print("TESTING COMBINED PROMPTS (Point + BBox + Mask)")
+    print("="*60)
     
     combined_configs = [
-        # {
-        #     'prompt_types': ['point', 'bbox'],
-        #     'positive_point_num': 10,
-        #     'negative_point_num': 5,
-        #     'enlarge_ratio': 0.0,
-        # },
-        # {
-        #     'prompt_types': ['point', 'bbox'],
-        #     'positive_point_num': 15,
-        #     'negative_point_num': 10,
-        #     'enlarge_ratio': 0.0,
-        # },
-        # {
-        #     'prompt_types': ['point', 'bbox', 'mask'],
-        #     'positive_point_num': 10,
-        #     'negative_point_num': 5,
-        #     'enlarge_ratio': 0.0,
-        # },
-        # {
-        #     'prompt_types': ['point', 'bbox', 'mask'],
-        #     'positive_point_num': 20,
-        #     'negative_point_num': 10,
-        #     'enlarge_ratio': 0.0,
-        # },
+        {
+            'prompt_types': ['point', 'bbox'],
+            'positive_point_num': 10,
+            'negative_point_num': 5,
+            'enlarge_ratio': 0.0,
+        },
+        {
+            'prompt_types': ['point', 'bbox'],
+            'positive_point_num': 15,
+            'negative_point_num': 10,
+            'enlarge_ratio': 0.0,
+        },
+        {
+            'prompt_types': ['point', 'bbox', 'mask'],
+            'positive_point_num': 10,
+            'negative_point_num': 5,
+            'enlarge_ratio': 0.0,
+        },
+        {
+            'prompt_types': ['point', 'bbox'],
+            'positive_point_num': 20,
+            'negative_point_num': 10,
+            'enlarge_ratio': 0.0,
+        },
     ]
     
     for config in combined_configs:
