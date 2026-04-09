@@ -803,30 +803,30 @@ def main_worker(worker_id, worker_args):
     
     # Configuration 1: Point prompts with different (pos, neg) pairs
     point_configs = [
-        {'positive_point_num': 1, 'negative_point_num': 1},
-        {'positive_point_num': 1, 'negative_point_num': 2},
-        {'positive_point_num': 2, 'negative_point_num': 2},
-        {'positive_point_num': 1, 'negative_point_num': 3},
-        {'positive_point_num': 5, 'negative_point_num': 5},
-        {'positive_point_num': 10, 'negative_point_num': 10},
-        {'positive_point_num': 5, 'negative_point_num': 10},
-        {'positive_point_num': 15, 'negative_point_num': 5},
-        {'positive_point_num': 10, 'negative_point_num': 5},
-        {'positive_point_num': 20, 'negative_point_num': 10},
-        {'positive_point_num': 20, 'negative_point_num': 5},
-        {'positive_point_num': 20, 'negative_point_num': 20},
+        # {'positive_point_num': 1, 'negative_point_num': 1},
+        # {'positive_point_num': 1, 'negative_point_num': 2},
+        # {'positive_point_num': 2, 'negative_point_num': 2},
+        # {'positive_point_num': 1, 'negative_point_num': 3},
+        # {'positive_point_num': 5, 'negative_point_num': 5},
+        # {'positive_point_num': 10, 'negative_point_num': 10},
+        # {'positive_point_num': 5, 'negative_point_num': 10},
+        # {'positive_point_num': 15, 'negative_point_num': 5},
+        # {'positive_point_num': 10, 'negative_point_num': 5},
+        # {'positive_point_num': 20, 'negative_point_num': 10},
+        # {'positive_point_num': 20, 'negative_point_num': 5},
+        # {'positive_point_num': 20, 'negative_point_num': 20},
     ]
     
     # Configuration 2: BBox prompts with different enlarge ratios
     bbox_configs = [
         {'enlarge_ratio': 0.0},
         {'enlarge_ratio': 0.1},
-        {'enlarge_ratio': 0.2},
-        {'enlarge_ratio': 0.3},
-        {'enlarge_ratio': 0.4},
-        {'enlarge_ratio': 0.5},
-        {'enlarge_ratio': -0.1},
-        {'enlarge_ratio': -0.2},
+        # {'enlarge_ratio': 0.2},
+        # {'enlarge_ratio': 0.3},
+        # {'enlarge_ratio': 0.4},
+        # {'enlarge_ratio': 0.5},
+        # {'enlarge_ratio': -0.1},
+        # {'enlarge_ratio': -0.2},
     ]
     
     # Configuration 3: Mask prompt (single config)
