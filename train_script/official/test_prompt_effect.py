@@ -209,12 +209,16 @@ def validate_cgnet_baseline(val_dataloader, prompter, device, worker_args):
             # Generate auxiliary mask using CGNet (baseline prediction)
             features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
             aux_mask = prompter.get_aux_mask(features)  # B, 3, H, W with channels [BG, TC, AR]
-            
-            # Extract AR and TC predictions from aux_mask
-            # aux_mask channels: [Background, TC, AR]
-            ar_pred_mask = aux_mask[:, 2, :, :].unsqueeze(1).unsqueeze(1)  # B, H, W -> B, 1, 1, H, W
-            tc_pred_mask = aux_mask[:, 1, :, :].unsqueeze(1).unsqueeze(1)  # B, H, W -> B, 1, 1, H, W
-            
+            # Extract AR and TC predictions depending on the tensor dimension
+            if aux_mask.dim() == 3:
+                # Shape is [B, H, W] (class indices)
+                ar_pred_mask = (aux_mask == 2).float().unsqueeze(1).unsqueeze(1) # B, 1, 1, H, W
+                tc_pred_mask = (aux_mask == 1).float().unsqueeze(1).unsqueeze(1) # B, 1, 1, H, W
+            else:
+                # Shape is [B, C, H, W] (logits or probabilities)
+                ar_pred_mask = aux_mask[:, 2, :, :].unsqueeze(1).unsqueeze(1)
+                tc_pred_mask = aux_mask[:, 1, :, :].unsqueeze(1).unsqueeze(1)
+        
             # Ensure proper shape for metric computation: B, 1, H, W
             ar_pred_mask = ar_pred_mask.squeeze(2)  # B, 1, H, W
             tc_pred_mask = tc_pred_mask.squeeze(2)  # B, 1, H, W
