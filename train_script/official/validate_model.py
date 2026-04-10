@@ -283,17 +283,31 @@ def main_worker(worker_id, worker_args):
     device, local_rank = setup_device_and_distributed(worker_id, worker_args)
     print(f"Worker {worker_id} initialized on device {device} with local_rank {local_rank}.")
     
+    # configs_linear = [
+    #     {"mode": "infused", "save_path": make_save_path(worker_args, 'infused_vit_b_mlp1_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1},
+    #     {"mode": "infused", "save_path": make_save_path(worker_args, 'infused_vit_b_mlp05_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 0.5},
+    #     {"mode": "concat", "save_path": make_save_path(worker_args, 'concat_vit_b_mlp1_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1},
+    #     {"mode": "concat", "save_path": make_save_path(worker_args, 'concat_vit_b_mlp05_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 0.5},
+    #     {"mode": "single", "save_path": make_save_path(worker_args, 'single_vit_b_mlp1_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1},
+    #     {"mode": "single", "save_path": make_save_path(worker_args, 'single_vit_b_mlp05_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 0.5},
+    #     {"mode": "lora_dual", "save_path": make_save_path(worker_args, 'lora_dual_vit_b_rank_32_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1, "lora_r": 32},
+    #     {"mode": "lora_dual", "save_path": make_save_path(worker_args, 'lora_dual_vit_b_rank_64_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1, "lora_r": 64},
+    #     {"mode": "lora_single", "save_path": make_save_path(worker_args, 'lora_single_vit_b_rank_32_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1, "lora_r": 32},
+    #     {"mode": "lora_single", "save_path": make_save_path(worker_args, 'lora_single_vit_b_rank_64_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1, "lora_r": 64}
+    # ]
     configs_linear = [
-        {"mode": "infused", "save_path": make_save_path(worker_args, 'infused_vit_b_mlp1_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1},
-        {"mode": "infused", "save_path": make_save_path(worker_args, 'infused_vit_b_mlp05_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 0.5},
-        {"mode": "concat", "save_path": make_save_path(worker_args, 'concat_vit_b_mlp1_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1},
-        {"mode": "concat", "save_path": make_save_path(worker_args, 'concat_vit_b_mlp05_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 0.5},
-        {"mode": "single", "save_path": make_save_path(worker_args, 'single_vit_b_mlp1_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1},
-        {"mode": "single", "save_path": make_save_path(worker_args, 'single_vit_b_mlp05_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 0.5},
-        {"mode": "lora_dual", "save_path": make_save_path(worker_args, 'lora_dual_vit_b_rank_32_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1, "lora_r": 32},
-        {"mode": "lora_dual", "save_path": make_save_path(worker_args, 'lora_dual_vit_b_rank_64_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1, "lora_r": 64},
-        {"mode": "lora_single", "save_path": make_save_path(worker_args, 'lora_single_vit_b_rank_32_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1, "lora_r": 32},
-        {"mode": "lora_single", "save_path": make_save_path(worker_args, 'lora_single_vit_b_rank_64_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1, "lora_r": 64}
+        # {"mode": "infused", "save_path": make_save_path(worker_args, 'infused_vit_b_mlp1_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1},
+        
+        {"mode": "infused", "save_path": make_save_path(worker_args, 'infused_vit_b_mlp05_linear_bbox'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 0.5},
+        
+        # {"mode": "concat", "save_path": make_save_path(worker_args, 'concat_vit_b_mlp1_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1},
+        # {"mode": "concat", "save_path": make_save_path(worker_args, 'concat_vit_b_mlp05_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 0.5},
+        # {"mode": "single", "save_path": make_save_path(worker_args, 'single_vit_b_mlp1_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1},
+        # {"mode": "single", "save_path": make_save_path(worker_args, 'single_vit_b_mlp05_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 0.5},
+        # {"mode": "lora_dual", "save_path": make_save_path(worker_args, 'lora_dual_vit_b_rank_32_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1, "lora_r": 32},
+        # {"mode": "lora_dual", "save_path": make_save_path(worker_args, 'lora_dual_vit_b_rank_64_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1, "lora_r": 64},
+        # {"mode": "lora_single", "save_path": make_save_path(worker_args, 'lora_single_vit_b_rank_32_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1, "lora_r": 32},
+        # {"mode": "lora_single", "save_path": make_save_path(worker_args, 'lora_single_vit_b_rank_64_linear'), "sam_type": 'vit_b', "image_encoder_mlp_ratio": 1, "lora_r": 64}
     ]
     
     # configs_nonlinear = [
