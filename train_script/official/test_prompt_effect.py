@@ -105,18 +105,14 @@ def analyze_scale_ratios(gt_bboxes_list, pred_bboxes_list, device, iou_threshold
     all_ratios = []
 
     for gt, pred in zip(gt_bboxes_list, pred_bboxes_list):
-        # Skip if either ground truth or prediction is missing
         if gt is None or len(gt) == 0 or pred is None or len(pred) == 0:
             continue
 
-        # Ensure tensors are 2D [N, 4] and float
         gt = gt.view(-1, 4).float().to(device)
         pred = pred.view(-1, 4).float().to(device)
 
-        # Calculate IoU between all GT and Pred boxes
         iou_matrix = ops.box_iou(gt, pred)
         
-        # For each GT, find the best matching prediction
         max_iou_per_gt, best_pred_idx = iou_matrix.max(dim=1)
         
         for i, iou in enumerate(max_iou_per_gt):
@@ -124,16 +120,13 @@ def analyze_scale_ratios(gt_bboxes_list, pred_bboxes_list, device, iou_threshold
                 matched_gt = gt[i]
                 matched_pred = pred[best_pred_idx[i]]
                 
-                # Calculate widths and heights
                 w_gt = matched_gt[2] - matched_gt[0]
                 h_gt = matched_gt[3] - matched_gt[1]
                 
                 w_pr = matched_pred[2] - matched_pred[0]
                 h_pr = matched_pred[3] - matched_pred[1]
                 
-                # Avoid division by zero
                 if w_gt > 0 and h_gt > 0:
-                    # We only care about expansion (how much LARGER the prediction is)
                     r_w = max(0, (w_pr / w_gt).item() - 1.0)
                     r_h = max(0, (h_pr / h_gt).item() - 1.0)
                     
@@ -161,13 +154,12 @@ def freeze_model_parameters(model, trainable_modules=None):
     Args:
         model: PyTorch model to freeze
         trainable_modules: List of module names to keep trainable (e.g., ['image_encoder', 'mask_decoder'])
-                          If None or empty, all parameters are frozen.
+                           If None or empty, all parameters are frozen.
     """
     if trainable_modules is None:
         trainable_modules = []
     
     for name, param in model.named_parameters():
-        # Check if this parameter belongs to a trainable module
         is_trainable = any(module_name in name for module_name in trainable_modules)
         param.requires_grad = is_trainable
     
@@ -192,9 +184,7 @@ def validate_cgnet_baseline(val_dataloader, prompter, device, worker_args):
     print("VALIDATING CGNET BASELINE")
     print("="*60)
     
-    # Initialize metrics for baseline (using CGNet aux_mask directly)
-    ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
-    tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+    val_metrics = StreamSegMetrics(class_names=['Background', 'TC', 'AR'])
     
     valid_pbar = tqdm(
         total=len(val_dataloader),
@@ -206,34 +196,22 @@ def validate_cgnet_baseline(val_dataloader, prompter, device, worker_args):
         for val_step, batch in enumerate(val_dataloader):
             batch = batch_to_cuda(batch, device)
             
-            # Generate auxiliary mask using CGNet (baseline prediction)
             features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
-            aux_mask = prompter.get_aux_mask(features)  # B, 3, H, W with channels [BG, TC, AR]
-            # Extract AR and TC predictions depending on the tensor dimension
+            aux_mask = prompter.get_aux_mask(features) 
+            
             if aux_mask.dim() == 3:
-                # Shape is [B, H, W] (class indices)
-                ar_pred_mask = (aux_mask == 2).float().unsqueeze(1).unsqueeze(1) # B, 1, 1, H, W
-                tc_pred_mask = (aux_mask == 1).float().unsqueeze(1).unsqueeze(1) # B, 1, 1, H, W
+                combined_preds = aux_mask.unsqueeze(1).unsqueeze(1)
             else:
-                # Shape is [B, C, H, W] (logits or probabilities)
-                ar_pred_mask = aux_mask[:, 2, :, :].unsqueeze(1).unsqueeze(1)
-                tc_pred_mask = aux_mask[:, 1, :, :].unsqueeze(1).unsqueeze(1)
-        
-            # Ensure proper shape for metric computation: B, 1, H, W
-            ar_pred_mask = ar_pred_mask.squeeze(2)  # B, 1, H, W
-            tc_pred_mask = tc_pred_mask.squeeze(2)  # B, 1, H, W
+                combined_preds = torch.argmax(aux_mask, dim=1).unsqueeze(1).unsqueeze(1)
+                
+            masks_gt = batch['gt_mask'] 
             
-            # Extract ground truth masks
-            masks_gt = batch['gt_mask']  # List of B tensors with shape [H, W]
-            masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt]  # AR is class 2
-            masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt]  # TC is class 1
+            formatted_preds = []
+            for i in range(len(masks_gt)):
+                pred = combined_preds[i].view_as(masks_gt[i])
+                formatted_preds.append(pred)
             
-            # Convert to list format expected by metrics.update()
-            ar_masks = [ar_pred_mask[i:i+1] for i in range(ar_pred_mask.shape[0])]
-            tc_masks = [tc_pred_mask[i:i+1] for i in range(tc_pred_mask.shape[0])]
-            
-            # Ensure correct shape for metrics: B, 1, 1, H, W
-            for masks in [masks_ar_gts, masks_tc_gts, ar_masks, tc_masks]:
+            for masks in [masks_gt, formatted_preds]:
                 for i in range(len(masks)):
                     if len(masks[i].shape) == 2:
                         masks[i] = masks[i][None, None, :]
@@ -242,62 +220,39 @@ def validate_cgnet_baseline(val_dataloader, prompter, device, worker_args):
                     if len(masks[i].shape) != 4:
                         raise RuntimeError(f"Unexpected mask shape: {masks[i].shape}")
             
-            # Update metrics
-            tc_metrics.update(tc_masks, masks_tc_gts, batch['index_name'])
-            ar_metrics.update(ar_masks, masks_ar_gts, batch['index_name'])
+            val_metrics.update(formatted_preds, masks_gt, batch['index_name'])
             
             valid_pbar.update(1)
     
     valid_pbar.close()
     
-    # Compute metrics
-    ar_metric_dict, _ = ar_metrics.compute()
-    tc_metric_dict, _ = tc_metrics.compute()
+    metric_dict, _ = val_metrics.compute()
     
-    # Extract metrics
-    miou_ar = ar_metric_dict['Mean Foreground IoU']
-    miou_tc = tc_metric_dict['Mean Foreground IoU']
-    mean_acc_ar = ar_metric_dict['Mean Acc']
-    mean_acc_tc = tc_metric_dict['Mean Acc']
-    overall_acc_ar = ar_metric_dict['Overall Acc']
-    overall_acc_tc = tc_metric_dict['Overall Acc']
-    freqw_acc_ar = ar_metric_dict['FreqW Acc']
-    freqw_acc_tc = tc_metric_dict['FreqW Acc']
-    miou_including_bg_ar = ar_metric_dict['Mean IoU']
-    miou_including_bg_tc = tc_metric_dict['Mean IoU']
-    
-    # Create baseline result dictionary
     baseline_result = {
         'prompt_type': 'cgnet_baseline',
         'positive_point_num': 0,
         'negative_point_num': 0,
         'enlarge_ratio': 0,
         'centroid_ratio': 0,
-        'miou_ar': miou_ar,
-        'miou_tc': miou_tc,
-        'mean_acc_ar': mean_acc_ar,
-        'mean_acc_tc': mean_acc_tc,
-        'overall_acc_ar': overall_acc_ar,
-        'overall_acc_tc': overall_acc_tc,
-        'freqw_acc_ar': freqw_acc_ar,
-        'freqw_acc_tc': freqw_acc_tc,
-        'miou_including_bg_ar': miou_including_bg_ar,
-        'miou_including_bg_tc': miou_including_bg_tc,
+        'iou_tc': metric_dict['TC IoU'],
+        'iou_ar': metric_dict['AR IoU'],
+        'iou_bg': metric_dict['Background IoU'],
+        'mean_iou': metric_dict['Mean IoU'],
+        'mean_foreground_iou': metric_dict['Mean Foreground IoU'],
+        'mean_acc': metric_dict['Mean Acc'],
+        'overall_acc': metric_dict['Overall Acc'],
+        'freqw_acc': metric_dict['FreqW Acc']
     }
     
-    # Print baseline results
     print(f"\n✓ CGNet Baseline Results:")
-    print(f"  mIoU TC: {miou_tc:.4f}, mIoU AR: {miou_ar:.4f}")
-    print(f"  Mean Acc TC: {mean_acc_tc:.4f}, Mean Acc AR: {mean_acc_ar:.4f}")
-    print(f"  Overall Acc TC: {overall_acc_tc:.4f}, Overall Acc AR: {overall_acc_ar:.4f}")
+    print(f"  TC IoU: {baseline_result['iou_tc']:.4f}, AR IoU: {baseline_result['iou_ar']:.4f}, Mean FG IoU: {baseline_result['mean_foreground_iou']:.4f}")
     
     return baseline_result
 
 
 def validate_with_combined_prompts(
     val_dataloader, 
-    ar_metrics, 
-    tc_metrics, 
+    val_metrics, 
     model, 
     prompter, 
     device, 
@@ -312,31 +267,12 @@ def validate_with_combined_prompts(
     """
     Validate model with combined prompt types (e.g., point + bbox simultaneously).
     This function generates multiple prompt types and passes them to the model at the same time.
-    
-    Args:
-        val_dataloader: Validation data loader
-        ar_metrics: StreamSegMetrics for AR evaluation
-        tc_metrics: StreamSegMetrics for TC evaluation
-        model: ClimateSAM model
-        prompter: CGNetPrompter instance
-        device: Device to run on
-        positive_point_num: Number of positive points
-        negative_point_num: Number of negative points
-        enlarge_ratio: BBox enlargement ratio
-        centroid_ratio: Centroid ratio for prompt generation
-        worker_args: Worker arguments
-        prompt_types: List of prompt types to combine (e.g., ['point', 'bbox', 'mask'])
-        max_samples: Limit number of validation samples for faster testing
-    
-    Returns:
-        Dictionary with combined metrics
     """
     if prompt_types is None:
         prompt_types = ['point', 'bbox']
     
     model.eval()
     
-    # Create progress bar with all prompt types in description
     prompt_types_str = '+'.join(prompt_types)
     valid_pbar = tqdm(
         total=len(val_dataloader),
@@ -348,18 +284,15 @@ def validate_with_combined_prompts(
     
     with torch.no_grad():
         for val_step, batch in enumerate(val_dataloader):
-            # Break early if max_samples is reached
             if max_samples and total_samples >= max_samples:
                 break
             
             batch = batch_to_cuda(batch, device)
             total_samples += batch['input'].shape[0]
             
-            # Generate auxiliary mask using CGNet
             features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
             aux_mask = prompter.get_aux_mask(features)
             
-            # Initialize prompt dictionaries for each type
             combined_prompt_dict = {
                 'ar_point_prompts': None,
                 'tc_point_prompts': None,
@@ -369,7 +302,6 @@ def validate_with_combined_prompts(
                 'tc_mask_prompts': None,
             }
             
-            # Generate prompts for each requested type
             for prompt_type in prompt_types:
                 prompt_maker = PromptMaker(
                     prompt_type=prompt_type,
@@ -387,7 +319,6 @@ def validate_with_combined_prompts(
                     centroid_ratio=centroid_ratio
                 )
                 
-                # Merge prompts from this type into combined dict
                 if prompt_type == 'point':
                     combined_prompt_dict['ar_point_prompts'] = prompt_dict.get('ar_point_prompts')
                     combined_prompt_dict['tc_point_prompts'] = prompt_dict.get('tc_point_prompts')
@@ -398,7 +329,6 @@ def validate_with_combined_prompts(
                     combined_prompt_dict['ar_mask_prompts'] = prompt_dict.get('ar_mask_prompts')
                     combined_prompt_dict['tc_mask_prompts'] = prompt_dict.get('tc_mask_prompts')
             
-            # Convert combined prompts to device
             for key in combined_prompt_dict:
                 if combined_prompt_dict[key] is None:
                     continue
@@ -417,10 +347,8 @@ def validate_with_combined_prompts(
                         for item in combined_prompt_dict[key]
                     ]
             
-            # Set inference images
             images = model.set_infer_img(batch['input'])
             
-            # Perform inference with combined prompts - all at once
             tc_masks, ar_masks = model.infer(
                 ar_point_prompts=combined_prompt_dict['ar_point_prompts'],
                 tc_point_prompts=combined_prompt_dict['tc_point_prompts'],
@@ -430,60 +358,56 @@ def validate_with_combined_prompts(
                 tc_mask_prompts=combined_prompt_dict.get('tc_mask_prompts')
             )
             
-            # Extract ground truth masks
             masks_gt = batch['gt_mask']
-            masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt]
-            masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt]
             
-            # Ensure correct shape for metrics
-            for masks in [masks_ar_gts, masks_tc_gts, ar_masks, tc_masks]:
+            combined_preds = []
+            for i in range(len(masks_gt)):
+                pred = torch.zeros_like(masks_gt[i])
+                tc_mask_matched = tc_masks[i].view_as(pred)
+                ar_mask_matched = ar_masks[i].view_as(pred)
+                pred[tc_mask_matched == 1] = 1
+                pred[ar_mask_matched == 1] = 2
+                combined_preds.append(pred)
+                
+            for masks in [masks_gt, combined_preds]:
                 for i in range(len(masks)):
                     if len(masks[i].shape) == 2:
                         masks[i] = masks[i][None, None, :]
                     if len(masks[i].shape) == 3:
                         masks[i] = masks[i][:, None, :]
                     if len(masks[i].shape) != 4:
-                        raise RuntimeError(f"Unexpected mask shape: {masks[i].shape}")
+                        raise RuntimeError
             
-            # Update metrics
-            tc_metrics.update(tc_masks, masks_tc_gts, batch['index_name'])
-            ar_metrics.update(ar_masks, masks_ar_gts, batch['index_name'])
+            val_metrics.update(combined_preds, masks_gt, batch['index_name'])
             
             valid_pbar.update(1)
     
     valid_pbar.close()
     
-    # Compute metrics
-    ar_metric_dict, _ = ar_metrics.compute()
-    tc_metric_dict, _ = tc_metrics.compute()
+    metric_dict, _ = val_metrics.compute()
     
-    # Create result dictionary
     results = {
         'prompt_type': prompt_types_str,
         'positive_point_num': positive_point_num,
         'negative_point_num': negative_point_num,
         'enlarge_ratio': enlarge_ratio,
         'centroid_ratio': centroid_ratio,
-        'miou_ar': ar_metric_dict['Mean Foreground IoU'],
-        'miou_tc': tc_metric_dict['Mean Foreground IoU'],
-        'mean_acc_ar': ar_metric_dict['Mean Acc'],
-        'mean_acc_tc': tc_metric_dict['Mean Acc'],
-        'overall_acc_ar': ar_metric_dict['Overall Acc'],
-        'overall_acc_tc': tc_metric_dict['Overall Acc'],
-        'freqw_acc_ar': ar_metric_dict['FreqW Acc'],
-        'freqw_acc_tc': tc_metric_dict['FreqW Acc'],
-        'miou_including_bg_ar': ar_metric_dict['Mean IoU'],
-        'miou_including_bg_tc': tc_metric_dict['Mean IoU'],
+        'iou_tc': metric_dict['TC IoU'],
+        'iou_ar': metric_dict['AR IoU'],
+        'iou_bg': metric_dict['Background IoU'],
+        'mean_iou': metric_dict['Mean IoU'],
+        'mean_foreground_iou': metric_dict['Mean Foreground IoU'],
+        'mean_acc': metric_dict['Mean Acc'],
+        'overall_acc': metric_dict['Overall Acc'],
+        'freqw_acc': metric_dict['FreqW Acc']
     }
     
-    # Reset metrics for next validation
-    ar_metrics.reset()
-    tc_metrics.reset()
+    val_metrics.reset()
     
     return results
 
 def validate_with_prompt_config(
-    val_dataloader, ar_metrics, tc_metrics, model, prompter, device, 
+    val_dataloader, val_metrics, model, prompter, device, 
     prompt_type, positive_point_num, negative_point_num, enlarge_ratio,
     centroid_ratio, worker_args, max_samples=None
 ):
@@ -501,7 +425,6 @@ def validate_with_prompt_config(
         negative_point_num=negative_point_num, centroid_ratio=centroid_ratio
     )
 
-    # Initialize diagnostic accumulators for bbox profiling
     if prompt_type == 'bbox':
         ar_diag_totals = {'gt': 0, 'pred': 0, 'missed': 0, 'ghosts': 0, 'fragmented': 0, 'ious': []}
         tc_diag_totals = {'gt': 0, 'pred': 0, 'missed': 0, 'ghosts': 0, 'fragmented': 0, 'ious': []}
@@ -528,9 +451,6 @@ def validate_with_prompt_config(
             
             prompt_dict = batch_to_cuda(prompt_dict, device)
 
-            # ================================================================= #
-            # GHOST CATCHER & DIAGNOSTICS (Only run for bbox tests)
-            # ================================================================= #
             if prompt_type == 'bbox' and 'ar_bbox_prompts' in batch:
                 batch_size = features.shape[0]
                 exp_dir = getattr(worker_args, 'exp_dir', 'exp')
@@ -566,7 +486,6 @@ def validate_with_prompt_config(
                         if hasattr(worker_args, 'wandb') and worker_args.wandb and wandb.run is not None and ghost_count >= 2:
                             wandb.log({f"ghost_analysis/ratio_{enlarge_ratio}": wandb.Image(save_path)})
 
-                # --- RUN DIAGNOSTICS ---
                 ar_stats = profile_prompt_errors(batch['ar_bbox_prompts'], prompt_dict['ar_bbox_prompts'], iou_threshold=0.3)
                 tc_stats = profile_prompt_errors(batch['tc_bbox_prompts'], prompt_dict['tc_bbox_prompts'], iou_threshold=0.3)
                 
@@ -589,9 +508,7 @@ def validate_with_prompt_config(
                 tc_diag_totals['ghosts'] += tc_stats['ghost_prompts']
                 tc_diag_totals['fragmented'] += tc_stats['fragmented_objects']
                 tc_diag_totals['ious'].extend(tc_stats['matched_bbox_iou'])
-            # ================================================================= #
             
-            # Set inference images
             images = model.set_infer_img(batch['input'])
             
             tc_masks, ar_masks = model.infer(
@@ -602,27 +519,32 @@ def validate_with_prompt_config(
             )
             
             masks_gt = batch['gt_mask']
-            masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt]
-            masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt]
             
-            for masks in [masks_ar_gts, masks_tc_gts, ar_masks, tc_masks]:
+            combined_preds = []
+            for i in range(len(masks_gt)):
+                pred = torch.zeros_like(masks_gt[i])
+                tc_mask_matched = tc_masks[i].view_as(pred)
+                ar_mask_matched = ar_masks[i].view_as(pred)
+                pred[tc_mask_matched == 1] = 1
+                pred[ar_mask_matched == 1] = 2
+                combined_preds.append(pred)
+                
+            for masks in [masks_gt, combined_preds]:
                 for i in range(len(masks)):
                     if len(masks[i].shape) == 2:
                         masks[i] = masks[i][None, None, :]
                     if len(masks[i].shape) == 3:
                         masks[i] = masks[i][:, None, :]
                     if len(masks[i].shape) != 4:
-                        raise RuntimeError(f"Unexpected mask shape: {masks[i].shape}")
+                        raise RuntimeError
             
-            tc_metrics.update(tc_masks, masks_tc_gts, batch['index_name'])
-            ar_metrics.update(ar_masks, masks_ar_gts, batch['index_name'])
+            val_metrics.update(combined_preds, masks_gt, batch['index_name'])
             
             valid_pbar.update(1)
     
     valid_pbar.close()
     
-    ar_metric_dict, _ = ar_metrics.compute()
-    tc_metric_dict, _ = tc_metrics.compute()
+    metric_dict, _ = val_metrics.compute()
     
     results = {
         'prompt_type': prompt_type,
@@ -630,19 +552,16 @@ def validate_with_prompt_config(
         'negative_point_num': negative_point_num,
         'enlarge_ratio': enlarge_ratio,
         'centroid_ratio': centroid_ratio,
-        'miou_ar': ar_metric_dict['Mean Foreground IoU'],
-        'miou_tc': tc_metric_dict['Mean Foreground IoU'],
-        'mean_acc_ar': ar_metric_dict['Mean Acc'],
-        'mean_acc_tc': tc_metric_dict['Mean Acc'],
-        'overall_acc_ar': ar_metric_dict['Overall Acc'],
-        'overall_acc_tc': tc_metric_dict['Overall Acc'],
-        'freqw_acc_ar': ar_metric_dict['FreqW Acc'],
-        'freqw_acc_tc': tc_metric_dict['FreqW Acc'],
-        'miou_including_bg_ar': ar_metric_dict['Mean IoU'],
-        'miou_including_bg_tc': tc_metric_dict['Mean IoU'],
+        'iou_tc': metric_dict['TC IoU'],
+        'iou_ar': metric_dict['AR IoU'],
+        'iou_bg': metric_dict['Background IoU'],
+        'mean_iou': metric_dict['Mean IoU'],
+        'mean_foreground_iou': metric_dict['Mean Foreground IoU'],
+        'mean_acc': metric_dict['Mean Acc'],
+        'overall_acc': metric_dict['Overall Acc'],
+        'freqw_acc': metric_dict['FreqW Acc']
     }
 
-    # Append the BBox diagnostics if applicable
     if prompt_type == 'bbox' and 'ar_diag_totals' in locals():
         avg_ar_bbox_iou = np.mean(ar_diag_totals['ious']) if ar_diag_totals['ious'] else 0.0
         avg_tc_bbox_iou = np.mean(tc_diag_totals['ious']) if tc_diag_totals['ious'] else 0.0
@@ -672,8 +591,7 @@ def validate_with_prompt_config(
                 f"diag/tc_ghost_pct_ratio_{enlarge_ratio}": results['diag_tc_ghost_pct'],
             })
     
-    ar_metrics.reset()
-    tc_metrics.reset()
+    val_metrics.reset()
     
     return results
 
@@ -701,14 +619,12 @@ def main_worker(worker_id, worker_args):
     )
     val_collate_fn = val_dataset.collate_fn
     
-    # Debug mode: use smaller dataset
     if hasattr(worker_args, 'debugging') and worker_args.debugging:
         debug_val_size = getattr(worker_args, 'debug_val_size', 20)
         val_indices = list(range(min(debug_val_size, len(val_dataset))))
         val_dataset = torch.utils.data.Subset(val_dataset, val_indices)
         print(f"Debug mode: Using only {len(val_dataset)} validation samples")
     
-    # Create validation dataloader
     val_bs = worker_args.val_bs if worker_args.val_bs else 2
     val_workers = getattr(worker_args, 'num_workers', 2)
     
@@ -729,7 +645,6 @@ def main_worker(worker_id, worker_args):
         enable_wandb_logging=False
     ).to(device=device)
     
-    # Load pretrained weights
     image_encoder_path = os.path.join(
         worker_args.exp_dir, 
         f"{worker_args.encoder_weights_name}.pth"
@@ -744,21 +659,18 @@ def main_worker(worker_id, worker_args):
     phase_1_checkpoint = torch.load(image_encoder_path, map_location=device)
     print(f"Pretrained weights from phase 1 loaded from {image_encoder_path}")
     
-    # Load image encoder
     if 'image_encoder' in phase_1_checkpoint:
         climatesam.image_encoder.load_state_dict(phase_1_checkpoint['image_encoder'])
         print(f"✓ Image encoder weights loaded")
     else:
         raise ValueError("Image encoder weights not found in checkpoint.")
     
-    # Load mask decoder
     if 'mask_decoder' in phase_1_checkpoint:
         climatesam.mask_decoder.load_state_dict(phase_1_checkpoint['mask_decoder'])
         print(f"✓ Mask decoder weights loaded")
     else:
         raise ValueError("Mask decoder weights not found in checkpoint.")
     
-    # Load input adapter
     if 'input_adapter' in phase_1_checkpoint:
         climatesam.input_adapter.load_state_dict(phase_1_checkpoint['input_adapter'])
         print(f"✓ Input adapter weights loaded")
@@ -770,14 +682,12 @@ def main_worker(worker_id, worker_args):
     print("FREEZING MODEL PARAMETERS")
     print("="*60)
     
-    # Freeze all parameters by default
-    trainable_modules = []  # All modules are frozen
+    trainable_modules = []
     if hasattr(worker_args, 'trainable_modules'):
         trainable_modules = worker_args.trainable_modules
     
     freeze_model_parameters(climatesam, trainable_modules=trainable_modules)
     
-    # Verify all parameters are frozen
     total_params = sum(p.numel() for p in climatesam.parameters())
     frozen_params = sum(p.numel() for p in climatesam.parameters() if not p.requires_grad)
     print(f"\nTotal parameters: {total_params:,}")
@@ -793,43 +703,40 @@ def main_worker(worker_id, worker_args):
     )
     
     # ==================== VALIDATE CGNET BASELINE ====================
-    # baseline_result = validate_cgnet_baseline(val_dataloader, prompter, device, worker_args)
-    all_results = []
+    baseline_result = validate_cgnet_baseline(val_dataloader, prompter, device, worker_args)
+    all_results = [baseline_result]
     
     # ==================== DEFINE PROMPT CONFIGURATIONS ====================
     print("\n" + "="*60)
     print("PROMPT TEST CONFIGURATIONS")
     print("="*60)
     
-    # Configuration 1: Point prompts with different (pos, neg) pairs
     point_configs = [
-        # {'positive_point_num': 1, 'negative_point_num': 1},
-        # {'positive_point_num': 1, 'negative_point_num': 2},
-        # {'positive_point_num': 2, 'negative_point_num': 2},
-        # {'positive_point_num': 1, 'negative_point_num': 3},
-        # {'positive_point_num': 5, 'negative_point_num': 5},
-        # {'positive_point_num': 10, 'negative_point_num': 10},
-        # {'positive_point_num': 5, 'negative_point_num': 10},
-        # {'positive_point_num': 15, 'negative_point_num': 5},
-        # {'positive_point_num': 10, 'negative_point_num': 5},
-        # {'positive_point_num': 20, 'negative_point_num': 10},
-        # {'positive_point_num': 20, 'negative_point_num': 5},
-        # {'positive_point_num': 20, 'negative_point_num': 20},
+        {'positive_point_num': 1, 'negative_point_num': 1},
+        {'positive_point_num': 1, 'negative_point_num': 2},
+        {'positive_point_num': 2, 'negative_point_num': 2},
+        {'positive_point_num': 1, 'negative_point_num': 3},
+        {'positive_point_num': 5, 'negative_point_num': 5},
+        {'positive_point_num': 10, 'negative_point_num': 10},
+        {'positive_point_num': 5, 'negative_point_num': 10},
+        {'positive_point_num': 15, 'negative_point_num': 5},
+        {'positive_point_num': 10, 'negative_point_num': 5},
+        {'positive_point_num': 20, 'negative_point_num': 10},
+        {'positive_point_num': 20, 'negative_point_num': 5},
+        {'positive_point_num': 20, 'negative_point_num': 20},
     ]
     
-    # Configuration 2: BBox prompts with different enlarge ratios
     bbox_configs = [
         {'enlarge_ratio': 0.0},
         {'enlarge_ratio': 0.1},
-        # {'enlarge_ratio': 0.2},
-        # {'enlarge_ratio': 0.3},
-        # {'enlarge_ratio': 0.4},
-        # {'enlarge_ratio': 0.5},
-        # {'enlarge_ratio': -0.1},
-        # {'enlarge_ratio': -0.2},
+        {'enlarge_ratio': 0.2},
+        {'enlarge_ratio': 0.3},
+        {'enlarge_ratio': 0.4},
+        {'enlarge_ratio': 0.5},
+        {'enlarge_ratio': -0.1},
+        {'enlarge_ratio': -0.2},
     ]
     
-    # Configuration 3: Mask prompt (single config)
     mask_configs = [{}]
     
     # ==================== TEST POINT PROMPTS ====================
@@ -840,13 +747,11 @@ def main_worker(worker_id, worker_args):
     for config in point_configs:
         print(f"\nTesting Point Prompt: pos={config['positive_point_num']}, neg={config['negative_point_num']}")
         
-        ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
-        tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+        val_metrics = StreamSegMetrics(class_names=['Background', 'TC', 'AR'])
         
         results = validate_with_prompt_config(
             val_dataloader=val_dataloader,
-            ar_metrics=ar_metrics,
-            tc_metrics=tc_metrics,
+            val_metrics=val_metrics,
             model=climatesam,
             prompter=prompter,
             device=device,
@@ -860,12 +765,15 @@ def main_worker(worker_id, worker_args):
         )
         
         all_results.append(results)
-        print(f"  mIoU TC: {results['miou_tc']:.4f}, mIoU AR: {results['miou_ar']:.4f}")
+        print(f"  TC IoU: {results['iou_tc']:.4f}, AR IoU: {results['iou_ar']:.4f}, BG IoU: {results['iou_bg']:.4f}, Mean IoU: {results['mean_iou']:.4f}, Mean FG IoU: {results['mean_foreground_iou']:.4f}")
         
         if worker_args.wandb:
             wandb.log({
-                'point_prompt/miou_tc': results['miou_tc'],
-                'point_prompt/miou_ar': results['miou_ar'],
+                'point_prompt/iou_tc': results['iou_tc'],
+                'point_prompt/iou_ar': results['iou_ar'],
+                'point_prompt/iou_bg': results['iou_bg'],
+                'point_prompt/mean_iou': results['mean_iou'],
+                'point_prompt/mean_foreground_iou': results['mean_foreground_iou'],
                 'point_prompt/config': f"pos={config['positive_point_num']}_neg={config['negative_point_num']}"
             })
     
@@ -877,13 +785,11 @@ def main_worker(worker_id, worker_args):
     for config in bbox_configs:
         print(f"\nTesting BBox Prompt: enlarge_ratio={config['enlarge_ratio']}")
         
-        ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
-        tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+        val_metrics = StreamSegMetrics(class_names=['Background', 'TC', 'AR'])
         
         results = validate_with_prompt_config(
             val_dataloader=val_dataloader,
-            ar_metrics=ar_metrics,
-            tc_metrics=tc_metrics,
+            val_metrics=val_metrics,
             model=climatesam,
             prompter=prompter,
             device=device,
@@ -897,12 +803,15 @@ def main_worker(worker_id, worker_args):
         )
         
         all_results.append(results)
-        print(f"  mIoU TC: {results['miou_tc']:.4f}, mIoU AR: {results['miou_ar']:.4f}")
+        print(f"  TC IoU: {results['iou_tc']:.4f}, AR IoU: {results['iou_ar']:.4f}, BG IoU: {results['iou_bg']:.4f}, Mean IoU: {results['mean_iou']:.4f}, Mean FG IoU: {results['mean_foreground_iou']:.4f}")
         
         if worker_args.wandb:
             wandb.log({
-                'bbox_prompt/miou_tc': results['miou_tc'],
-                'bbox_prompt/miou_ar': results['miou_ar'],
+                'bbox_prompt/iou_tc': results['iou_tc'],
+                'bbox_prompt/iou_ar': results['iou_ar'],
+                'bbox_prompt/iou_bg': results['iou_bg'],
+                'bbox_prompt/mean_iou': results['mean_iou'],
+                'bbox_prompt/mean_foreground_iou': results['mean_foreground_iou'],
                 'bbox_prompt/enlarge_ratio': config['enlarge_ratio']
             })
     
@@ -914,13 +823,11 @@ def main_worker(worker_id, worker_args):
     for config in mask_configs:
         print(f"\nTesting Mask Prompt")
         
-        ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
-        tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+        val_metrics = StreamSegMetrics(class_names=['Background', 'TC', 'AR'])
         
         results = validate_with_prompt_config(
             val_dataloader=val_dataloader,
-            ar_metrics=ar_metrics,
-            tc_metrics=tc_metrics,
+            val_metrics=val_metrics,
             model=climatesam,
             prompter=prompter,
             device=device,
@@ -934,12 +841,15 @@ def main_worker(worker_id, worker_args):
         )
         
         all_results.append(results)
-        print(f"  mIoU TC: {results['miou_tc']:.4f}, mIoU AR: {results['miou_ar']:.4f}")
+        print(f"  TC IoU: {results['iou_tc']:.4f}, AR IoU: {results['iou_ar']:.4f}, BG IoU: {results['iou_bg']:.4f}, Mean IoU: {results['mean_iou']:.4f}, Mean FG IoU: {results['mean_foreground_iou']:.4f}")
         
         if worker_args.wandb:
             wandb.log({
-                'mask_prompt/miou_tc': results['miou_tc'],
-                'mask_prompt/miou_ar': results['miou_ar'],
+                'mask_prompt/iou_tc': results['iou_tc'],
+                'mask_prompt/iou_ar': results['iou_ar'],
+                'mask_prompt/iou_bg': results['iou_bg'],
+                'mask_prompt/mean_iou': results['mean_iou'],
+                'mask_prompt/mean_foreground_iou': results['mean_foreground_iou'],
             })
     
     # ==================== TEST COMBINED PROMPTS ====================
@@ -980,13 +890,11 @@ def main_worker(worker_id, worker_args):
         print(f"\nTesting Combined: {prompt_types_str}")
         print(f"  Config: pos={config['positive_point_num']}, neg={config['negative_point_num']}, enlarge={config['enlarge_ratio']}")
         
-        ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
-        tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
+        val_metrics = StreamSegMetrics(class_names=['Background', 'TC', 'AR'])
         
         results = validate_with_combined_prompts(
             val_dataloader=val_dataloader,
-            ar_metrics=ar_metrics,
-            tc_metrics=tc_metrics,
+            val_metrics=val_metrics,
             model=climatesam,
             prompter=prompter,
             device=device,
@@ -1000,15 +908,18 @@ def main_worker(worker_id, worker_args):
         )
         
         all_results.append(results)
-        print(f"  ✓ mIoU TC: {results['miou_tc']:.4f}, mIoU AR: {results['miou_ar']:.4f}")
-        print(f"  ✓ Mean Acc TC: {results['mean_acc_tc']:.4f}, Mean Acc AR: {results['mean_acc_ar']:.4f}")
+        print(f"  ✓ TC IoU: {results['iou_tc']:.4f}, AR IoU: {results['iou_ar']:.4f}, Mean FG IoU: {results['mean_foreground_iou']:.4f}")
+        print(f"  ✓ Mean Acc: {results['mean_acc']:.4f}, Overall Acc: {results['overall_acc']:.4f}")
         
         if worker_args.wandb:
             wandb.log({
-                'combined_prompts/miou_tc': results['miou_tc'],
-                'combined_prompts/miou_ar': results['miou_ar'],
-                'combined_prompts/mean_acc_tc': results['mean_acc_tc'],
-                'combined_prompts/mean_acc_ar': results['mean_acc_ar'],
+                'combined_prompts/iou_tc': results['iou_tc'],
+                'combined_prompts/iou_ar': results['iou_ar'],
+                'combined_prompts/iou_bg': results['iou_bg'],
+                'combined_prompts/mean_iou': results['mean_iou'],
+                'combined_prompts/mean_foreground_iou': results['mean_foreground_iou'],
+                'combined_prompts/mean_acc': results['mean_acc'],
+                'combined_prompts/overall_acc': results['overall_acc'],
                 'combined_prompts/config': f"{prompt_types_str}_pos={config['positive_point_num']}_neg={config['negative_point_num']}_enlarge={config['enlarge_ratio']}"
             })
     
@@ -1017,10 +928,8 @@ def main_worker(worker_id, worker_args):
     print("RESULTS SUMMARY")
     print("="*60)
     
-    # Convert to DataFrame for better visualization
     results_df = pd.DataFrame(all_results)
     
-    # Save results to CSV
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     results_path = os.path.join(
         worker_args.exp_dir, 
@@ -1031,7 +940,6 @@ def main_worker(worker_id, worker_args):
     results_df.to_csv(results_path, index=False)
     print(f"\n✓ Results saved to: {results_path}")
     
-    # Save detailed JSON report
     json_path = os.path.join(
         worker_args.exp_dir, 
         worker_args.run_name,
@@ -1047,26 +955,25 @@ def main_worker(worker_id, worker_args):
             'results': all_results,
             'summary_stats': {
                 'point_prompts': {
-                    'avg_miou_tc': results_df[results_df['prompt_type'] == 'point']['miou_tc'].mean(),
-                    'avg_miou_ar': results_df[results_df['prompt_type'] == 'point']['miou_ar'].mean(),
-                    'max_miou_tc': results_df[results_df['prompt_type'] == 'point']['miou_tc'].max(),
-                    'max_miou_ar': results_df[results_df['prompt_type'] == 'point']['miou_ar'].max(),
+                    'avg_iou_tc': results_df[results_df['prompt_type'] == 'point']['iou_tc'].mean() if len(results_df[results_df['prompt_type'] == 'point']) > 0 else None,
+                    'avg_iou_ar': results_df[results_df['prompt_type'] == 'point']['iou_ar'].mean() if len(results_df[results_df['prompt_type'] == 'point']) > 0 else None,
+                    'max_iou_tc': results_df[results_df['prompt_type'] == 'point']['iou_tc'].max() if len(results_df[results_df['prompt_type'] == 'point']) > 0 else None,
+                    'max_iou_ar': results_df[results_df['prompt_type'] == 'point']['iou_ar'].max() if len(results_df[results_df['prompt_type'] == 'point']) > 0 else None,
                 },
                 'bbox_prompts': {
-                    'avg_miou_tc': results_df[results_df['prompt_type'] == 'bbox']['miou_tc'].mean(),
-                    'avg_miou_ar': results_df[results_df['prompt_type'] == 'bbox']['miou_ar'].mean(),
-                    'max_miou_tc': results_df[results_df['prompt_type'] == 'bbox']['miou_tc'].max(),
-                    'max_miou_ar': results_df[results_df['prompt_type'] == 'bbox']['miou_ar'].max(),
+                    'avg_iou_tc': results_df[results_df['prompt_type'] == 'bbox']['iou_tc'].mean() if len(results_df[results_df['prompt_type'] == 'bbox']) > 0 else None,
+                    'avg_iou_ar': results_df[results_df['prompt_type'] == 'bbox']['iou_ar'].mean() if len(results_df[results_df['prompt_type'] == 'bbox']) > 0 else None,
+                    'max_iou_tc': results_df[results_df['prompt_type'] == 'bbox']['iou_tc'].max() if len(results_df[results_df['prompt_type'] == 'bbox']) > 0 else None,
+                    'max_iou_ar': results_df[results_df['prompt_type'] == 'bbox']['iou_ar'].max() if len(results_df[results_df['prompt_type'] == 'bbox']) > 0 else None,
                 },
                 'mask_prompts': {
-                    'miou_tc': results_df[results_df['prompt_type'] == 'mask']['miou_tc'].values[0] if len(results_df[results_df['prompt_type'] == 'mask']) > 0 else None,
-                    'miou_ar': results_df[results_df['prompt_type'] == 'mask']['miou_ar'].values[0] if len(results_df[results_df['prompt_type'] == 'mask']) > 0 else None,
+                    'iou_tc': results_df[results_df['prompt_type'] == 'mask']['iou_tc'].values[0] if len(results_df[results_df['prompt_type'] == 'mask']) > 0 else None,
+                    'iou_ar': results_df[results_df['prompt_type'] == 'mask']['iou_ar'].values[0] if len(results_df[results_df['prompt_type'] == 'mask']) > 0 else None,
                 }
             }
         }, f, indent=2)
     print(f"✓ Detailed report saved to: {json_path}")
     
-    # Print summary table
     print("\n" + "="*80)
     print("DETAILED RESULTS TABLE")
     print("="*80)
@@ -1078,13 +985,11 @@ if __name__ == '__main__':
     print("Starting Prompt Effect Test...")
     args = parse()
     
-    # Initialize W&B if enabled
     if hasattr(args, 'wandb') and args.wandb:
         project_name = args.project_name if hasattr(args, 'project_name') else "climate-sam-prompt-test"
         run_name = args.run_name if hasattr(args, 'run_name') else f"prompt_test_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         wandb.init(project=project_name, name=run_name, config=vars(args))
     
-    # Setup GPU
     if torch.cuda.is_available():
         if 'CUDA_VISIBLE_DEVICES' in os.environ.keys():
             used_gpu = os.environ['CUDA_VISIBLE_DEVICES'].split(',')
@@ -1097,7 +1002,6 @@ if __name__ == '__main__':
     
     print(f"Using GPU(s): {args.used_gpu}")
     
-    # Run main worker
     if len(args.used_gpu) == 1:
         main_worker(worker_id=0, worker_args=args)
     else:
