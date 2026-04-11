@@ -249,7 +249,7 @@ def validate_cgnet_baseline(val_dataloader, prompter, device, worker_args):
     
     return baseline_result
 
-
+@torch.no_grad()
 def validate_with_combined_prompts(
     val_dataloader, 
     val_metrics, 
@@ -431,7 +431,11 @@ def validate_with_prompt_config(
         
         ar_scale_ratios = []
         tc_scale_ratios = []
-    
+
+    # Counter for our target visualizations
+    vis_saved_count = 0
+    max_vis_to_save = 4
+
     with torch.no_grad():
         for val_step, batch in enumerate(val_dataloader):
             if max_samples and total_samples >= max_samples:
@@ -450,6 +454,49 @@ def validate_with_prompt_config(
             )
             
             prompt_dict = batch_to_cuda(prompt_dict, device)
+
+            # ==========================================================
+            # VISUALIZATION BLOCK: Save 4 examples for point or bbox
+            # ==========================================================
+            if prompt_type in ['point', 'bbox'] and vis_saved_count < max_vis_to_save:
+                batch_size_b = features.shape[0]
+                exp_dir = getattr(worker_args, 'exp_dir', 'exp')
+                vis_save_dir = os.path.join(exp_dir, f"{prompt_type}_visualizations")
+                os.makedirs(vis_save_dir, exist_ok=True)
+                
+                for b in range(batch_size_b):
+                    if vis_saved_count >= max_vis_to_save:
+                        break
+                        
+                    # Extract single batch ground truth mask
+                    gt_mask_b = batch['gt_mask'][b]
+                    if isinstance(gt_mask_b, torch.Tensor):
+                        gt_mask_b = gt_mask_b.cpu().numpy()
+                        
+                    # Extract points (if they exist)
+                    ar_pts_b = prompt_dict['ar_point_prompts'][b] if prompt_dict.get('ar_point_prompts') is not None else None
+                    tc_pts_b = prompt_dict['tc_point_prompts'][b] if prompt_dict.get('tc_point_prompts') is not None else None
+                    
+                    # Extract bboxes (if they exist)
+                    ar_box_b = prompt_dict['ar_bbox_prompts'][b] if prompt_dict.get('ar_bbox_prompts') is not None else None
+                    tc_box_b = prompt_dict['tc_bbox_prompts'][b] if prompt_dict.get('tc_bbox_prompts') is not None else None
+                    
+                    # Create a specific configuration string for the file name
+                    cfg_str = f"pos{positive_point_num}_neg{negative_point_num}" if prompt_type == 'point' else f"enlarge{enlarge_ratio}"
+                    save_path = os.path.join(vis_save_dir, f"vis_{prompt_type}_{cfg_str}_step{val_step}_idx{b}.png")
+                    
+                    plot_mask_with_points_and_bbox(
+                        mask=gt_mask_b,
+                        ar_points=ar_pts_b,
+                        tc_points=tc_pts_b,
+                        ar_bbox=ar_box_b,
+                        tc_bbox=tc_box_b,
+                        save_path=save_path,
+                        title=f"{prompt_type.capitalize()} Prompt | {cfg_str}"
+                    )
+                    vis_saved_count += 1
+            # ==========================================================
+
 
             if prompt_type == 'bbox' and 'ar_bbox_prompts' in batch:
                 batch_size = features.shape[0]
