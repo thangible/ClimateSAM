@@ -759,32 +759,32 @@ def main_worker(worker_id, worker_args):
     print("="*60)
     
     point_configs = [
-        {'positive_point_num': 1, 'negative_point_num': 1},
-        {'positive_point_num': 1, 'negative_point_num': 2},
-        {'positive_point_num': 2, 'negative_point_num': 2},
-        {'positive_point_num': 1, 'negative_point_num': 3},
-        {'positive_point_num': 5, 'negative_point_num': 5},
-        {'positive_point_num': 10, 'negative_point_num': 10},
-        {'positive_point_num': 5, 'negative_point_num': 10},
-        {'positive_point_num': 15, 'negative_point_num': 5},
-        {'positive_point_num': 10, 'negative_point_num': 5},
-        {'positive_point_num': 20, 'negative_point_num': 10},
-        {'positive_point_num': 20, 'negative_point_num': 5},
-        {'positive_point_num': 20, 'negative_point_num': 20},
+        # {'positive_point_num': 1, 'negative_point_num': 1},
+        # {'positive_point_num': 1, 'negative_point_num': 2},
+        # {'positive_point_num': 2, 'negative_point_num': 2},
+        # {'positive_point_num': 1, 'negative_point_num': 3},
+        # {'positive_point_num': 5, 'negative_point_num': 5},
+        # {'positive_point_num': 10, 'negative_point_num': 10},
+        # {'positive_point_num': 5, 'negative_point_num': 10},
+        # {'positive_point_num': 15, 'negative_point_num': 5},
+        # {'positive_point_num': 10, 'negative_point_num': 5},
+        # {'positive_point_num': 20, 'negative_point_num': 10},
+        # {'positive_point_num': 20, 'negative_point_num': 5},
+        # {'positive_point_num': 20, 'negative_point_num': 20},
     ]
     
     bbox_configs = [
         {'enlarge_ratio': 0.0},
         {'enlarge_ratio': 0.1},
-        {'enlarge_ratio': 0.2},
-        {'enlarge_ratio': 0.3},
-        {'enlarge_ratio': 0.4},
-        {'enlarge_ratio': 0.5},
-        {'enlarge_ratio': -0.1},
-        {'enlarge_ratio': -0.2},
+        # {'enlarge_ratio': 0.2},
+        # {'enlarge_ratio': 0.3},
+        # {'enlarge_ratio': 0.4},
+        # {'enlarge_ratio': 0.5},
+        # {'enlarge_ratio': -0.1},
+        # {'enlarge_ratio': -0.2},
     ]
     
-    mask_configs = [{}]
+    mask_configs = []
     
     # ==================== TEST POINT PROMPTS ====================
     print("\n" + "="*60)
@@ -905,30 +905,30 @@ def main_worker(worker_id, worker_args):
     print("="*60)
     
     combined_configs = [
-        {
-            'prompt_types': ['point', 'bbox'],
-            'positive_point_num': 10,
-            'negative_point_num': 5,
-            'enlarge_ratio': 0.0,
-        },
-        {
-            'prompt_types': ['point', 'bbox'],
-            'positive_point_num': 15,
-            'negative_point_num': 10,
-            'enlarge_ratio': 0.0,
-        },
-        {
-            'prompt_types': ['point', 'bbox', 'mask'],
-            'positive_point_num': 10,
-            'negative_point_num': 5,
-            'enlarge_ratio': 0.0,
-        },
-        {
-            'prompt_types': ['point', 'bbox'],
-            'positive_point_num': 20,
-            'negative_point_num': 10,
-            'enlarge_ratio': 0.0,
-        },
+        # {
+        #     'prompt_types': ['point', 'bbox'],
+        #     'positive_point_num': 10,
+        #     'negative_point_num': 5,
+        #     'enlarge_ratio': 0.0,
+        # },
+        # {
+        #     'prompt_types': ['point', 'bbox'],
+        #     'positive_point_num': 15,
+        #     'negative_point_num': 10,
+        #     'enlarge_ratio': 0.0,
+        # },
+        # {
+        #     'prompt_types': ['point', 'bbox', 'mask'],
+        #     'positive_point_num': 10,
+        #     'negative_point_num': 5,
+        #     'enlarge_ratio': 0.0,
+        # },
+        # {
+        #     'prompt_types': ['point', 'bbox'],
+        #     'positive_point_num': 20,
+        #     'negative_point_num': 10,
+        #     'enlarge_ratio': 0.0,
+        # },
     ]
     
     for config in combined_configs:
