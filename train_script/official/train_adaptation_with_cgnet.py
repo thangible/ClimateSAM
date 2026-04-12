@@ -244,9 +244,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
             jitter_ratio=worker_args.gt_prompt_enlarge_ratio
         )
         
-        
-        ar_point_prompts_copy = None
-        tc_point_prompts_copy = None
+
         ar_bbox_prompts_copy = copy.deepcopy(prompt_dict['ar_bbox_prompts'])
         tc_bbox_prompts_copy = copy.deepcopy(prompt_dict['tc_bbox_prompts'])
         # Move bbox prompts to device/dtype
@@ -289,8 +287,8 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
             ar_masks_copy = copy.deepcopy(ar_masks)
             for i in range(len(masks_gt)):
                 mask = masks_gt_copy[i]
-                ar_points = ar_point_prompts_copy[i]
-                tc_points = tc_point_prompts_copy[i]
+                ar_points = None
+                tc_points = None
                 ar_bbox = ar_bbox_prompts_copy[i]
                 tc_bbox = tc_bbox_prompts_copy[i]
                 tc_pred_mask = tc_masks_copy[i]
@@ -309,7 +307,7 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
                 wandb.log(wandb_images, step=epoch)
                 print(f"Epoch {epoch} - All {len(wandb_images)-1} images logged to W&B together.")
 
-            del ar_point_prompts_copy, tc_point_prompts_copy, ar_bbox_prompts_copy, tc_bbox_prompts_copy, masks_gt_copy, tc_masks_copy, ar_masks_copy
+            del  ar_bbox_prompts_copy, tc_bbox_prompts_copy, masks_gt_copy, tc_masks_copy, ar_masks_copy
             torch.cuda.empty_cache()
             
         tc_metrics.update(tc_masks, masks_tc_gts,  batch['index_name'])
