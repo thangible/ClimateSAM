@@ -20,7 +20,7 @@ class PromptMaker:
         self.jitter_ratio = [0,0]
 
     @torch.no_grad()
-    def make_prompts(self, multiclass_mask: torch.Tensor = None, ar_mask: torch.Tensor = None, tc_mask: torch.Tensor = None, prompt_type = None, enlarge_ratio=0.1, positive_point_num=None, negative_point_num=None, centroid_ratio=None, jitter_ratio = [0,0]):
+    def make_prompts(self, multiclass_mask: torch.Tensor = None, ar_mask: torch.Tensor = None, tc_mask: torch.Tensor = None, prompt_type = None, enlarge_ratio=0.1, positive_point_num=None, negative_point_num=None, centroid_ratio=None, jitter_ratio = [0,0], stiched_ar_mask = False, stiched_tc_mask = False):
         """
         make_prompts now supports two calling conventions for backward compatibility:
         - Pass a multiclass_mask tensor (B, H, W) or (B,1,H,W) where values are {0,1,2}
@@ -73,7 +73,13 @@ class PromptMaker:
                 a_np = (a > 0.5).astype(np.uint8)
                 t_np = (t > 0.5).astype(np.uint8)
                 ar_mask_np = a_np
+                if stiched_ar_mask:
+                    ar_mask_np = stitch_fragmented_masks(ar_mask_np, kernel_size=15)
                 tc_mask_np = t_np
+                
+                if stiched_tc_mask:
+                    tc_mask_np = stitch_fragmented_masks(tc_mask_np, kernel_size=15)
+
             else:
                 # Backward-compatible: derive binary masks from multiclass mask
                 m = multiclass_mask[i]
@@ -334,3 +340,70 @@ def distance_transform(mask: np.ndarray, threshold: float = 0.5):
     dist_output = cv2.normalize(dist_transform, None, 0, 1.0, cv2.NORM_MINMAX)
     
     return dist_output
+
+def stitch_fragmented_masks(binary_mask, kernel_size=15):
+    """
+    Applies Morphological Closing to stitch fragmented blobs together.
+    It dilates the mask to bridge gaps, then erodes to restore the original 
+    outer boundaries without fundamentally bloating the object.
+    
+    Args:
+        binary_mask: 2D numpy array (uint8).
+        kernel_size: Int. Larger sizes bridge larger gaps. 
+                     ARs might need a larger kernel than TCs.
+    """
+    # Using an ELLIPSE kernel is usually better for natural shapes like weather events
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+    
+    # MORPH_CLOSE = Dilation followed by Erosion
+    stitched_mask = cv2.morphologyEx(binary_mask.astype(np.uint8), cv2.MORPH_CLOSE, kernel)
+    
+    return stitched_mask
+
+
+def make_shrunk_mask_prompts(binary_mask, connectivity, threshold=20, erode_ratio=0.2, h=256, w=256):
+    """
+    Creates conservative (shrunk) mask prompts. 
+    Erodes the object masks so SAM only gets the most confident inner region 
+    as a prior, leaving it free to predict the outer boundaries.
+    """
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_mask.astype(np.uint8), connectivity=connectivity)
+    
+    object_masks_list = []
+    shrunk_masks_list = []
+    
+    for obj_index in range(1, num_labels):
+        stat = stats[obj_index]
+        area_in_pixels = stat[4]
+        
+        if area_in_pixels >= threshold:
+            object_mask = (labels == obj_index).astype(np.uint8)
+            object_masks_list.append(object_mask)
+            
+            # Calculate a dynamic erode size so we don't obliterate tiny objects
+            erode_size = max(3, int(np.sqrt(area_in_pixels) * erode_ratio))
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (erode_size, erode_size))
+            
+            shrunk_mask = cv2.erode(object_mask, kernel, iterations=1)
+            
+            # Fallback: if erosion is too aggressive and wipes the whole mask, 
+            # fall back to a minimal erosion or the original mask
+            if not shrunk_mask.any():
+                kernel_small = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+                shrunk_mask = cv2.erode(object_mask, kernel_small, iterations=1)
+                if not shrunk_mask.any():
+                    shrunk_mask = object_mask
+                    
+            shrunk_masks_list.append(shrunk_mask)
+
+    if len(object_masks_list) == 0:
+        return None, None        
+    
+    object_masks = torch.from_numpy(np.stack(object_masks_list, axis=0)).to(torch.float32).unsqueeze(1)
+    shrunk_masks = torch.from_numpy(np.stack(shrunk_masks_list, axis=0)).to(torch.float32).unsqueeze(1)
+
+    # SAM expects dense mask prompts to be low resolution (typically 256x256)
+    # Use nearest neighbor to keep it strictly binary/crisp
+    shrunk_masks_resized = F.interpolate(shrunk_masks, (h, w), mode='nearest')
+    
+    return shrunk_masks_resized, object_masks
