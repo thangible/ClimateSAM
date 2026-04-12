@@ -19,7 +19,7 @@ import torch.nn.functional as F
 from functools import partial
 from torch.utils.data import DataLoader
 from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness,  plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug, setup_optimizer_and_scheduler, worker_init_fn, setup_device_and_distributed
-from loss_function import ClimateLoss, compute_climate_loss
+from loss_function import ClimateLoss, compute_climate_loss, compute_climate_loss_unified
 from tqdm import tqdm
 from contextlib import nullcontext
 from parser_config import parse
@@ -97,75 +97,10 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
                 tc_mask_prompts=None
             )
             
-            # prompt_debug(batch, 'Train Step {train_step}')
-            # Align ground-truth masks to prediction shapes to avoid size mismatches
-            raw_ar_gt = batch.get('ar_object_masks', [])
-            raw_tc_gt = batch.get('tc_object_masks', [])
-
-            def _align_gt_to_pred(pred_list, raw_gt_list):
-                aligned = []
-                for i, pred in enumerate(pred_list):
-                    raw = raw_gt_list[i] if (isinstance(raw_gt_list, (list, tuple)) and i < len(raw_gt_list)) else raw_gt_list[i] if (hasattr(raw_gt_list, '__getitem__') and i < len(raw_gt_list)) else None
-                    if raw is None:
-                        aligned.append(None)
-                        continue
-                    # Convert to tensor on correct device
-                    if not torch.is_tensor(raw):
-                        raw = torch.as_tensor(raw, device=device)
-                    else:
-                        raw = raw.to(device)
-
-                    # Try to coerce dtype to match pred
-                    try:
-                        raw = raw.to(dtype=pred.dtype)
-                    except Exception:
-                        raw = raw.float()
-
-                    # Normalize common cases to match pred's batch/channel dims
-                    try:
-                        if pred.dim() == 4:
-                            # want raw shape (B, C, H, W) or (B,1,H,W)
-                            if raw.dim() == 2:
-                                raw = raw.unsqueeze(0).unsqueeze(0)
-                            elif raw.dim() == 3:
-                                raw = raw.unsqueeze(1)
-                            elif raw.dim() == 4:
-                                pass
-                        elif pred.dim() == 3:
-                            # want raw shape (B, H, W)
-                            if raw.dim() == 2:
-                                raw = raw.unsqueeze(0)
-                            elif raw.dim() == 4 and raw.size(1) == 1:
-                                raw = raw.squeeze(1)
-                        elif pred.dim() == 2:
-                            # want raw shape (H, W)
-                            raw = raw.squeeze()
-                    except Exception:
-                        pass
-
-                    # Final attempt to match shapes
-                    if raw.shape != pred.shape:
-                        try:
-                            raw = raw.reshape(pred.shape)
-                        except Exception:
-                            # Fallback: broadcast or expand first dimension if possible
-                            try:
-                                if raw.dim() == pred.dim() - 1:
-                                    raw = raw.unsqueeze(0)
-                                else:
-                                    raw = raw.expand(pred.shape)
-                            except Exception:
-                                # as last resort convert to zeros of pred shape
-                                raw = torch.zeros_like(pred, device=device)
-
-                    aligned.append(raw)
-                return aligned
-
-            masks_ar_gt = _align_gt_to_pred(ar_mask, raw_ar_gt)
-            masks_tc_gt = _align_gt_to_pred(tc_mask, raw_tc_gt)
+            masks_ar_gt = batch['ar_object_masks']
+            masks_tc_gt = batch['tc_object_masks']
             
-            # Compute loss using the new loss function
-            loss_dict = compute_climate_loss(
+            loss_dict = compute_climate_loss_unified(
                 ar_masks=ar_mask,
                 tc_masks=tc_mask,
                 ar_masks_gt=masks_ar_gt,
@@ -173,6 +108,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
                 device=device,
                 worker_args=worker_args
             )
+        
         
         total_loss = loss_dict.pop('total_loss_for_backward')
         
