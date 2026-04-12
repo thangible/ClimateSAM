@@ -17,9 +17,10 @@ class PromptMaker:
         self.centroid_ratio = centroid_ratio
         self.positive_point_num = positive_point_num
         self.negative_point_num = negative_point_num
+        self.jitter_ratio = [0,0]
 
     @torch.no_grad()
-    def make_prompts(self, multiclass_mask: torch.Tensor = None, ar_mask: torch.Tensor = None, tc_mask: torch.Tensor = None, prompt_type = None, enlarge_ratio=0.1, positive_point_num=None, negative_point_num=None, centroid_ratio=None):
+    def make_prompts(self, multiclass_mask: torch.Tensor = None, ar_mask: torch.Tensor = None, tc_mask: torch.Tensor = None, prompt_type = None, enlarge_ratio=0.1, positive_point_num=None, negative_point_num=None, centroid_ratio=None, jitter_ratio = [0,0]):
         """
         make_prompts now supports two calling conventions for backward compatibility:
         - Pass a multiclass_mask tensor (B, H, W) or (B,1,H,W) where values are {0,1,2}
@@ -33,7 +34,9 @@ class PromptMaker:
             self.negative_point_num = negative_point_num
         if centroid_ratio is not None:
             self.centroid_ratio = centroid_ratio
-        
+        if jitter_ratio is not None:
+            self.jitter_ratio = jitter_ratio
+
         # Determine batch size from available inputs
         if ar_mask is not None and tc_mask is not None:
             batch_size = ar_mask.shape[0]
@@ -89,8 +92,8 @@ class PromptMaker:
                 ar_noisy_masks = None
                 tc_noisy_masks = None
             elif prompt_type == 'bbox':
-                ar_bbox_prompts, ar_object_masks = make_bbox_prompts(ar_mask_np, self.connectivity, self.threshold, enlarge_ratio=enlarge_ratio)
-                tc_bbox_prompts, tc_object_masks = make_bbox_prompts(tc_mask_np, self.connectivity, self.threshold, enlarge_ratio=enlarge_ratio)
+                ar_bbox_prompts, ar_object_masks = make_bbox_prompts(ar_mask_np, self.connectivity, self.threshold, enlarge_ratio=enlarge_ratio, jitter_ratio=self.jitter_ratio)
+                tc_bbox_prompts, tc_object_masks = make_bbox_prompts(tc_mask_np, self.connectivity, self.threshold, enlarge_ratio=enlarge_ratio, jitter_ratio=self.jitter_ratio)
                 ar_point_prompts = (None, None)
                 tc_point_prompts = (None, None)
                 ar_noisy_masks = None
@@ -118,7 +121,7 @@ class PromptMaker:
         prompt_dict = {key: [d[key] if d[key] is not None else None for d in prompt_list] for key in prompt_list[0]}
         return prompt_dict
                 
-def make_bbox_prompts(binary_mask, connectivity, threshold=20, enlarge_ratio=0.5):
+def make_bbox_prompts(binary_mask, connectivity, threshold=20, enlarge_ratio=0.5, jitter_ratio = [0,0]):
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(binary_mask.astype(np.uint8), connectivity=connectivity)
     object_masks_list = []
     bboxes = []
@@ -135,8 +138,15 @@ def make_bbox_prompts(binary_mask, connectivity, threshold=20, enlarge_ratio=0.5
             bounding_box = [left, top, right, bottom]
             # enlarge bbox by 10% (clipped to image bounds)
             h_img, w_img = binary_mask.shape
-            pad_w = int(round(enlarge_ratio * width))
-            pad_h = int(round(enlarge_ratio * height))
+            
+            enlarge_ratio_w = enlarge_ratio + random.uniform(jitter_ratio[0], jitter_ratio[1])
+            enlarge_ratio_h = enlarge_ratio + random.uniform(jitter_ratio[0], jitter_ratio[1])
+
+            # horizontal_jitter = int(random.uniform(jitter_ratio[0], jitter_ratio[1]) * width)
+            # vertical_jitter = int(random.uniform(jitter_ratio[0], jitter_ratio[1]) * height)
+
+            pad_w = int(round(enlarge_ratio_w * width))
+            pad_h = int(round(enlarge_ratio_h * height))
             nleft = max(0, left - pad_w)
             ntop = max(0, top - pad_h)
             nright = min(w_img - 1, right + pad_w)

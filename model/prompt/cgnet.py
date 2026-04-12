@@ -109,18 +109,6 @@ class CGNetPrompter:
                 val_mean_iou, val_all_ious = self.quick_evaluate(val_dataloader, n_samples=2, save_dir=self.exp_dir)
                 print(f"Validation Stats: Mean IoU {val_mean_iou:.4f} | Class 1 IoU: {val_all_ious[1]:.4f} | Class 2 IoU: {val_all_ious[2]:.4f}")
                 
-                # if self.wandb:
-                #     try:
-                #         wandb.log({
-                #             "val/mean_iou": float(val_mean_iou),
-                #             "val/iou_class_1": float(val_all_ious[1]),
-                #             "val/iou_class_2": float(val_all_ious[2]),
-                #             "epoch": epoch
-                #         }, step=epoch)
-                #     except Exception as e:
-                #         print(f"WandB validation log failed: {e}")
-
-                # Save best model based on validation IoU
                 if val_mean_iou > best_val_iou:
                     best_val_iou = val_mean_iou
                     self.save_model()

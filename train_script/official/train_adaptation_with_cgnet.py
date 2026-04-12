@@ -73,7 +73,8 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
                     positive_point_num=0,
                     negative_point_num=0,
                     enlarge_ratio=0.0,
-                    centroid_ratio=0
+                    centroid_ratio=0,
+                    jitter_ratio=worker_args.gt_prompt_enlarge_ratio
                 )
                 ar_bbox_prompts = [item.to(device=device, dtype=torch.float32) if item is not None else None for item in prompt_dict.get('ar_bbox_prompts', [None]*len(batch['input']))]
                 tc_bbox_prompts = [item.to(device=device, dtype=torch.float32) if item is not None else None for item in prompt_dict.get('tc_bbox_prompts', [None]*len(batch['input']))]
@@ -239,8 +240,11 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
             positive_point_num=0,
             negative_point_num=0,
             enlarge_ratio=0.0,
-            centroid_ratio=0
+            centroid_ratio=0,
+            jitter_ratio=worker_args.gt_prompt_enlarge_ratio
         )
+        
+        
         ar_point_prompts_copy = None
         tc_point_prompts_copy = None
         ar_bbox_prompts_copy = copy.deepcopy(prompt_dict['ar_bbox_prompts'])
