@@ -98,8 +98,71 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
             )
             
             # prompt_debug(batch, 'Train Step {train_step}')
-            masks_ar_gt = batch['ar_object_masks']
-            masks_tc_gt = batch['tc_object_masks']
+            # Align ground-truth masks to prediction shapes to avoid size mismatches
+            raw_ar_gt = batch.get('ar_object_masks', [])
+            raw_tc_gt = batch.get('tc_object_masks', [])
+
+            def _align_gt_to_pred(pred_list, raw_gt_list):
+                aligned = []
+                for i, pred in enumerate(pred_list):
+                    raw = raw_gt_list[i] if (isinstance(raw_gt_list, (list, tuple)) and i < len(raw_gt_list)) else raw_gt_list[i] if (hasattr(raw_gt_list, '__getitem__') and i < len(raw_gt_list)) else None
+                    if raw is None:
+                        aligned.append(None)
+                        continue
+                    # Convert to tensor on correct device
+                    if not torch.is_tensor(raw):
+                        raw = torch.as_tensor(raw, device=device)
+                    else:
+                        raw = raw.to(device)
+
+                    # Try to coerce dtype to match pred
+                    try:
+                        raw = raw.to(dtype=pred.dtype)
+                    except Exception:
+                        raw = raw.float()
+
+                    # Normalize common cases to match pred's batch/channel dims
+                    try:
+                        if pred.dim() == 4:
+                            # want raw shape (B, C, H, W) or (B,1,H,W)
+                            if raw.dim() == 2:
+                                raw = raw.unsqueeze(0).unsqueeze(0)
+                            elif raw.dim() == 3:
+                                raw = raw.unsqueeze(1)
+                            elif raw.dim() == 4:
+                                pass
+                        elif pred.dim() == 3:
+                            # want raw shape (B, H, W)
+                            if raw.dim() == 2:
+                                raw = raw.unsqueeze(0)
+                            elif raw.dim() == 4 and raw.size(1) == 1:
+                                raw = raw.squeeze(1)
+                        elif pred.dim() == 2:
+                            # want raw shape (H, W)
+                            raw = raw.squeeze()
+                    except Exception:
+                        pass
+
+                    # Final attempt to match shapes
+                    if raw.shape != pred.shape:
+                        try:
+                            raw = raw.reshape(pred.shape)
+                        except Exception:
+                            # Fallback: broadcast or expand first dimension if possible
+                            try:
+                                if raw.dim() == pred.dim() - 1:
+                                    raw = raw.unsqueeze(0)
+                                else:
+                                    raw = raw.expand(pred.shape)
+                            except Exception:
+                                # as last resort convert to zeros of pred shape
+                                raw = torch.zeros_like(pred, device=device)
+
+                    aligned.append(raw)
+                return aligned
+
+            masks_ar_gt = _align_gt_to_pred(ar_mask, raw_ar_gt)
+            masks_tc_gt = _align_gt_to_pred(tc_mask, raw_tc_gt)
             
             # Compute loss using the new loss function
             loss_dict = compute_climate_loss(
@@ -205,7 +268,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
     # scaler.update()
 
 @torch.no_grad()
-def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args):
+def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args, prompter=None):
 
     # Example usage inside validation loop:
     # plot_mask_with_points(batch['gt_mask'][0], batch['tc_point_prompts'])
@@ -225,12 +288,42 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
 
         # prompt_debug(batch, text=f"Validation Step {val_step}")
         
+        # If a CGNet prompter is provided, generate bbox prompts (enlarge_ratio=0.0)
+        ar_point_prompts_to_use = batch.get('ar_point_prompts')
+        tc_point_prompts_to_use = batch.get('tc_point_prompts')
+        ar_bbox_prompts_to_use = batch.get('ar_bbox_prompts')
+        tc_bbox_prompts_to_use = batch.get('tc_bbox_prompts')
+        try:
+            if prompter is not None and 'cgnet_input' in batch:
+                features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
+                aux_mask = prompter.get_aux_mask(features)
+                prompt_maker = PromptMaker(prompt_type='bbox', positive_point_num=0, negative_point_num=0, centroid_ratio=0)
+                prompt_dict = prompt_maker.make_prompts(
+                    multiclass_mask=aux_mask,
+                    prompt_type='bbox',
+                    positive_point_num=0,
+                    negative_point_num=0,
+                    enlarge_ratio=0.0,
+                    centroid_ratio=0
+                )
+                # Move bbox prompts to device/dtype
+                if 'ar_bbox_prompts' in prompt_dict and prompt_dict['ar_bbox_prompts'] is not None:
+                    ar_bbox_prompts_to_use = [item.to(device=device, dtype=torch.float32) if item is not None else None for item in prompt_dict['ar_bbox_prompts']]
+                if 'tc_bbox_prompts' in prompt_dict and prompt_dict['tc_bbox_prompts'] is not None:
+                    tc_bbox_prompts_to_use = [item.to(device=device, dtype=torch.float32) if item is not None else None for item in prompt_dict['tc_bbox_prompts']]
+                # override point prompts (keep None)
+                ar_point_prompts_to_use = None
+                tc_point_prompts_to_use = None
+        except Exception as e:
+            # fallback to dataloader prompts
+            print(f"Warning: CGNet prompt generation failed during validation, falling back to dataloader prompts. Error: {e}")
+
         # Perform inference with prompts
         tc_masks, ar_masks = model.infer(
-            ar_point_prompts=batch['ar_point_prompts'],
-            tc_point_prompts=batch['tc_point_prompts'],
-            ar_bbox_prompts=batch['ar_bbox_prompts'],
-            tc_bbox_prompts=batch['tc_bbox_prompts']
+            ar_point_prompts=ar_point_prompts_to_use,
+            tc_point_prompts=tc_point_prompts_to_use,
+            ar_bbox_prompts=ar_bbox_prompts_to_use,
+            tc_bbox_prompts=tc_bbox_prompts_to_use
         )
         
         masks_gt = batch['gt_mask']
@@ -497,7 +590,7 @@ def main_worker(worker_id, worker_args):
         
         if epoch % worker_args.valid_per_epochs == 1 or epoch == max_epoch_num:
             if worker_args.load_pretrained or epoch > 1: 
-                miou_tc, miou_ar = validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args)
+                miou_tc, miou_ar = validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args, prompter=prompter)
                 print(f"Epoch {epoch} - mIoU TC: {miou_tc:.2%}, mIoU AR: {miou_ar:.2%}")
                 if miou_tc > best_miou_tc:
                     best_miou_tc = miou_tc
