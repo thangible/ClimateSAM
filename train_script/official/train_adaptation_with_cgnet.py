@@ -268,7 +268,7 @@ def train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device
     # scaler.update()
 
 @torch.no_grad()
-def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args, prompter=None):
+def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, device, max_epoch_num, worker_args, prompter):
 
     # Example usage inside validation loop:
     # plot_mask_with_points(batch['gt_mask'][0], batch['tc_point_prompts'])
@@ -281,42 +281,43 @@ def validate_one_epoch(epoch, val_dataloader, ar_metrics, tc_metrics, model, dev
         # Set inference images once
         images = model.set_infer_img(batch['input'])
 
-        ar_point_prompts_copy = copy.deepcopy(batch['ar_point_prompts'])
-        tc_point_prompts_copy = copy.deepcopy(batch['tc_point_prompts'])
-        ar_bbox_prompts_copy = copy.deepcopy(batch['ar_bbox_prompts'])
-        tc_bbox_prompts_copy = copy.deepcopy(batch['tc_bbox_prompts'])
+        # ar_point_prompts_copy = copy.deepcopy(batch['ar_point_prompts'])
+        # tc_point_prompts_copy = copy.deepcopy(batch['tc_point_prompts'])
+        # ar_bbox_prompts_copy = copy.deepcopy(batch['ar_bbox_prompts'])
+        # tc_bbox_prompts_copy = copy.deepcopy(batch['tc_bbox_prompts'])
 
-        # prompt_debug(batch, text=f"Validation Step {val_step}")
+        # # prompt_debug(batch, text=f"Validation Step {val_step}")
         
-        # If a CGNet prompter is provided, generate bbox prompts (enlarge_ratio=0.0)
-        ar_point_prompts_to_use = batch.get('ar_point_prompts')
-        tc_point_prompts_to_use = batch.get('tc_point_prompts')
-        ar_bbox_prompts_to_use = batch.get('ar_bbox_prompts')
-        tc_bbox_prompts_to_use = batch.get('tc_bbox_prompts')
-        try:
-            if prompter is not None and 'cgnet_input' in batch:
-                features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
-                aux_mask = prompter.get_aux_mask(features)
-                prompt_maker = PromptMaker(prompt_type='bbox', positive_point_num=0, negative_point_num=0, centroid_ratio=0)
-                prompt_dict = prompt_maker.make_prompts(
-                    multiclass_mask=aux_mask,
-                    prompt_type='bbox',
-                    positive_point_num=0,
-                    negative_point_num=0,
-                    enlarge_ratio=0.0,
-                    centroid_ratio=0
-                )
-                # Move bbox prompts to device/dtype
-                if 'ar_bbox_prompts' in prompt_dict and prompt_dict['ar_bbox_prompts'] is not None:
-                    ar_bbox_prompts_to_use = [item.to(device=device, dtype=torch.float32) if item is not None else None for item in prompt_dict['ar_bbox_prompts']]
-                if 'tc_bbox_prompts' in prompt_dict and prompt_dict['tc_bbox_prompts'] is not None:
-                    tc_bbox_prompts_to_use = [item.to(device=device, dtype=torch.float32) if item is not None else None for item in prompt_dict['tc_bbox_prompts']]
-                # override point prompts (keep None)
-                ar_point_prompts_to_use = None
-                tc_point_prompts_to_use = None
-        except Exception as e:
-            # fallback to dataloader prompts
-            print(f"Warning: CGNet prompt generation failed during validation, falling back to dataloader prompts. Error: {e}")
+        # # If a CGNet prompter is provided, generate bbox prompts (enlarge_ratio=0.0)
+        # ar_point_prompts_to_use = batch.get('ar_point_prompts')
+        # tc_point_prompts_to_use = batch.get('tc_point_prompts')
+        # ar_bbox_prompts_to_use = batch.get('ar_bbox_prompts')
+        # tc_bbox_prompts_to_use = batch.get('tc_bbox_prompts')
+
+        features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
+        aux_mask = prompter.get_aux_mask(features)
+        prompt_maker = PromptMaker(prompt_type='bbox', positive_point_num=0, negative_point_num=0, centroid_ratio=0)
+        prompt_dict = prompt_maker.make_prompts(
+            multiclass_mask=aux_mask,
+            prompt_type='bbox',
+            positive_point_num=0,
+            negative_point_num=0,
+            enlarge_ratio=0.0,
+            centroid_ratio=0
+        )
+        ar_point_prompts_copy = None
+        tc_point_prompts_copy = None
+        ar_bbox_prompts_copy = copy.deepcopy(prompt_dict['ar_bbox_prompts'])
+        tc_bbox_prompts_copy = copy.deepcopy(prompt_dict['tc_bbox_prompts'])
+        # Move bbox prompts to device/dtype
+        if 'ar_bbox_prompts' in prompt_dict and prompt_dict['ar_bbox_prompts'] is not None:
+            ar_bbox_prompts_to_use = [item.to(device=device, dtype=torch.float32) if item is not None else None for item in prompt_dict['ar_bbox_prompts']]
+        if 'tc_bbox_prompts' in prompt_dict and prompt_dict['tc_bbox_prompts'] is not None:
+            tc_bbox_prompts_to_use = [item.to(device=device, dtype=torch.float32) if item is not None else None for item in prompt_dict['tc_bbox_prompts']]
+        # override point prompts (keep None)
+        ar_point_prompts_to_use = None
+        tc_point_prompts_to_use = None
+
 
         # Perform inference with prompts
         tc_masks, ar_masks = model.infer(
