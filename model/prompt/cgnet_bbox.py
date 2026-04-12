@@ -394,9 +394,64 @@ class CGNetBBoxPrompter:
     def save_model(self):
         save_path = os.path.join(self.exp_dir, f"cgnet_bbox_weight.pth")
         torch.save(self.cgnet_model.state_dict(), save_path)
+
+    
+    def _merge_fragmented_boxes(self, boxes, distance_threshold=20.0):
+        """
+        Merges bounding boxes that are close to each other.
+        Everything runs natively on PyTorch tensors to keep operations on the GPU.
+        """
+        if len(boxes) <= 1:
+            return boxes
+            
+        n = len(boxes)
+        merged_boxes = []
+        visited = torch.zeros(n, dtype=torch.bool, device=boxes.device)
         
+        for i in range(n):
+            if visited[i]:
+                continue
+                
+            # Start a new cluster with the current box
+            cluster = [i]
+            visited[i] = True
+            queue = [i]
+            
+            # Find all boxes connected to this cluster
+            while queue:
+                curr = queue.pop(0)
+                box1 = boxes[curr]
+                
+                for j in range(n):
+                    if not visited[j]:
+                        box2 = boxes[j]
+                        
+                        # Calculate distance between box1 and box2
+                        dx = torch.clamp(torch.max(box1[0], box2[0]) - torch.min(box1[2], box2[2]), min=0.0)
+                        dy = torch.clamp(torch.max(box1[1], box2[1]) - torch.min(box1[3], box2[3]), min=0.0)
+                        dist = torch.sqrt(dx**2 + dy**2)
+                        
+                        if dist <= distance_threshold:
+                            visited[j] = True
+                            queue.append(j)
+                            cluster.append(j)
+                            
+            # Create a bounding box that encompasses the entire cluster
+            cluster_boxes = boxes[cluster]
+            min_x = torch.min(cluster_boxes[:, 0])
+            min_y = torch.min(cluster_boxes[:, 1])
+            max_x = torch.max(cluster_boxes[:, 2])
+            max_y = torch.max(cluster_boxes[:, 3])
+            
+            merged_boxes.append(torch.stack([min_x, min_y, max_x, max_y]))
+            
+        if len(merged_boxes) > 0:
+            return torch.stack(merged_boxes)
+            
+        return torch.empty((0, 4), device=boxes.device)
+    
     @torch.no_grad()
-    def get_prompts(self, batch_input, conf_threshold=0.5, iou_threshold=0.4, enlarge_ratio=0.0):
+    def get_prompts(self, batch_input, conf_threshold=0.5, iou_threshold=0.4, enlarge_ratio=0.0, merge_threshold=20.0):
         """
         Infers bounding boxes from the input and formats them as SAM-compatible prompts.
         Applies Non-Maximum Suppression (NMS) to filter redundant overlapping boxes.
@@ -485,6 +540,9 @@ class CGNetBBoxPrompter:
             tc_boxes = boxes[tc_mask][:, :4]
             ar_boxes = boxes[ar_mask][:, :4]
             
+            tc_boxes = self._merge_fragmented_boxes(tc_boxes, distance_threshold=merge_threshold)
+            ar_boxes = self._merge_fragmented_boxes(ar_boxes, distance_threshold=merge_threshold)
+            
             # 9. Format to [N, 1, 4] to mimic original climatenet_util.py output
             if len(tc_boxes) > 0:
                 tc_bbox_prompts.append(tc_boxes.unsqueeze(1))
@@ -500,6 +558,7 @@ class CGNetBBoxPrompter:
             'ar_bbox_prompts': ar_bbox_prompts,
             'tc_bbox_prompts': tc_bbox_prompts
         }
+        
     @torch.no_grad()
     def quick_evaluate(self, dataloader, n_samples=5, save_dir="eval_plots", name = None):
         """
