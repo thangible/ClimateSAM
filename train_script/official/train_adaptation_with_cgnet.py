@@ -522,3 +522,29 @@ def main_worker(worker_id, worker_args):
                
         train_one_epoch(epoch, train_dataloader, model, optimizer, scheduler, device, local_rank, worker_args, max_epoch_num, scaler, prompter=prompter)
         
+        
+        
+if __name__ == '__main__':
+    print("Starting training process...")
+    args = parse()
+    set_randomness()
+    
+    if hasattr(args, 'wandb') and args.wandb:
+        project_name = args.project_name if hasattr(args, 'project_name') else "climate-sam"
+        run_name = args.run_name if hasattr(args, 'run_name') else None
+        wandb.init(project=project_name, name=run_name, config=vars(args))
+
+
+    if torch.cuda.is_available():
+        if 'CUDA_VISIBLE_DEVICES' in os.environ.keys():
+            used_gpu = os.environ['CUDA_VISIBLE_DEVICES'].split(',')
+        else:
+            used_gpu = get_idle_gpu(gpu_num=1)
+            os.environ['CUDA_VISIBLE_DEVICES'] = str(used_gpu[0])
+        args.used_gpu, args.gpu_num = used_gpu, len(used_gpu)
+    else:
+        args.used_gpu, args.gpu_num = [], 1
+
+    # launch the experiment process for both single-GPU and multi-GPU settings
+    if len(args.used_gpu) == 1:
+        main_worker(worker_id=0, worker_args=args)
