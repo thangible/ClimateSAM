@@ -8,6 +8,7 @@ from tqdm import tqdm
 import wandb
 
 from .cgnet_module import CGNetModule
+from utility import plot_mask_with_points_and_bbox_with_conf  
 
 # ========================================== #
 # 1. Dataset Adapter for ClimateNet          #
@@ -369,7 +370,7 @@ class CGNetBBoxPrompter:
                 plot_path = os.path.join(self.exp_dir, f"val_epoch_{epoch}.png")
                 
                 # Pass GT Mask to display background context, and overlay predicted BBoxes
-                plot_mask_with_points_and_bbox(
+                plot_mask_with_points_and_bbox_with_conf(
                     mask=gt_mask,
                     ar_bbox=p_ar,
                     tc_bbox=p_tc,
@@ -565,7 +566,7 @@ class CGNetBBoxPrompter:
         plots_saved = 0
         
         os.makedirs(save_dir, exist_ok=True)
-        from utility import plot_mask_with_points_and_bbox
+        from utility import plot_mask_with_points_and_bbox_with_conf
         
         print(f"\nStarting quick evaluation over {len(dataloader)} batches...")
         
@@ -628,7 +629,7 @@ class CGNetBBoxPrompter:
                     
                     plot_path = os.path.join(save_dir, f"quick_eval_sample_{plots_saved + 1}.png")
                     
-                    plot_mask_with_points_and_bbox(
+                    plot_mask_with_points_and_bbox_with_conf(
                         mask=gt_mask,
                         ar_bbox=p_ar,
                         tc_bbox=p_tc,

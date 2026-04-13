@@ -17,7 +17,7 @@ import torch.multiprocessing as mp
 import torch.nn.functional as F
 from functools import partial
 from torch.utils.data import DataLoader
-from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug, print_param_stats
+from utility import batch_to_cuda, get_idle_gpu, get_idle_port, set_randomness, plot_with_projection, plot_mask_with_points_and_bbox, prompt_debug, print_param_stats, plot_mask_with_points_and_bbox_with_conf
 from loss_function import ClimateLoss, compute_climate_loss
 from tqdm import tqdm
 from contextlib import nullcontext
@@ -30,7 +30,6 @@ import wandb
 
 # Import the new BBox Prompter
 from model.prompt.cgnet_bbox import CGNetBBoxPrompter 
-
 
 import torchvision.ops as ops
 
@@ -86,7 +85,6 @@ def profile_prompt_errors(gt_bboxes_list, pred_bboxes_list, iou_threshold=0.3):
     return stats
 
 
-
 def worker_init_fn(worker_id: int, base_seed: int, same_worker_seed: bool = True):
     """
     Set random seed for each worker in DataLoader to ensure the reproducibility.
@@ -116,112 +114,6 @@ def setup_optimizer_and_scheduler(model, worker_args):
         optimizer=optimizer, T_max=worker_args.max_epoch_num, eta_min=1e-5
     )
     return optimizer, scheduler
-
-# @torch.no_grad()
-# def validate_cgnet_bboxes(
-#     val_dataloader, 
-#     ar_metrics, 
-#     tc_metrics, 
-#     model, 
-#     prompter, 
-#     device, 
-#     conf_threshold=0.5,
-#     iou_threshold=0.4,
-#     max_samples=None,
-#     enlarge_ratio=0
-# ):
-#     """
-#     Validate model using direct BBox predictions from CGNetBBoxPrompter.
-#     """
-#     model.eval()
-#     prompter.cgnet_model.eval()
-    
-#     total_samples = 0
-#     valid_pbar = tqdm(
-#         total=len(val_dataloader), 
-#         desc=f'Validation (BBox conf={conf_threshold}, iou={iou_threshold})',
-#         leave=False
-#     )
-    
-#     with torch.no_grad():
-#         for val_step, batch in enumerate(val_dataloader):
-#             if max_samples and total_samples >= max_samples:
-#                 break
-                
-#             batch = batch_to_cuda(batch, device)
-#             total_samples += batch['input'].shape[0]
-            
-#             # 1. Generate BBox prompts directly using the NEW CGNetBBoxPrompter
-#             features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
-#             prompt_dict = prompter.get_prompts(features, conf_threshold=conf_threshold, iou_threshold=iou_threshold, enlarge_ratio=enlarge_ratio)
-            
-#             # 2. Package for SAM
-#             combined_prompt_dict = {
-#                 'ar_point_prompts': None,
-#                 'tc_point_prompts': None,
-#                 'ar_bbox_prompts': prompt_dict['ar_bbox_prompts'],
-#                 'tc_bbox_prompts': prompt_dict['tc_bbox_prompts']
-#             }
-            
-#             # 3. Set inference images
-#             images = model.set_infer_img(batch['input'])
-            
-#             # 4. Perform inference with combined prompts - all at once
-#             tc_masks, ar_masks = model.infer(
-#                 ar_point_prompts=combined_prompt_dict['ar_point_prompts'],
-#                 tc_point_prompts=combined_prompt_dict['tc_point_prompts'],
-#                 ar_bbox_prompts=combined_prompt_dict['ar_bbox_prompts'],
-#                 tc_bbox_prompts=combined_prompt_dict['tc_bbox_prompts']
-#             )
-            
-#             # 5. Extract ground truth masks
-#             masks_gt = batch['gt_mask']
-#             masks_ar_gts = [(mask == 2).to(torch.uint8) for mask in masks_gt]
-#             masks_tc_gts = [(mask == 1).to(torch.uint8) for mask in masks_gt]
-            
-#             # Ensure correct shape for metrics [B, 1, 1, H, W]
-#             for masks in [masks_ar_gts, masks_tc_gts, ar_masks, tc_masks]:
-#                 for i in range(len(masks)):
-#                     if len(masks[i].shape) == 2:
-#                         masks[i] = masks[i][None, None, :]
-#                     if len(masks[i].shape) == 3:
-#                         masks[i] = masks[i][:, None, :]
-#                     if len(masks[i].shape) != 4:
-#                         raise RuntimeError(f"Unexpected mask shape: {masks[i].shape}")
-            
-#             # 6. Update metrics
-#             tc_metrics.update(tc_masks, masks_tc_gts, batch['index_name'])
-#             ar_metrics.update(ar_masks, masks_ar_gts, batch['index_name'])
-            
-#             valid_pbar.update(1)
-    
-#     valid_pbar.close()
-    
-#     # Compute metrics
-#     ar_metric_dict, _ = ar_metrics.compute()
-#     tc_metric_dict, _ = tc_metrics.compute()
-    
-#     results = {
-#         'prompt_type': 'bbox_direct',
-#         'conf_threshold': conf_threshold,
-#         'iou_threshold': iou_threshold,
-#         'miou_ar': ar_metric_dict['Mean Foreground IoU'],
-#         'miou_tc': tc_metric_dict['Mean Foreground IoU'],
-#         'mean_acc_ar': ar_metric_dict['Mean Acc'],
-#         'mean_acc_tc': tc_metric_dict['Mean Acc'],
-#         'overall_acc_ar': ar_metric_dict['Overall Acc'],
-#         'overall_acc_tc': tc_metric_dict['Overall Acc'],
-#         'freqw_acc_ar': ar_metric_dict['FreqW Acc'],
-#         'freqw_acc_tc': tc_metric_dict['FreqW Acc'],
-#         'miou_including_bg_ar': ar_metric_dict['Mean IoU'],
-#         'miou_including_bg_tc': tc_metric_dict['Mean IoU'],
-#     }
-    
-#     # Reset metrics for next validation
-#     ar_metrics.reset()
-#     tc_metrics.reset()
-    
-#     return results
 
 
 @torch.no_grad()
@@ -285,11 +177,12 @@ def validate_cgnet_bboxes(
                 if pr_ar is not None and len(pr_ar) > 0:
                     # If there is no Ground Truth at all, EVERY prediction is a ghost
                     if gt_ar is None or len(gt_ar) == 0:
-                        ghost_count = len(pr_ar)
+                        ghost_count = pr_ar.view(-1, pr_ar.shape[-1]).shape[0]
                     # Otherwise, calculate IoU to find boxes hitting pure background
                     else:
-                        gt_flat = gt_ar.view(-1, 4).float().to(device)
-                        pr_flat = pr_ar.view(-1, 4).float().to(device)
+                        # SAFELY SLICE [x1, y1, x2, y2]
+                        gt_flat = gt_ar.view(-1, gt_ar.shape[-1])[:, :4].float().to(device)
+                        pr_flat = pr_ar.view(-1, pr_ar.shape[-1])[:, :4].float().to(device)
                         
                         iou_matrix = ops.box_iou(gt_flat, pr_flat)
                         max_iou_per_pred, _ = iou_matrix.max(dim=0)
@@ -303,7 +196,7 @@ def validate_cgnet_bboxes(
                     save_path = os.path.join(ghost_save_dir, f"ghost_ar_ratio_{enlarge_ratio}_step_{val_step}_img_{b}.png")
                     
                     # Plot using your existing utility
-                    plot_mask_with_points_and_bbox(
+                    plot_mask_with_points_and_bbox_with_conf(
                         mask=batch['gt_mask'][b].cpu().numpy() if isinstance(batch['gt_mask'][b], torch.Tensor) else batch['gt_mask'][b],
                         ar_bbox=pr_ar.cpu().numpy() if pr_ar is not None else None,
                         tc_bbox=prompt_dict['tc_bbox_prompts'][b].cpu().numpy() if prompt_dict['tc_bbox_prompts'][b] is not None else None,
@@ -614,54 +507,7 @@ def main_worker(worker_id, worker_args):
     print(results_df.to_string(index=False))
     print("="*120)
 
-    # print("Running final validation with integrated BBox Prompter and SAM...")
-    # bbox_configs = [
-    #     {'enlarge_ratio': 0.0},
-    #     {'enlarge_ratio': 0.1},
-    #     {'enlarge_ratio': 0.2},
-    #     {'enlarge_ratio': 0.3},
-    #     {'enlarge_ratio': 0.4},
-    #     {'enlarge_ratio': 0.5},
-    #     {'enlarge_ratio': 0.6},
-    #     {'enlarge_ratio': 0.7},
-    #     {'enlarge_ratio': -0.1},
-    #     {'enlarge_ratio': -0.2},
-    # ]
-    # all_results = []
-    # for bbox_config in bbox_configs:
-    #     enlarge_ratio = bbox_config['enlarge_ratio']
-    #     print(f"\nValidating with enlarge_ratio={enlarge_ratio}...")
-    #     # Validate quickly and plot 10 distinct samples
-    #     ar_iou, tc_iou = cgnetprompter.quick_evaluate(val_dataloader, n_samples=10, save_dir="my_test_plots", name = f"enlarge_{enlarge_ratio}")
-    #     results = validate_cgnet_bboxes(
-    #         val_dataloader=val_dataloader,
-    #         ar_metrics=ar_metrics,
-    #         tc_metrics=tc_metrics,
-    #         model=climatesam,
-    #         prompter=cgnetprompter,
-    #         device=device,
-    #         conf_threshold=0.5,
-    #         iou_threshold=0.4,
-    #         max_samples=None,
-    #         enlarge_ratio=enlarge_ratio,
-    #         merge_threshold=10
-    # )
-    #     all_results.append(results)
-    #     print(f"Validation completed for enlarge_ratio={enlarge_ratio}. mIoU TC: {results['miou_tc']:.4f}, mIoU AR: {results['miou_ar']:.4f}, mean AR bbox IoU: {results['diag_ar_avg_bbox_iou']:.4f}, mean TC bbox IoU: {results['diag_tc_avg_bbox_iou']:.4f}")
 
-    # # ==================== SAVE RESULTS ====================
-    # print("\n" + "="*60)
-    # print("RESULTS SUMMARY")
-    # print("="*60)
-    
-    # # Convert to DataFrame for better visualization
-    # import pandas as pd
-    # results_df = pd.DataFrame(all_results)
-    # print("="*80)
-    # print(results_df.to_string(index=False))
-    # print("="*80)
-    
-    
 if __name__ == '__main__':
     print("Starting training process...")
     args = parse()
@@ -683,4 +529,3 @@ if __name__ == '__main__':
 
     if len(args.used_gpu) == 1:
         main_worker(worker_id=0, worker_args=args)
-        
