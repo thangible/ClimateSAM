@@ -9,7 +9,6 @@ for p in (PROJECT_ROOT, TRAIN_SCRIPT_DIR):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-#  python train_script/official/train_cgnet_bbox.py --config input_config_official --sam_type vit_b --image_encoder_mlp_ratio 0.5 --encoder_weights_name infused_token_vit_b_0.5_jitter00504 --pretrained_name exp/best_weights/GOAT_CGNET_BBOX.pth --run_name TRAIN_CG_BBOX --project_name climate-sam-generator --max_epoch_num 100 --wandb
 import random
 import numpy as np
 import torch
@@ -30,7 +29,7 @@ import copy
 import wandb
 
 # Import the new BBox Prompter
-from model.prompt.cgnet_bbox_sam import CGNetBBoxPrompter 
+from model.prompt.cgnet_bbox import CGNetBBoxPrompter 
 
 import torchvision.ops as ops
 
@@ -157,9 +156,24 @@ def validate_cgnet_bboxes(
             batch = batch_to_cuda(batch, device)
             total_samples += batch['input'].shape[0]
             
+            # ==== NEW: EXTRACT SAM FEATURES ====
+            sam_features = None
+            if model is not None:
+                raw_input = batch['input'].to(device, dtype=torch.float32)
+                sam_img = model.input_adapter(raw_input)
+                sam_features = model.image_encoder(sam_img)
+            # ===================================
+            
             # 1. Generate BBox prompts directly
             features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
-            prompt_dict = prompter.get_prompts(features, conf_threshold=conf_threshold, iou_threshold=iou_threshold, enlarge_ratio=enlarge_ratio, merge_threshold= merge_threshold)
+            prompt_dict = prompter.get_prompts(
+                features, 
+                sam_features=sam_features, 
+                conf_threshold=conf_threshold, 
+                iou_threshold=iou_threshold, 
+                enlarge_ratio=enlarge_ratio, 
+                merge_threshold=merge_threshold
+            )
             
             # ================================================================= #
             # NEW: GHOST CATCHER & VISUALIZER
@@ -192,7 +206,6 @@ def validate_cgnet_bboxes(
                         ghost_count = (max_iou_per_pred < 0.3).sum().item()
                 
                 # Plot and save if this image has an aggressively high ghost count
-                # (You can change this threshold to >= 2 or 3 to only catch the worst offenders)
                 if ghost_count >= 1: 
                     save_path = os.path.join(ghost_save_dir, f"ghost_ar_ratio_{enlarge_ratio}_step_{val_step}_img_{b}.png")
                     
@@ -340,7 +353,6 @@ def main_worker(worker_id, worker_args):
     print(f"Worker {worker_id} initialized on device {device} with local_rank {local_rank}.")
     
     # PREPARE DATASET
-    # Ensure generate_prompt is True if it's required to yield bounding boxes inside your dataset
     dataset_dir = worker_args.data_dir
     train_dataset = ClimateDataset(
         data_dir=dataset_dir, train_flag=True, shot_num=worker_args.shot_num,
@@ -403,24 +415,19 @@ def main_worker(worker_id, worker_args):
     )
 
     pretrained_name = worker_args.pretrained_name if hasattr(worker_args, 'pretrained_name') else os.path.join(worker_args.exp_dir,'cgnet_bbox_weight.pth')
+    
     # Initialize the new BBox Prompter
     cgnetprompter = CGNetBBoxPrompter(
-        weights_path=pretrained_name, # You can update this to the new checkpoint name
+        weights_path=pretrained_name, 
         device=device, 
         worker_args=worker_args,
-        num_classes=2 # 0: TC, 1: AR
+        num_classes=2
     )
-    
-    # Execute the training loop
-    print("Starting CGNet Bounding Box Training...")
-    print_param_stats(cgnetprompter.cgnet_model, phase="train")
-    cgnetprompter.train(train_dataloader=train_dataloader, val_dataloader=val_dataloader, epochs=max_epoch_num)
 
-    # ---------------------------------------------------------
-    # Validation / SAM Inference Phase
-    # ---------------------------------------------------------
-    print("Initializing SAM for final validation...")
-    
+    # =========================================================
+    # 1. INITIALIZE SAM FIRST FOR FEATURE FUSION
+    # =========================================================
+    print("Initializing SAM for Feature Fusion...")
     climatesam = ClimateSAM(
         model_type=worker_args.sam_type, 
         mlp_ratio=worker_args.image_encoder_mlp_ratio,
@@ -443,6 +450,22 @@ def main_worker(worker_id, worker_args):
     else:
         print(f"Warning: SAM weights not found at {image_encoder_path}. Using default initialization.")
 
+    # =========================================================
+    # 2. RUN CGNET TRAINING AND PASS SAM IN
+    # =========================================================
+    print("Starting CGNet Bounding Box Training...")
+    print_param_stats(cgnetprompter.cgnet_model, phase="train")
+    
+    cgnetprompter.train(
+        train_dataloader=train_dataloader, 
+        val_dataloader=val_dataloader, 
+        epochs=max_epoch_num,
+        sam_model=climatesam  # <-- PASSING SAM MODEL
+    )
+
+    # ---------------------------------------------------------
+    # Validation / SAM Inference Phase
+    # ---------------------------------------------------------
     # Initialize segmentation metrics
     ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
@@ -451,18 +474,18 @@ def main_worker(worker_id, worker_args):
     import itertools
 
     # Define the search grid
-    conf_thresholds = [0.1, 0.3]
-    iou_thresholds = [0.5]
-    merge_thresholds = [10.0]
-    fixed_enlarge_ratio = [0.0, 0.1]  # Fix this to avoid a massive 4D grid search
+    conf_thresholds = [0.3, 0.5, 0.7]
+    iou_thresholds = [0.3, 0.5, 0.7]
+    merge_thresholds = [10.0, 20.0, 30.0]
+    fixed_enlarge_ratio = 0.1  # Fix this to avoid a massive 4D grid search
 
     # Generate all combinations
-    hyperparameter_grid = list(itertools.product(conf_thresholds, iou_thresholds, merge_thresholds, fixed_enlarge_ratio))
+    hyperparameter_grid = list(itertools.product(conf_thresholds, iou_thresholds, merge_thresholds))
     
     all_results = []
     
-    for conf_thresh, iou_thresh, merge_thresh, enlarge_ratio in hyperparameter_grid:
-        print(f"\nValidating -> Conf: {conf_thresh} | IoU: {iou_thresh} | Merge: {merge_thresh}, Enlarge Ratio: {enlarge_ratio}...")
+    for conf_thresh, iou_thresh, merge_thresh in hyperparameter_grid:
+        print(f"\nValidating -> Conf: {conf_thresh} | IoU: {iou_thresh} | Merge: {merge_thresh}...")
         
         results = validate_cgnet_bboxes(
             val_dataloader=val_dataloader,
@@ -474,7 +497,7 @@ def main_worker(worker_id, worker_args):
             conf_threshold=conf_thresh,
             iou_threshold=iou_thresh,
             max_samples=None,
-            enlarge_ratio=enlarge_ratio,
+            enlarge_ratio=fixed_enlarge_ratio,
             merge_threshold=merge_thresh
         )
         
@@ -482,7 +505,6 @@ def main_worker(worker_id, worker_args):
         results['conf_threshold'] = conf_thresh
         results['iou_threshold'] = iou_thresh
         results['merge_threshold'] = merge_thresh
-        results['enlarge_ratio'] = enlarge_ratio
         
         all_results.append(results)
         print(f"Complete -> TC mIoU: {results['miou_tc']:.4f} | AR mIoU: {results['miou_ar']:.4f} | AR Ghosts: {results['diag_ar_ghost_pct']:.2%}")

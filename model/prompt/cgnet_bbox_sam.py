@@ -134,19 +134,25 @@ def yolo_detection_loss(preds, targets):
 # ========================================== #
 
 class CGNetDetectionModule(CGNetModule):
-    def __init__(self, num_classes=2, channels=4, M=3, N=21, dropout_flag=False):
+    def __init__(self, num_classes=2, channels=4, M=3, N=21, dropout_flag=False, use_sam_features=True):
         super().__init__(classes=num_classes, channels=channels, M=M, N=N, dropout_flag=dropout_flag)
         
         self.num_classes = num_classes
         self.out_channels = 1 + 4 + num_classes
+        self.use_sam_features = use_sam_features
         
         from .cgnet_module import Conv
+        
+        # Feature fusion block compresses 256 (CGNet) + 256 (SAM) back to 256
+        if self.use_sam_features:
+            self.feature_fusion = Conv(256 + 256, 256, 1, 1)
+            
         if dropout_flag:
             self.classifier = nn.Sequential(nn.Dropout2d(0.1, False), Conv(256, self.out_channels, 1, 1))
         else:
             self.classifier = nn.Sequential(Conv(256, self.out_channels, 1, 1))
 
-    def forward(self, input):
+    def forward(self, input, sam_features=None):
         output0 = self.level1_0(input)
         output0 = self.level1_1(output0)
         output0 = self.level1_2(output0)
@@ -162,9 +168,19 @@ class CGNetDetectionModule(CGNetModule):
         output2_0 = self.level3_0(output1_cat)
         for i, layer in enumerate(self.level3):
             output2 = layer(output2_0) if i == 0 else layer(output2)
-        output2_cat = self.bn_prelu_3(torch.cat([output2_0, output2], 1))
+            
+        # Standard CGNet Features (256 channels)
+        cgnet_features = self.bn_prelu_3(torch.cat([output2_0, output2], 1))
        
-        grid_out = self.classifier(output2_cat)
+        # FUSE SAM FEATURES if available
+        if self.use_sam_features and sam_features is not None:
+            _, _, H, W = cgnet_features.shape
+            # Ensure SAM features (usually 64x64) match CGNet's spatial dimensions
+            sam_resized = F.interpolate(sam_features, size=(H, W), mode="bilinear", align_corners=False)
+            fused = torch.cat([cgnet_features, sam_resized], dim=1)
+            cgnet_features = self.feature_fusion(fused)
+       
+        grid_out = self.classifier(cgnet_features)
         return grid_out
 
 # ========================================== #
@@ -176,7 +192,7 @@ class CGNetBBoxPrompter:
         self.device = device
         self.exp_dir = worker_args.exp_dir
         
-        self.cgnet_model = CGNetDetectionModule(num_classes=num_classes, channels=4)
+        self.cgnet_model = CGNetDetectionModule(num_classes=num_classes, channels=4, use_sam_features=True)
         
         if weights_path and os.path.exists(weights_path):
             # 1. Load the old weights
@@ -204,7 +220,7 @@ class CGNetBBoxPrompter:
         self.wandb = getattr(worker_args, 'wandb', False)
         self.run_name = getattr(worker_args, 'run_name', None)
 
-    def train(self, train_dataloader, val_dataloader, epochs):
+    def train(self, train_dataloader, val_dataloader, epochs, sam_model=None):
         best_val_loss = float('inf')
         best_val_iou = 0.0
         
@@ -222,14 +238,24 @@ class CGNetBBoxPrompter:
 
             for batch in epoch_loader:
                 features = batch['cgnet_input'].to(device=self.device, dtype=torch.float32)
-                
                 img_h, img_w = features.shape[2], features.shape[3]
+                
+                # ==== NEW: EXTRACT SAM FEATURES ====
+                sam_features = None
+                if sam_model is not None:
+                    with torch.no_grad():
+                        raw_input = batch['input'].to(self.device, dtype=torch.float32)
+                        sam_img = sam_model.input_adapter(raw_input)
+                        sam_features = sam_model.image_encoder(sam_img)
+                # ===================================
+                
                 raw_ar_boxes = batch['ar_bbox_prompts']
                 raw_tc_boxes = batch['tc_bbox_prompts']
                 
                 bboxes = parse_climatenet_bboxes(raw_ar_boxes, raw_tc_boxes, img_h, img_w)
 
-                outputs = self.cgnet_model(features)
+                # Feed both inputs to CGNet
+                outputs = self.cgnet_model(features, sam_features=sam_features)
                 grid_shape = outputs.shape[2:] 
 
                 targets = build_grid_targets(bboxes, grid_shape, self.device)
@@ -269,7 +295,7 @@ class CGNetBBoxPrompter:
             # Validation every 5 epochs or on the final epoch         #
             # --------------------------------------------------------- #
             if epoch % 5 == 0 or epoch == epochs:
-                val_loss, val_ar_iou, val_tc_iou = self.validate(val_dataloader, epoch)
+                val_loss, val_ar_iou, val_tc_iou = self.validate(val_dataloader, epoch, sam_model=sam_model)
                 print(f"Validation Stats: Loss {val_loss:.4f} | AR BBox IoU: {val_ar_iou:.4f} | TC BBox IoU: {val_tc_iou:.4f}")
                 
                 if self.wandb:
@@ -297,7 +323,7 @@ class CGNetBBoxPrompter:
                             print(f"WandB save failed: {e}")
 
     @torch.no_grad()
-    def validate(self, val_dataloader, epoch):
+    def validate(self, val_dataloader, epoch, sam_model=None):
         self.cgnet_model.eval()
         epoch_loss_sum = 0.0
         epoch_loss_count = 0
@@ -307,17 +333,26 @@ class CGNetBBoxPrompter:
         
         plot_saved = False
         
-        from utility import plot_mask_with_points_and_bbox  # Assuming it's accessible
+        from utility import plot_mask_with_points_and_bbox_with_conf 
         
         for batch in tqdm(val_dataloader, desc="Validating"):
             features = batch['cgnet_input'].to(device=self.device, dtype=torch.float32)
             img_h, img_w = features.shape[2], features.shape[3]
             
+            # ==== NEW: EXTRACT SAM FEATURES ====
+            sam_features = None
+            if sam_model is not None:
+                with torch.no_grad():
+                    raw_input = batch['input'].to(self.device, dtype=torch.float32)
+                    sam_img = sam_model.input_adapter(raw_input)
+                    sam_features = sam_model.image_encoder(sam_img)
+            # ===================================
+            
             raw_ar_boxes = batch['ar_bbox_prompts']
             raw_tc_boxes = batch['tc_bbox_prompts']
             bboxes = parse_climatenet_bboxes(raw_ar_boxes, raw_tc_boxes, img_h, img_w)
             
-            outputs = self.cgnet_model(features)
+            outputs = self.cgnet_model(features, sam_features=sam_features)
             grid_shape = outputs.shape[2:] 
             targets = build_grid_targets(bboxes, grid_shape, self.device)
             
@@ -325,8 +360,8 @@ class CGNetBBoxPrompter:
             epoch_loss_sum += float(loss.item())
             epoch_loss_count += 1
             
-            # Get BBox Predictions (returns [N, 1, 5])
-            prompt_dict = self.get_prompts(features, conf_threshold=0.7, iou_threshold=0.4)
+            # Get BBox Predictions
+            prompt_dict = self.get_prompts(features, sam_features=sam_features, conf_threshold=0.7, iou_threshold=0.4)
         
             pred_ar_bboxes = prompt_dict['ar_bbox_prompts']
             pred_tc_bboxes = prompt_dict['tc_bbox_prompts']
@@ -338,7 +373,6 @@ class CGNetBBoxPrompter:
                 pr_ar = pred_ar_bboxes[b]  
                 if gt_ar is not None and pr_ar is not None:
                     gt_ar_flat = gt_ar.view(-1, 4).to(self.device)
-                    # FIX: Slice to only 4 elements [x1, y1, x2, y2] to avoid ops.box_iou error
                     pr_ar_flat = pr_ar.view(-1, pr_ar.shape[-1])[:, :4].to(self.device)
                     ious = ops.box_iou(pr_ar_flat, gt_ar_flat)
                     ar_ious.append(ious.max(dim=1)[0].mean().item()) 
@@ -352,7 +386,6 @@ class CGNetBBoxPrompter:
                 pr_tc = pred_tc_bboxes[b]
                 if gt_tc is not None and pr_tc is not None:
                     gt_tc_flat = gt_tc.view(-1, 4).to(self.device)
-                    # FIX: Slice to only 4 elements [x1, y1, x2, y2] to avoid ops.box_iou error
                     pr_tc_flat = pr_tc.view(-1, pr_tc.shape[-1])[:, :4].to(self.device)
                     ious = ops.box_iou(pr_tc_flat, gt_tc_flat)
                     tc_ious.append(ious.max(dim=1)[0].mean().item())
@@ -370,7 +403,6 @@ class CGNetBBoxPrompter:
 
                     plot_path = os.path.join(self.exp_dir, f"val_epoch_{epoch}.png")
 
-                    # Pass GT Mask to display background context, and overlay predicted BBoxes
                     plot_mask_with_points_and_bbox_with_conf(
                         mask=gt_mask,
                         ar_bbox=p_ar,
@@ -397,10 +429,6 @@ class CGNetBBoxPrompter:
         torch.save(self.cgnet_model.state_dict(), save_path)
 
     def _merge_fragmented_boxes(self, boxes, distance_threshold=20.0):
-        """
-        Merges bounding boxes that are close to each other.
-        Everything runs natively on PyTorch tensors to keep operations on the GPU.
-        """
         if len(boxes) <= 1:
             return boxes
             
@@ -412,12 +440,10 @@ class CGNetBBoxPrompter:
             if visited[i]:
                 continue
                 
-            # Start a new cluster with the current box
             cluster = [i]
             visited[i] = True
             queue = [i]
             
-            # Find all boxes connected to this cluster
             while queue:
                 curr = queue.pop(0)
                 box1 = boxes[curr]
@@ -425,8 +451,6 @@ class CGNetBBoxPrompter:
                 for j in range(n):
                     if not visited[j]:
                         box2 = boxes[j]
-                        
-                        # Calculate distance between box1 and box2
                         dx = torch.clamp(torch.max(box1[0], box2[0]) - torch.min(box1[2], box2[2]), min=0.0)
                         dy = torch.clamp(torch.max(box1[1], box2[1]) - torch.min(box1[3], box2[3]), min=0.0)
                         dist = torch.sqrt(dx**2 + dy**2)
@@ -436,14 +460,12 @@ class CGNetBBoxPrompter:
                             queue.append(j)
                             cluster.append(j)
                             
-            # Create a bounding box that encompasses the entire cluster
             cluster_boxes = boxes[cluster]
             min_x = torch.min(cluster_boxes[:, 0])
             min_y = torch.min(cluster_boxes[:, 1])
             max_x = torch.max(cluster_boxes[:, 2])
             max_y = torch.max(cluster_boxes[:, 3])
             
-            # Keep the highest confidence score from the merged cluster
             max_conf = torch.max(cluster_boxes[:, 4])
             
             merged_boxes.append(torch.stack([min_x, min_y, max_x, max_y, max_conf]))
@@ -454,25 +476,21 @@ class CGNetBBoxPrompter:
         return torch.empty((0, 5), device=boxes.device)
     
     @torch.no_grad()
-    def get_prompts(self, batch_input, conf_threshold=0.5, iou_threshold=0.4, enlarge_ratio=0.0, merge_threshold=20.0):
-        """
-        Infers bounding boxes from the input and formats them as SAM-compatible prompts.
-        Applies Non-Maximum Suppression (NMS) to filter redundant overlapping boxes.
-        """
+    def get_prompts(self, batch_input, sam_features=None, conf_threshold=0.5, iou_threshold=0.4, enlarge_ratio=0.0, merge_threshold=20.0):
         self.cgnet_model.eval()
-        outputs = self.cgnet_model(batch_input)
+        
+        # Pass both inputs
+        outputs = self.cgnet_model(batch_input, sam_features=sam_features)
         
         B, C, GH, GW = outputs.shape
         H, W = batch_input.shape[2], batch_input.shape[3]
 
-        # Permute for easier indexing: [B, GH, GW, 7]
         outputs_permuted = outputs.permute(0, 2, 3, 1)
         pred_conf = torch.sigmoid(outputs_permuted[..., 0])
 
         ar_bbox_prompts = []
         tc_bbox_prompts = []
 
-        # 1. Handle enlarge_ratio (can be a scalar or a list/tuple like [min, max])
         if isinstance(enlarge_ratio, (list, tuple)):
             import random
             e_ratio = random.uniform(enlarge_ratio[0], enlarge_ratio[1])
@@ -480,7 +498,6 @@ class CGNetBBoxPrompter:
             e_ratio = enlarge_ratio
 
         for b in range(B):
-            # 2. Filter out low-confidence cells
             mask = pred_conf[b] > conf_threshold
             if mask.sum() == 0:
                 ar_bbox_prompts.append(None)
@@ -490,55 +507,44 @@ class CGNetBBoxPrompter:
             pos_preds = outputs_permuted[b][mask]
             grid_y, grid_x = torch.where(mask)
 
-            # 3. Extract bounding box properties
             dxdy = torch.sigmoid(pos_preds[:, 1:3])
             wh = torch.sigmoid(pos_preds[:, 3:5])
             
-            # 4. Extract class predictions
             cls_probs = torch.softmax(pos_preds[:, 5:], dim=1)
             cls_conf, cls_pred = torch.max(cls_probs, dim=1)
 
-            # 5. Map from grid scale back to normalized image coordinates [0, 1]
             cx = (grid_x.float() + dxdy[:, 0]) / GW
             cy = (grid_y.float() + dxdy[:, 1]) / GH
             norm_w = wh[:, 0]
             norm_h = wh[:, 1]
 
-            # 6. Convert to absolute pixel coordinates and apply enlarge_ratio
             w_abs = norm_w * W
             h_abs = norm_h * H
             cx_abs = cx * W
             cy_abs = cy * H
             
-            # Calculate padding based on the ratio
             pad_w = w_abs * e_ratio
             pad_h = h_abs * e_ratio
 
-            # Clamp coordinates to ensure they don't go out of image bounds
             x_min = torch.clamp(cx_abs - (w_abs / 2) - pad_w, min=0)
             y_min = torch.clamp(cy_abs - (h_abs / 2) - pad_h, min=0)
             x_max = torch.clamp(cx_abs + (w_abs / 2) + pad_w, max=W - 1)
             y_max = torch.clamp(cy_abs + (h_abs / 2) + pad_h, max=H - 1)
 
-            # Stack for NMS processing
             boxes = torch.stack((x_min, y_min, x_max, y_max, pred_conf[b][mask], cls_pred.float()), dim=1)
             
-            # 7. Apply Non-Maximum Suppression (NMS)
             keep_idx = ops.nms(boxes[:, :4], boxes[:, 4], iou_threshold=iou_threshold)
             boxes = boxes[keep_idx]
             
-            # 8. Separate boxes by Class ID (0: TC, 1: AR)
             tc_mask = boxes[:, 5] == 0
             ar_mask = boxes[:, 5] == 1
             
-            # FIX: Keep 5 elements [x1, y1, x2, y2, conf] instead of 4
             tc_boxes = boxes[tc_mask][:, :5]
             ar_boxes = boxes[ar_mask][:, :5]
             
             tc_boxes = self._merge_fragmented_boxes(tc_boxes, distance_threshold=merge_threshold)
             ar_boxes = self._merge_fragmented_boxes(ar_boxes, distance_threshold=merge_threshold)
             
-            # 9. Format to [N, 1, 5] 
             if len(tc_boxes) > 0:
                 tc_bbox_prompts.append(tc_boxes.unsqueeze(1))
             else:
@@ -555,11 +561,7 @@ class CGNetBBoxPrompter:
         }
         
     @torch.no_grad()
-    def quick_evaluate(self, dataloader, n_samples=5, save_dir="eval_plots", name=None):
-        """
-        Quickly validates the dataset, prints the AR and TC BBox IoU, 
-        and plots/logs GT vs Predicted bounding boxes for n_samples.
-        """
+    def quick_evaluate(self, dataloader, n_samples=5, save_dir="eval_plots", name=None, sam_model=None):
         self.cgnet_model.eval()
         
         ar_ious = []
@@ -574,27 +576,31 @@ class CGNetBBoxPrompter:
         for batch in tqdm(dataloader, desc="Quick Eval"):
             features = batch['cgnet_input'].to(device=self.device, dtype=torch.float32)
             
+            # ==== NEW: EXTRACT SAM FEATURES ====
+            sam_features = None
+            if sam_model is not None:
+                with torch.no_grad():
+                    raw_input = batch['input'].to(self.device, dtype=torch.float32)
+                    sam_img = sam_model.input_adapter(raw_input)
+                    sam_features = sam_model.image_encoder(sam_img)
+            # ===================================
+            
             raw_ar_boxes = batch['ar_bbox_prompts']
             raw_tc_boxes = batch['tc_bbox_prompts']
             
-            # Get BBox Predictions
-            prompt_dict = self.get_prompts(features, conf_threshold=0.5, iou_threshold=0.4)
+            prompt_dict = self.get_prompts(features, sam_features=sam_features, conf_threshold=0.5, iou_threshold=0.4)
             pred_ar_bboxes = prompt_dict['ar_bbox_prompts']
             pred_tc_bboxes = prompt_dict['tc_bbox_prompts']
             
             batch_size = features.shape[0]
             
-            # Process each image in the batch individually for IoU and plotting
             for b in range(batch_size):
-                # --------------------------------------------------------- #
-                # 1. Calculate AR BBox IoU
-                # --------------------------------------------------------- #
+                # AR IoU Calculation
                 gt_ar = raw_ar_boxes[b] 
                 pr_ar = pred_ar_bboxes[b] 
                 
                 if gt_ar is not None and pr_ar is not None:
                     gt_ar_flat = gt_ar.view(-1, 4).to(self.device)
-                    # FIX: Slice to only 4 elements [x1, y1, x2, y2] to avoid ops.box_iou error
                     pr_ar_flat = pr_ar.view(-1, pr_ar.shape[-1])[:, :4].to(self.device)
                     ious = ops.box_iou(pr_ar_flat, gt_ar_flat)
                     ar_ious.append(ious.max(dim=1)[0].mean().item()) 
@@ -603,15 +609,12 @@ class CGNetBBoxPrompter:
                 else:
                     ar_ious.append(0.0) 
                     
-                # --------------------------------------------------------- #
-                # 2. Calculate TC BBox IoU
-                # --------------------------------------------------------- #
+                # TC IoU Calculation
                 gt_tc = raw_tc_boxes[b]
                 pr_tc = pred_tc_bboxes[b]
                 
                 if gt_tc is not None and pr_tc is not None:
                     gt_tc_flat = gt_tc.view(-1, 4).to(self.device)
-                    # FIX: Slice to only 4 elements [x1, y1, x2, y2] to avoid ops.box_iou error
                     pr_tc_flat = pr_tc.view(-1, pr_tc.shape[-1])[:, :4].to(self.device)
                     ious = ops.box_iou(pr_tc_flat, gt_tc_flat)
                     tc_ious.append(ious.max(dim=1)[0].mean().item())
@@ -620,9 +623,7 @@ class CGNetBBoxPrompter:
                 else:
                     tc_ious.append(0.0)
 
-                # --------------------------------------------------------- #
-                # 3. Plot and Log n_samples
-                # --------------------------------------------------------- #
+                # Plot and Log n_samples
                 if plots_saved < n_samples:
                     gt_mask = batch['gt_mask'][b]
                     p_ar = pred_ar_bboxes[b]
@@ -646,9 +647,6 @@ class CGNetBBoxPrompter:
                             
                     plots_saved += 1
                     
-        # --------------------------------------------------------- #
-        # 4. Compute and Print Final Metrics
-        # --------------------------------------------------------- #
         avg_ar_iou = np.mean(ar_ious) if len(ar_ious) > 0 else 0.0
         avg_tc_iou = np.mean(tc_ious) if len(tc_ious) > 0 else 0.0
         mean_overall_iou = (avg_ar_iou + avg_tc_iou) / 2.0
