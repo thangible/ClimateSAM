@@ -159,8 +159,8 @@ def validate_cgnet_bboxes(
             # ==== NEW: EXTRACT SAM FEATURES ====
             sam_features = None
             if model is not None:
-                
-                sam_features, _ , sam_img, ori_img_size = model.encode_images(batch['input'])
+                raw_input = batch['input'].to(device, dtype=torch.float32)
+                sam_features, _, _, _ = model.encode_images(raw_input)
                 
                 # raw_input = batch['input'].to(device, dtype=torch.float32)
                 # sam_img = model.input_adapter(raw_input)

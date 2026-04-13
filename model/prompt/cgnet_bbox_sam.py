@@ -244,7 +244,10 @@ class CGNetBBoxPrompter:
                 sam_features = None
                 if sam_model is not None:
                     with torch.no_grad():
-                        sam_features, _ , _ , _ = sam_model.encode_images(batch['input'])
+                        raw_input = batch['input'].to(self.device, dtype=torch.float32)
+                        # Use ClimateSAM's native pipeline! 
+                        # encode_images returns: image_embeddings, interm_embeddings, image_input, ori_img_size
+                        sam_features, _, _, _ = sam_model.encode_images(raw_input)
                 # ===================================
                 
                 raw_ar_boxes = batch['ar_bbox_prompts']
@@ -342,8 +345,7 @@ class CGNetBBoxPrompter:
             if sam_model is not None:
                 with torch.no_grad():
                     raw_input = batch['input'].to(self.device, dtype=torch.float32)
-                    sam_img = sam_model.input_adapter(raw_input)
-                    sam_features = sam_model.image_encoder(sam_img)
+                    sam_features, _, _, _ = sam_model.encode_images(raw_input)
             # ===================================
             
             raw_ar_boxes = batch['ar_bbox_prompts']
@@ -579,8 +581,7 @@ class CGNetBBoxPrompter:
             if sam_model is not None:
                 with torch.no_grad():
                     raw_input = batch['input'].to(self.device, dtype=torch.float32)
-                    sam_img = sam_model.input_adapter(raw_input)
-                    sam_features = sam_model.image_encoder(sam_img)
+                    sam_features, _, _, _ = sam_model.encode_images(raw_input)
             # ===================================
             
             raw_ar_boxes = batch['ar_bbox_prompts']
