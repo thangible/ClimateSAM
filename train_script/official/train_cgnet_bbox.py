@@ -231,7 +231,8 @@ def validate_cgnet_bboxes(
     conf_threshold=0.5,
     iou_threshold=0.4,
     max_samples=None,
-    enlarge_ratio=0
+    enlarge_ratio=0,
+    merge_threshold=10
 ):
     """
     Validate model using direct BBox predictions from CGNetBBoxPrompter
@@ -261,7 +262,7 @@ def validate_cgnet_bboxes(
             
             # 1. Generate BBox prompts directly
             features = batch['cgnet_input'].to(device=device, dtype=torch.float32)
-            prompt_dict = prompter.get_prompts(features, conf_threshold=conf_threshold, iou_threshold=iou_threshold, enlarge_ratio=enlarge_ratio)
+            prompt_dict = prompter.get_prompts(features, conf_threshold=conf_threshold, iou_threshold=iou_threshold, enlarge_ratio=enlarge_ratio, merge_threshold= merge_threshold)
             
             # ================================================================= #
             # NEW: GHOST CATCHER & VISUALIZER
@@ -542,26 +543,24 @@ def main_worker(worker_id, worker_args):
     # Initialize segmentation metrics
     ar_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
     tc_metrics = StreamSegMetrics(class_names=['Background', 'Foreground'])
-
+    
     print("Running final validation with integrated BBox Prompter and SAM...")
-    bbox_configs = [
-        {'enlarge_ratio': 0.0},
-        {'enlarge_ratio': 0.1},
-        {'enlarge_ratio': 0.2},
-        {'enlarge_ratio': 0.3},
-        {'enlarge_ratio': 0.4},
-        {'enlarge_ratio': 0.5},
-        {'enlarge_ratio': 0.6},
-        {'enlarge_ratio': 0.7},
-        {'enlarge_ratio': -0.1},
-        {'enlarge_ratio': -0.2},
-    ]
+    import itertools
+
+    # Define the search grid
+    conf_thresholds = [0.3, 0.5, 0.7]
+    iou_thresholds = [0.3, 0.5, 0.7]
+    merge_thresholds = [10.0, 20.0, 30.0]
+    fixed_enlarge_ratio = 0.1  # Fix this to avoid a massive 4D grid search
+
+    # Generate all combinations
+    hyperparameter_grid = list(itertools.product(conf_thresholds, iou_thresholds, merge_thresholds))
+    
     all_results = []
-    for bbox_config in bbox_configs:
-        enlarge_ratio = bbox_config['enlarge_ratio']
-        print(f"\nValidating with enlarge_ratio={enlarge_ratio}...")
-        # Validate quickly and plot 10 distinct samples
-        ar_iou, tc_iou = cgnetprompter.quick_evaluate(val_dataloader, n_samples=10, save_dir="my_test_plots", name = f"enlarge_{enlarge_ratio}")
+    
+    for conf_thresh, iou_thresh, merge_thresh in hyperparameter_grid:
+        print(f"\nValidating -> Conf: {conf_thresh} | IoU: {iou_thresh} | Merge: {merge_thresh}...")
+        
         results = validate_cgnet_bboxes(
             val_dataloader=val_dataloader,
             ar_metrics=ar_metrics,
@@ -569,25 +568,89 @@ def main_worker(worker_id, worker_args):
             model=climatesam,
             prompter=cgnetprompter,
             device=device,
-            conf_threshold=0.5,
-            iou_threshold=0.4,
+            conf_threshold=conf_thresh,
+            iou_threshold=iou_thresh,
             max_samples=None,
-            enlarge_ratio=enlarge_ratio
-    )
+            enlarge_ratio=fixed_enlarge_ratio,
+            merge_threshold=merge_thresh
+        )
+        
+        # Inject the thresholds into the results dict for the final pandas DataFrame
+        results['conf_threshold'] = conf_thresh
+        results['iou_threshold'] = iou_thresh
+        results['merge_threshold'] = merge_thresh
+        
         all_results.append(results)
-        print(f"Validation completed for enlarge_ratio={enlarge_ratio}. mIoU TC: {results['miou_tc']:.4f}, mIoU AR: {results['miou_ar']:.4f}")
+        print(f"Complete -> TC mIoU: {results['miou_tc']:.4f} | AR mIoU: {results['miou_ar']:.4f} | AR Ghosts: {results['diag_ar_ghost_pct']:.2%}")
 
     # ==================== SAVE RESULTS ====================
-    print("\n" + "="*60)
-    print("RESULTS SUMMARY")
-    print("="*60)
+    print("\n" + "="*80)
+    print("RESULTS SUMMARY (SORTED BY AR mIoU)")
+    print("="*80)
     
-    # Convert to DataFrame for better visualization
+    # Convert to DataFrame, sort to find the best configuration easily
     import pandas as pd
     results_df = pd.DataFrame(all_results)
-    print("="*80)
+    
+    # Reorder columns to put hyperparams first for readability
+    cols = ['conf_threshold', 'iou_threshold', 'merge_threshold', 'enlarge_ratio', 'miou_ar', 'miou_tc', 'diag_ar_avg_bbox_iou', 'diag_tc_avg_bbox_iou']
+    # Add any remaining columns
+    cols.extend([c for c in results_df.columns if c not in cols])
+    results_df = results_df[cols]
+    
+    # Sort by AR mIoU descending to put the best results at the top
+    results_df = results_df.sort_values(by='miou_ar', ascending=False)
+    
+    print("="*120)
     print(results_df.to_string(index=False))
-    print("="*80)
+    print("="*120)
+
+    # print("Running final validation with integrated BBox Prompter and SAM...")
+    # bbox_configs = [
+    #     {'enlarge_ratio': 0.0},
+    #     {'enlarge_ratio': 0.1},
+    #     {'enlarge_ratio': 0.2},
+    #     {'enlarge_ratio': 0.3},
+    #     {'enlarge_ratio': 0.4},
+    #     {'enlarge_ratio': 0.5},
+    #     {'enlarge_ratio': 0.6},
+    #     {'enlarge_ratio': 0.7},
+    #     {'enlarge_ratio': -0.1},
+    #     {'enlarge_ratio': -0.2},
+    # ]
+    # all_results = []
+    # for bbox_config in bbox_configs:
+    #     enlarge_ratio = bbox_config['enlarge_ratio']
+    #     print(f"\nValidating with enlarge_ratio={enlarge_ratio}...")
+    #     # Validate quickly and plot 10 distinct samples
+    #     ar_iou, tc_iou = cgnetprompter.quick_evaluate(val_dataloader, n_samples=10, save_dir="my_test_plots", name = f"enlarge_{enlarge_ratio}")
+    #     results = validate_cgnet_bboxes(
+    #         val_dataloader=val_dataloader,
+    #         ar_metrics=ar_metrics,
+    #         tc_metrics=tc_metrics,
+    #         model=climatesam,
+    #         prompter=cgnetprompter,
+    #         device=device,
+    #         conf_threshold=0.5,
+    #         iou_threshold=0.4,
+    #         max_samples=None,
+    #         enlarge_ratio=enlarge_ratio,
+    #         merge_threshold=10
+    # )
+    #     all_results.append(results)
+    #     print(f"Validation completed for enlarge_ratio={enlarge_ratio}. mIoU TC: {results['miou_tc']:.4f}, mIoU AR: {results['miou_ar']:.4f}, mean AR bbox IoU: {results['diag_ar_avg_bbox_iou']:.4f}, mean TC bbox IoU: {results['diag_tc_avg_bbox_iou']:.4f}")
+
+    # # ==================== SAVE RESULTS ====================
+    # print("\n" + "="*60)
+    # print("RESULTS SUMMARY")
+    # print("="*60)
+    
+    # # Convert to DataFrame for better visualization
+    # import pandas as pd
+    # results_df = pd.DataFrame(all_results)
+    # print("="*80)
+    # print(results_df.to_string(index=False))
+    # print("="*80)
     
     
 if __name__ == '__main__':
