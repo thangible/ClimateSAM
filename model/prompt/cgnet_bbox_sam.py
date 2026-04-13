@@ -396,25 +396,30 @@ class CGNetBBoxPrompter:
             
             # Save visual plot for the very first batch
             if not plot_saved and self.wandb:
-                for i in range(gt_mask.shape[0]):
-                    gt_mask = batch['gt_mask'][i]
+                # FIX: Read the shape from the batch directly
+                for i in range(batch['gt_mask'].shape[0]):
+                    # FIX: Use a new variable name to avoid unbound local errors
+                    current_gt_mask = batch['gt_mask'][i]
                     p_ar = pred_ar_bboxes[i]
                     p_tc = pred_tc_bboxes[i]
 
-                    plot_path = os.path.join(self.exp_dir, f"val_epoch_{epoch}.png")
+                    # FIX: Add _sample_{i} so it doesn't overwrite the same image
+                    plot_path = os.path.join(self.exp_dir, f"val_epoch_{epoch}_sample_{i}.png")
 
                     plot_mask_with_points_and_bbox_with_conf(
-                        mask=gt_mask,
+                        mask=current_gt_mask,
                         ar_bbox=p_ar,
-                    tc_bbox=p_tc,
-                    save_path=plot_path,
-                    title=f"BBox Predictions, Sample {i} - Epoch {epoch}"
-                )
+                        tc_bbox=p_tc,
+                        save_path=plot_path,
+                        title=f"BBox Predictions, Sample {i} - Epoch {epoch}"
+                    )
                 
-                try:
-                    wandb.log({f"val/predictions {i}": wandb.Image(plot_path)}, step=epoch)
-                except Exception as e:
-                    print(f"WandB image log failed: {e}")
+                    try:
+                        # FIX: Indent the wandb log so it logs EVERY image in the loop, 
+                        # and give each image a unique key
+                        wandb.log({f"val/predictions_sample_{i}": wandb.Image(plot_path)}, step=epoch)
+                    except Exception as e:
+                        print(f"WandB image log failed: {e}")
 
                 plot_saved = True
                 
