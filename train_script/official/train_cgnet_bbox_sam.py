@@ -29,7 +29,7 @@ import copy
 import wandb
 
 # Import the new BBox Prompter
-from model.prompt.cgnet_bbox import CGNetBBoxPrompter 
+from model.prompt.cgnet_bbox_sam import CGNetBBoxPrompter 
 
 import torchvision.ops as ops
 
@@ -159,9 +159,12 @@ def validate_cgnet_bboxes(
             # ==== NEW: EXTRACT SAM FEATURES ====
             sam_features = None
             if model is not None:
-                raw_input = batch['input'].to(device, dtype=torch.float32)
-                sam_img = model.input_adapter(raw_input)
-                sam_features = model.image_encoder(sam_img)
+                
+                sam_features, _ , sam_img, ori_img_size = model.encode_images(batch['input'])
+                
+                # raw_input = batch['input'].to(device, dtype=torch.float32)
+                # sam_img = model.input_adapter(raw_input)
+                # sam_features = model.image_encoder(sam_img)
             # ===================================
             
             # 1. Generate BBox prompts directly

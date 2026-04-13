@@ -30,7 +30,7 @@ import copy
 import wandb
 
 # Import the new BBox Prompter
-from model.prompt.cgnet_bbox_sam import CGNetBBoxPrompter 
+from model.prompt.cgnet_bbox import CGNetBBoxPrompter 
 
 import torchvision.ops as ops
 
