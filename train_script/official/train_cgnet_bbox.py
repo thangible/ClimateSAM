@@ -50,18 +50,22 @@ def profile_prompt_errors(gt_bboxes_list, pred_bboxes_list, iou_threshold=0.3):
     for gt, pred in zip(gt_bboxes_list, pred_bboxes_list):
         if gt is None or len(gt) == 0:
             if pred is not None and len(pred) > 0:
-                stats['ghost_prompts'] += len(pred)
-                stats['total_pred_prompts'] += len(pred)
+                # Count the number of boxes dynamically regardless of features
+                num_preds = pred.view(-1, pred.shape[-1]).shape[0]
+                stats['ghost_prompts'] += num_preds
+                stats['total_pred_prompts'] += num_preds
             continue
 
-        gt = gt.view(-1, 4).float()
+        # Safely extract [x1, y1, x2, y2]
+        gt = gt.view(-1, gt.shape[-1])[:, :4].float()
         stats['total_gt_objects'] += len(gt)
 
         if pred is None or len(pred) == 0:
             stats['missed_objects'] += len(gt)
             continue
 
-        pred = pred.view(-1, 4).float()
+        # FIX: Dynamically check shape and slice ONLY the first 4 elements [x1, y1, x2, y2]
+        pred = pred.view(-1, pred.shape[-1])[:, :4].float()
         stats['total_pred_prompts'] += len(pred)
 
         iou_matrix = ops.box_iou(gt, pred)
