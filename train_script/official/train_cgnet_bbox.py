@@ -339,11 +339,16 @@ def validate_cgnet_bboxes(
             # -----------------------
 
             # 2. Package for SAM
+            def strip_conf(bboxes_list):
+                if bboxes_list is None: 
+                    return None
+                return [b[..., :4] if b is not None else None for b in bboxes_list]
+
             combined_prompt_dict = {
                 'ar_point_prompts': None,
                 'tc_point_prompts': None,
-                'ar_bbox_prompts': prompt_dict['ar_bbox_prompts'],
-                'tc_bbox_prompts': prompt_dict['tc_bbox_prompts']
+                'ar_bbox_prompts': strip_conf(prompt_dict['ar_bbox_prompts']),
+                'tc_bbox_prompts': strip_conf(prompt_dict['tc_bbox_prompts'])
             }
             
             # 3. Set inference images
