@@ -295,7 +295,7 @@ class CGNetBBoxPrompter:
             # --------------------------------------------------------- #
             # Validation every 5 epochs or on the final epoch         #
             # --------------------------------------------------------- #
-            if epoch % 5 == 0 or epoch == epochs:
+            if epoch % 5 == 0 or epoch == epochs or epoch == 1:
                 val_loss, val_ar_iou, val_tc_iou = self.validate(val_dataloader, epoch, sam_model=sam_model)
                 print(f"Validation Stats: Loss {val_loss:.4f} | AR BBox IoU: {val_ar_iou:.4f} | TC BBox IoU: {val_tc_iou:.4f}")
                 
@@ -396,14 +396,12 @@ class CGNetBBoxPrompter:
             
             # Save visual plot for the very first batch
             if not plot_saved and self.wandb:
-                # FIX: Read the shape from the batch directly
-                for i in range(batch['gt_mask'].shape[0]):
-                    # FIX: Use a new variable name to avoid unbound local errors
+                # FIX: Use len() since batch['gt_mask'] is a list, not a tensor
+                for i in range(len(batch['gt_mask'])):
                     current_gt_mask = batch['gt_mask'][i]
                     p_ar = pred_ar_bboxes[i]
                     p_tc = pred_tc_bboxes[i]
 
-                    # FIX: Add _sample_{i} so it doesn't overwrite the same image
                     plot_path = os.path.join(self.exp_dir, f"val_epoch_{epoch}_sample_{i}.png")
 
                     plot_mask_with_points_and_bbox_with_conf(
@@ -415,8 +413,6 @@ class CGNetBBoxPrompter:
                     )
                 
                     try:
-                        # FIX: Indent the wandb log so it logs EVERY image in the loop, 
-                        # and give each image a unique key
                         wandb.log({f"val/predictions_sample_{i}": wandb.Image(plot_path)}, step=epoch)
                     except Exception as e:
                         print(f"WandB image log failed: {e}")
