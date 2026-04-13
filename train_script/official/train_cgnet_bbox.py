@@ -9,6 +9,7 @@ for p in (PROJECT_ROOT, TRAIN_SCRIPT_DIR):
     if p not in sys.path:
         sys.path.insert(0, p)
 
+#  python train_script/official/train_cgnet_bbox.py --config input_config_official --sam_type vit_b --image_encoder_mlp_ratio 0.5 --encoder_weights_name infused_token_vit_b_0.5_jitter00504 --pretrained_name exp/best_weights/GOAT_CGNET_BBOX.pth --run_name TRAIN_CG_BBOX --project_name climate-sam-generator --max_epoch_num 100 --wandb
 import random
 import numpy as np
 import torch
@@ -450,18 +451,18 @@ def main_worker(worker_id, worker_args):
     import itertools
 
     # Define the search grid
-    conf_thresholds = [0.3, 0.5, 0.7]
-    iou_thresholds = [0.3, 0.5, 0.7]
-    merge_thresholds = [10.0, 20.0, 30.0]
-    fixed_enlarge_ratio = 0.1  # Fix this to avoid a massive 4D grid search
+    conf_thresholds = [0.1, 0.3]
+    iou_thresholds = [0.5]
+    merge_thresholds = [10.0]
+    fixed_enlarge_ratio = [0.0, 0.1]  # Fix this to avoid a massive 4D grid search
 
     # Generate all combinations
-    hyperparameter_grid = list(itertools.product(conf_thresholds, iou_thresholds, merge_thresholds))
+    hyperparameter_grid = list(itertools.product(conf_thresholds, iou_thresholds, merge_thresholds, fixed_enlarge_ratio))
     
     all_results = []
     
-    for conf_thresh, iou_thresh, merge_thresh in hyperparameter_grid:
-        print(f"\nValidating -> Conf: {conf_thresh} | IoU: {iou_thresh} | Merge: {merge_thresh}...")
+    for conf_thresh, iou_thresh, merge_thresh, enlarge_ratio in hyperparameter_grid:
+        print(f"\nValidating -> Conf: {conf_thresh} | IoU: {iou_thresh} | Merge: {merge_thresh}, Enlarge Ratio: {enlarge_ratio}...")
         
         results = validate_cgnet_bboxes(
             val_dataloader=val_dataloader,
@@ -473,7 +474,7 @@ def main_worker(worker_id, worker_args):
             conf_threshold=conf_thresh,
             iou_threshold=iou_thresh,
             max_samples=None,
-            enlarge_ratio=fixed_enlarge_ratio,
+            enlarge_ratio=enlarge_ratio,
             merge_threshold=merge_thresh
         )
         
@@ -481,6 +482,7 @@ def main_worker(worker_id, worker_args):
         results['conf_threshold'] = conf_thresh
         results['iou_threshold'] = iou_thresh
         results['merge_threshold'] = merge_thresh
+        results['enlarge_ratio'] = enlarge_ratio
         
         all_results.append(results)
         print(f"Complete -> TC mIoU: {results['miou_tc']:.4f} | AR mIoU: {results['miou_ar']:.4f} | AR Ghosts: {results['diag_ar_ghost_pct']:.2%}")
