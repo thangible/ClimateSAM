@@ -1,0 +1,94 @@
+/home/worker1/thang/ClimateSAM/prompter_bench/train.py:179: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:835.)
+  sums[k] = sums.get(k, 0.0) + float(v) * len(mb) / len(chunk)
+[mpg_seg_fold3] epoch 1 3.8s loss 1.8597
+[mpg_seg_fold3] epoch 2 2.8s loss 1.5438 | val_own_Mean FG IoU 0.1581
+[mpg_seg_fold3] epoch 3 2.8s loss 1.4201
+[mpg_seg_fold3] epoch 4 2.9s loss 1.2064 | val_own_Mean FG IoU 0.2426
+[mpg_seg_fold3] epoch 5 2.8s loss 1.1423
+[mpg_seg_fold3] epoch 6 2.8s loss 1.1118 | val_own_Mean FG IoU 0.3334
+[mpg_seg_fold3] epoch 7 2.8s loss 1.0843
+[mpg_seg_fold3] epoch 8 2.8s loss 1.3901 | val_own_Mean FG IoU 0.1907
+[mpg_seg_fold3] epoch 9 2.9s loss 1.4154
+[mpg_seg_fold3] epoch 10 2.8s loss 1.3989 | val_own_Mean FG IoU 0.1907
+[mpg_seg_fold3] epoch 11 2.7s loss 1.4017
+[mpg_seg_fold3] epoch 12 2.8s loss 1.3856 | val_own_Mean FG IoU 0.1883
+[mpg_seg_fold3] epoch 13 2.8s loss 1.3841
+[mpg_seg_fold3] epoch 14 2.7s loss 1.3782 | val_own_Mean FG IoU 0.1995
+[mpg_seg_fold3] epoch 15 2.8s loss 1.3688
+[mpg_seg_fold3] epoch 16 2.5s loss 1.3700 | val_own_Mean FG IoU 0.1832
+[mpg_seg_fold3] epoch 17 2.2s loss 1.3786
+[mpg_seg_fold3] epoch 18 2.6s loss 1.3618 | val_own_Mean FG IoU 0.2025
+[mpg_seg_fold3] epoch 19 2.6s loss 1.3617
+[mpg_seg_fold3] epoch 20 2.5s loss 1.3553 | val_own_Mean FG IoU 0.1995
+[mpg_seg_fold3] epoch 21 2.7s loss 1.3522
+[mpg_seg_fold3] epoch 22 2.7s loss 1.3485 | val_own_Mean FG IoU 0.2052
+[mpg_seg_fold3] epoch 23 2.8s loss 1.3468
+[mpg_seg_fold3] epoch 24 2.8s loss 1.3437 | val_own_Mean FG IoU 0.2033
+[mpg_seg_fold3] epoch 25 2.7s loss 1.3433
+[mpg_seg_fold3] epoch 26 2.7s loss 1.3385 | val_own_Mean FG IoU 0.2072
+[mpg_seg_fold3] epoch 27 2.8s loss 1.3335
+[mpg_seg_fold3] epoch 28 2.8s loss 1.3303 | val_own_Mean FG IoU 0.2075
+[mpg_seg_fold3] epoch 29 2.8s loss 1.3304
+[mpg_seg_fold3] epoch 30 2.8s loss 1.3274 | val_own_Mean FG IoU 0.2084
+[mpg_seg_fold3] epoch 31 2.8s loss 1.3248
+[mpg_seg_fold3] epoch 32 2.8s loss 1.3200 | val_own_Mean FG IoU 0.2037
+[mpg_seg_fold3] epoch 33 2.8s loss 1.3205
+[mpg_seg_fold3] epoch 34 2.8s loss 1.3169 | val_own_Mean FG IoU 0.2064
+[mpg_seg_fold3] epoch 35 2.8s loss 1.3150
+[mpg_seg_fold3] epoch 36 2.8s loss 1.3098 | val_own_Mean FG IoU 0.2072
+[mpg_seg_fold3] epoch 37 2.4s loss 1.3070
+[mpg_seg_fold3] epoch 38 2.6s loss 1.3117 | val_own_Mean FG IoU 0.2082
+[mpg_seg_fold3] epoch 39 2.8s loss 1.3049
+[mpg_seg_fold3] epoch 40 2.8s loss 1.3023 | val_own_Mean FG IoU 0.2083
+[mpg_seg_fold3] epoch 41 2.8s loss 1.2977
+[mpg_seg_fold3] epoch 42 2.7s loss 1.2971 | val_own_Mean FG IoU 0.2063
+[mpg_seg_fold3] epoch 43 2.1s loss 1.2921
+[mpg_seg_fold3] epoch 44 2.3s loss 1.2878 | val_own_Mean FG IoU 0.2079
+[mpg_seg_fold3] epoch 45 2.9s loss 1.2522
+[mpg_seg_fold3] epoch 46 2.8s loss 1.0357 | val_own_Mean FG IoU 0.3672
+[mpg_seg_fold3] epoch 47 2.9s loss 0.9987
+[mpg_seg_fold3] epoch 48 2.9s loss 0.9663 | val_own_Mean FG IoU 0.3884
+[mpg_seg_fold3] epoch 49 2.8s loss 0.9559
+[mpg_seg_fold3] epoch 50 2.7s loss 0.9469 | val_own_Mean FG IoU 0.3866
+[mpg_seg_fold3] epoch 51 2.6s loss 0.9427
+[mpg_seg_fold3] epoch 52 2.6s loss 0.9401 | val_own_Mean FG IoU 0.3869
+[mpg_seg_fold3] epoch 53 2.8s loss 0.9301
+[mpg_seg_fold3] epoch 54 2.8s loss 0.9266 | val_own_Mean FG IoU 0.3911
+[mpg_seg_fold3] epoch 55 2.7s loss 0.9238
+[mpg_seg_fold3] epoch 56 2.7s loss 0.9221 | val_own_Mean FG IoU 0.3906
+[mpg_seg_fold3] epoch 57 2.8s loss 0.9206
+[mpg_seg_fold3] epoch 58 2.7s loss 0.9185 | val_own_Mean FG IoU 0.3904
+[mpg_seg_fold3] epoch 59 2.8s loss 0.9195
+[mpg_seg_fold3] epoch 60 2.6s loss 0.9182 | val_own_Mean FG IoU 0.3905
+{
+  "name": "mpg_seg_fold3",
+  "arch": "mpg",
+  "mode": "seg",
+  "seed": 0,
+  "encoder": "infused_mlp05",
+  "trainable_params": 671138,
+  "best_epoch": 54,
+  "train_time_min": 3.658798396587372,
+  "args": {
+    "encoder": "infused_mlp05",
+    "arch": "mpg",
+    "mode": "seg",
+    "seed": 0,
+    "epochs": 60,
+    "lr": 0.001,
+    "bs": 8,
+    "micro_bs": 8,
+    "aux_weight": 1.0,
+    "init": null,
+    "val_every": 2,
+    "name": "mpg_seg_fold3",
+    "smooth": false,
+    "exclude_fold": 3
+  },
+  "val_own_TC IoU": 0.36444002319811836,
+  "val_own_AR IoU": 0.41783253999724185,
+  "val_own_BG IoU": 0.9460255827399241,
+  "val_own_Mean IoU": 0.5760993819784281,
+  "val_own_Mean FG IoU": 0.3911362815976801
+}

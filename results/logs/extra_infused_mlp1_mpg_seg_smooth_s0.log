@@ -1,0 +1,94 @@
+/home/worker1/thang/ClimateSAM/prompter_bench/train.py:179: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:835.)
+  sums[k] = sums.get(k, 0.0) + float(v) * len(mb) / len(chunk)
+[mpg_seg_smooth_s0] epoch 1 3.9s loss 1.7924
+[mpg_seg_smooth_s0] epoch 2 3.1s loss 1.3107 | val_own_Mean FG IoU 0.2012
+[mpg_seg_smooth_s0] epoch 3 2.9s loss 1.1242
+[mpg_seg_smooth_s0] epoch 4 3.5s loss 1.1079 | val_own_Mean FG IoU 0.3560
+[mpg_seg_smooth_s0] epoch 5 3.4s loss 1.0992
+[mpg_seg_smooth_s0] epoch 6 3.5s loss 1.0741 | val_own_Mean FG IoU 0.3653
+[mpg_seg_smooth_s0] epoch 7 3.4s loss 1.0662
+[mpg_seg_smooth_s0] epoch 8 3.5s loss 1.1003 | val_own_Mean FG IoU 0.3666
+[mpg_seg_smooth_s0] epoch 9 3.5s loss 1.0620
+[mpg_seg_smooth_s0] epoch 10 3.6s loss 1.0416 | val_own_Mean FG IoU 0.3770
+[mpg_seg_smooth_s0] epoch 11 3.5s loss 1.0304
+[mpg_seg_smooth_s0] epoch 12 3.4s loss 1.0025 | val_own_Mean FG IoU 0.3711
+[mpg_seg_smooth_s0] epoch 13 3.5s loss 0.9903
+[mpg_seg_smooth_s0] epoch 14 2.6s loss 0.9861 | val_own_Mean FG IoU 0.3682
+[mpg_seg_smooth_s0] epoch 15 3.4s loss 0.9772
+[mpg_seg_smooth_s0] epoch 16 3.6s loss 0.9710 | val_own_Mean FG IoU 0.3857
+[mpg_seg_smooth_s0] epoch 17 3.4s loss 0.9814
+[mpg_seg_smooth_s0] epoch 18 3.4s loss 0.9626 | val_own_Mean FG IoU 0.3748
+[mpg_seg_smooth_s0] epoch 19 3.5s loss 0.9449
+[mpg_seg_smooth_s0] epoch 20 3.5s loss 0.9552 | val_own_Mean FG IoU 0.3784
+[mpg_seg_smooth_s0] epoch 21 3.5s loss 0.9360
+[mpg_seg_smooth_s0] epoch 22 3.6s loss 0.9197 | val_own_Mean FG IoU 0.3831
+[mpg_seg_smooth_s0] epoch 23 3.6s loss 0.9248
+[mpg_seg_smooth_s0] epoch 24 3.4s loss 0.9328 | val_own_Mean FG IoU 0.3858
+[mpg_seg_smooth_s0] epoch 25 2.7s loss 0.9151
+[mpg_seg_smooth_s0] epoch 26 2.8s loss 0.9422 | val_own_Mean FG IoU 0.3177
+[mpg_seg_smooth_s0] epoch 27 3.5s loss 1.0100
+[mpg_seg_smooth_s0] epoch 28 3.4s loss 0.9583 | val_own_Mean FG IoU 0.3677
+[mpg_seg_smooth_s0] epoch 29 3.0s loss 0.9522
+[mpg_seg_smooth_s0] epoch 30 3.1s loss 0.9119 | val_own_Mean FG IoU 0.3859
+[mpg_seg_smooth_s0] epoch 31 3.4s loss 0.9016
+[mpg_seg_smooth_s0] epoch 32 3.5s loss 0.8908 | val_own_Mean FG IoU 0.3868
+[mpg_seg_smooth_s0] epoch 33 3.6s loss 0.8840
+[mpg_seg_smooth_s0] epoch 34 3.4s loss 0.8773 | val_own_Mean FG IoU 0.3805
+[mpg_seg_smooth_s0] epoch 35 3.5s loss 0.8757
+[mpg_seg_smooth_s0] epoch 36 3.4s loss 0.8726 | val_own_Mean FG IoU 0.3823
+[mpg_seg_smooth_s0] epoch 37 2.7s loss 0.8686
+[mpg_seg_smooth_s0] epoch 38 3.2s loss 0.8698 | val_own_Mean FG IoU 0.3863
+[mpg_seg_smooth_s0] epoch 39 3.4s loss 0.8717
+[mpg_seg_smooth_s0] epoch 40 3.5s loss 0.8603 | val_own_Mean FG IoU 0.3845
+[mpg_seg_smooth_s0] epoch 41 3.4s loss 0.8552
+[mpg_seg_smooth_s0] epoch 42 3.5s loss 0.8539 | val_own_Mean FG IoU 0.3873
+[mpg_seg_smooth_s0] epoch 43 3.0s loss 0.8506
+[mpg_seg_smooth_s0] epoch 44 3.0s loss 0.8469 | val_own_Mean FG IoU 0.3805
+[mpg_seg_smooth_s0] epoch 45 3.5s loss 0.8472
+[mpg_seg_smooth_s0] epoch 46 3.4s loss 0.8441 | val_own_Mean FG IoU 0.3812
+[mpg_seg_smooth_s0] epoch 47 3.5s loss 0.8416
+[mpg_seg_smooth_s0] epoch 48 3.0s loss 0.8406 | val_own_Mean FG IoU 0.3817
+[mpg_seg_smooth_s0] epoch 49 3.0s loss 0.8398
+[mpg_seg_smooth_s0] epoch 50 3.4s loss 0.8375 | val_own_Mean FG IoU 0.3816
+[mpg_seg_smooth_s0] epoch 51 3.5s loss 0.8362
+[mpg_seg_smooth_s0] epoch 52 3.5s loss 0.8347 | val_own_Mean FG IoU 0.3805
+[mpg_seg_smooth_s0] epoch 53 3.5s loss 0.8349
+[mpg_seg_smooth_s0] epoch 54 3.5s loss 0.8328 | val_own_Mean FG IoU 0.3821
+[mpg_seg_smooth_s0] epoch 55 3.5s loss 0.8327
+[mpg_seg_smooth_s0] epoch 56 3.5s loss 0.8320 | val_own_Mean FG IoU 0.3827
+[mpg_seg_smooth_s0] epoch 57 3.6s loss 0.8321
+[mpg_seg_smooth_s0] epoch 58 3.5s loss 0.8303 | val_own_Mean FG IoU 0.3818
+[mpg_seg_smooth_s0] epoch 59 3.4s loss 0.8305
+[mpg_seg_smooth_s0] epoch 60 2.6s loss 0.8301 | val_own_Mean FG IoU 0.3819
+{
+  "name": "mpg_seg_smooth_s0",
+  "arch": "mpg",
+  "mode": "seg",
+  "seed": 0,
+  "encoder": "infused_mlp1",
+  "trainable_params": 671138,
+  "best_epoch": 42,
+  "train_time_min": 4.190726677576701,
+  "args": {
+    "encoder": "infused_mlp1",
+    "arch": "mpg",
+    "mode": "seg",
+    "seed": 0,
+    "epochs": 60,
+    "lr": 0.001,
+    "bs": 8,
+    "micro_bs": 8,
+    "aux_weight": 1.0,
+    "init": null,
+    "val_every": 2,
+    "name": "mpg_seg_smooth_s0",
+    "smooth": true,
+    "exclude_fold": null
+  },
+  "val_own_TC IoU": 0.35920306697427895,
+  "val_own_AR IoU": 0.4154177289808125,
+  "val_own_BG IoU": 0.9466898739773605,
+  "val_own_Mean IoU": 0.5737702233108174,
+  "val_own_Mean FG IoU": 0.38731039797754574
+}

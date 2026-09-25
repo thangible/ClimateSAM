@@ -31,3 +31,69 @@ Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/cs
 [mpg_sam_e2e_s0] epoch 28 22.3s loss 1.5906 | val_sam_Mean FG IoU 0.3559
 [mpg_sam_e2e_s0] epoch 29 20.2s loss 1.5489
 [mpg_sam_e2e_s0] epoch 30 22.9s loss 1.5514 | val_sam_Mean FG IoU 0.3553
+[mpg_sam_e2e_s0] epoch 31 22.9s loss 1.5310
+[mpg_sam_e2e_s0] epoch 32 22.4s loss 1.5126 | val_sam_Mean FG IoU 0.3528
+[mpg_sam_e2e_s0] epoch 33 22.0s loss 1.5001
+[mpg_sam_e2e_s0] epoch 34 22.7s loss 1.4865 | val_sam_Mean FG IoU 0.3580
+[mpg_sam_e2e_s0] epoch 35 21.3s loss 1.4971
+[mpg_sam_e2e_s0] epoch 36 18.0s loss 1.4753 | val_sam_Mean FG IoU 0.3580
+[mpg_sam_e2e_s0] epoch 37 22.6s loss 1.4724
+[mpg_sam_e2e_s0] epoch 38 22.3s loss 1.4562 | val_sam_Mean FG IoU 0.3627
+[mpg_sam_e2e_s0] epoch 39 22.6s loss 1.4559
+[mpg_sam_e2e_s0] epoch 40 22.0s loss 1.4381 | val_sam_Mean FG IoU 0.3569
+[mpg_sam_e2e_s0] epoch 41 20.8s loss 1.4324
+[mpg_sam_e2e_s0] epoch 42 22.7s loss 1.4277 | val_sam_Mean FG IoU 0.3598
+[mpg_sam_e2e_s0] epoch 43 22.0s loss 1.4207
+[mpg_sam_e2e_s0] epoch 44 21.5s loss 1.4102 | val_sam_Mean FG IoU 0.3606
+[mpg_sam_e2e_s0] epoch 45 22.5s loss 1.4140
+[mpg_sam_e2e_s0] epoch 46 22.1s loss 1.4043 | val_sam_Mean FG IoU 0.3630
+[mpg_sam_e2e_s0] epoch 47 19.0s loss 1.3948
+[mpg_sam_e2e_s0] epoch 48 21.4s loss 1.3890 | val_sam_Mean FG IoU 0.3628
+[mpg_sam_e2e_s0] epoch 49 22.5s loss 1.3823
+[mpg_sam_e2e_s0] epoch 50 21.9s loss 1.3809 | val_sam_Mean FG IoU 0.3608
+[mpg_sam_e2e_s0] epoch 51 21.7s loss 1.3779
+[mpg_sam_e2e_s0] epoch 52 22.3s loss 1.3740 | val_sam_Mean FG IoU 0.3553
+[mpg_sam_e2e_s0] epoch 53 21.2s loss 1.3691
+[mpg_sam_e2e_s0] epoch 54 21.9s loss 1.3678 | val_sam_Mean FG IoU 0.3537
+[mpg_sam_e2e_s0] epoch 55 22.1s loss 1.3654
+[mpg_sam_e2e_s0] epoch 56 21.8s loss 1.3654 | val_sam_Mean FG IoU 0.3593
+[mpg_sam_e2e_s0] epoch 57 21.7s loss 1.3650
+[mpg_sam_e2e_s0] epoch 58 17.3s loss 1.3593 | val_sam_Mean FG IoU 0.3571
+[mpg_sam_e2e_s0] epoch 59 21.7s loss 1.3608
+[mpg_sam_e2e_s0] epoch 60 22.4s loss 1.3588 | val_sam_Mean FG IoU 0.3570
+{
+  "name": "mpg_sam_e2e_s0",
+  "arch": "mpg",
+  "mode": "sam",
+  "seed": 0,
+  "encoder": "infused_mlp1",
+  "trainable_params": 671138,
+  "best_epoch": 26,
+  "train_time_min": 27.369864292939504,
+  "args": {
+    "encoder": "infused_mlp1",
+    "arch": "mpg",
+    "mode": "sam",
+    "seed": 0,
+    "epochs": 60,
+    "lr": 0.001,
+    "bs": 8,
+    "micro_bs": 8,
+    "aux_weight": 0.5,
+    "init": null,
+    "val_every": 2,
+    "name": "mpg_sam_e2e_s0",
+    "smooth": false,
+    "exclude_fold": null
+  },
+  "val_own_TC IoU": 0.3526111406937933,
+  "val_own_AR IoU": 0.38476089195292706,
+  "val_own_BG IoU": 0.949027633440522,
+  "val_own_Mean IoU": 0.5621332220290808,
+  "val_own_Mean FG IoU": 0.3686860163233602,
+  "val_sam_TC IoU": 0.3434637254394109,
+  "val_sam_AR IoU": 0.3958305612188552,
+  "val_sam_BG IoU": 0.9359744067102447,
+  "val_sam_Mean IoU": 0.5584228977895036,
+  "val_sam_Mean FG IoU": 0.36964714332913307
+}

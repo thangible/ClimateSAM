@@ -1,0 +1,69 @@
+/home/worker1/thang/ClimateSAM/prompter_bench/train.py:179: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:835.)
+  sums[k] = sums.get(k, 0.0) + float(v) * len(mb) / len(chunk)
+[mpg_twostage_s2] epoch 1 15.7s loss 2.1418
+[mpg_twostage_s2] epoch 2 14.9s loss 2.1318 | val_sam_Mean FG IoU 0.3758
+[mpg_twostage_s2] epoch 3 15.8s loss 2.1256
+[mpg_twostage_s2] epoch 4 16.8s loss 2.1160 | val_sam_Mean FG IoU 0.3734
+[mpg_twostage_s2] epoch 5 16.9s loss 2.1132
+[mpg_twostage_s2] epoch 6 17.0s loss 2.1027 | val_sam_Mean FG IoU 0.3711
+[mpg_twostage_s2] epoch 7 16.0s loss 2.1019
+[mpg_twostage_s2] epoch 8 10.7s loss 2.0974 | val_sam_Mean FG IoU 0.3767
+[mpg_twostage_s2] epoch 9 15.0s loss 2.0926
+[mpg_twostage_s2] epoch 10 14.6s loss 2.0876 | val_sam_Mean FG IoU 0.3704
+[mpg_twostage_s2] epoch 11 14.4s loss 2.0847
+[mpg_twostage_s2] epoch 12 14.6s loss 2.0800 | val_sam_Mean FG IoU 0.3748
+[mpg_twostage_s2] epoch 13 16.0s loss 2.0806
+[mpg_twostage_s2] epoch 14 17.3s loss 2.0780 | val_sam_Mean FG IoU 0.3747
+[mpg_twostage_s2] epoch 15 17.4s loss 2.0728
+[mpg_twostage_s2] epoch 16 17.2s loss 2.0715 | val_sam_Mean FG IoU 0.3767
+[mpg_twostage_s2] epoch 17 16.3s loss 2.0725
+[mpg_twostage_s2] epoch 18 17.5s loss 2.0700 | val_sam_Mean FG IoU 0.3709
+[mpg_twostage_s2] epoch 19 15.2s loss 2.0636
+[mpg_twostage_s2] epoch 20 14.7s loss 2.0638 | val_sam_Mean FG IoU 0.3705
+[mpg_twostage_s2] epoch 21 14.9s loss 2.0632
+[mpg_twostage_s2] epoch 22 14.6s loss 2.0577 | val_sam_Mean FG IoU 0.3733
+[mpg_twostage_s2] epoch 23 14.6s loss 2.0604
+[mpg_twostage_s2] epoch 24 14.7s loss 2.0562 | val_sam_Mean FG IoU 0.3752
+[mpg_twostage_s2] epoch 25 13.9s loss 2.0577
+[mpg_twostage_s2] epoch 26 14.5s loss 2.0540 | val_sam_Mean FG IoU 0.3720
+[mpg_twostage_s2] epoch 27 14.7s loss 2.0571
+[mpg_twostage_s2] epoch 28 14.8s loss 2.0559 | val_sam_Mean FG IoU 0.3731
+[mpg_twostage_s2] epoch 29 14.7s loss 2.0523
+[mpg_twostage_s2] epoch 30 14.7s loss 2.0542 | val_sam_Mean FG IoU 0.3737
+{
+  "name": "mpg_twostage_s2",
+  "arch": "mpg",
+  "mode": "sam",
+  "seed": 2,
+  "encoder": "infused_mlp05",
+  "trainable_params": 671138,
+  "best_epoch": 16,
+  "train_time_min": 8.158650394280752,
+  "args": {
+    "encoder": "infused_mlp05",
+    "arch": "mpg",
+    "mode": "sam",
+    "seed": 2,
+    "epochs": 30,
+    "lr": 0.0001,
+    "bs": 8,
+    "micro_bs": 8,
+    "aux_weight": 1.0,
+    "init": "results/runs/infused_mlp05/mpg_seg_s2/best.pth",
+    "val_every": 2,
+    "name": "mpg_twostage_s2",
+    "smooth": false,
+    "exclude_fold": null
+  },
+  "val_own_TC IoU": 0.3571149540679383,
+  "val_own_AR IoU": 0.4057547107403713,
+  "val_own_BG IoU": 0.9421645164008747,
+  "val_own_Mean IoU": 0.568344727069728,
+  "val_own_Mean FG IoU": 0.38143483240415477,
+  "val_sam_TC IoU": 0.3533870631830024,
+  "val_sam_AR IoU": 0.4000149665821465,
+  "val_sam_BG IoU": 0.9368764622413549,
+  "val_sam_Mean IoU": 0.5634261640021679,
+  "val_sam_Mean FG IoU": 0.37670101488257446
+}

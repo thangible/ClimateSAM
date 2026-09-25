@@ -1,0 +1,68 @@
+prompts (hybrid):   0%|          | 0/18 [00:00<?, ?it/s]prompts (hybrid):   6%|▌         | 1/18 [00:00<00:08,  1.92it/s]prompts (hybrid):  17%|█▋        | 3/18 [00:00<00:02,  5.04it/s]prompts (hybrid):  28%|██▊       | 5/18 [00:00<00:01,  7.44it/s]prompts (hybrid):  39%|███▉      | 7/18 [00:00<00:01,  9.32it/s]prompts (hybrid):  50%|█████     | 9/18 [00:01<00:00, 10.30it/s]prompts (hybrid):  61%|██████    | 11/18 [00:01<00:00, 11.24it/s]prompts (hybrid):  72%|███████▏  | 13/18 [00:01<00:00, 11.25it/s]prompts (hybrid):  83%|████████▎ | 15/18 [00:01<00:00,  9.79it/s]prompts (hybrid):  94%|█████████▍| 17/18 [00:01<00:00,  9.13it/s]prompts (hybrid): 100%|██████████| 18/18 [00:02<00:00,  8.93it/s]                                                                 prompts (hybrid):   0%|          | 0/18 [00:00<?, ?it/s]prompts (hybrid):  11%|█         | 2/18 [00:00<00:01, 11.95it/s]prompts (hybrid):  22%|██▏       | 4/18 [00:00<00:01, 10.00it/s]prompts (hybrid):  33%|███▎      | 6/18 [00:00<00:01,  9.75it/s]prompts (hybrid):  44%|████▍     | 8/18 [00:00<00:00, 10.99it/s]prompts (hybrid):  56%|█████▌    | 10/18 [00:01<00:00,  9.37it/s]prompts (hybrid):  67%|██████▋   | 12/18 [00:01<00:00, 10.82it/s]prompts (hybrid):  78%|███████▊  | 14/18 [00:01<00:00, 11.21it/s]prompts (hybrid):  89%|████████▉ | 16/18 [00:01<00:00, 11.82it/s]prompts (hybrid): 100%|██████████| 18/18 [00:01<00:00, 12.13it/s]                                                                 prompts (hybrid):   0%|          | 0/18 [00:00<?, ?it/s]prompts (hybrid):  11%|█         | 2/18 [00:00<00:01, 12.00it/s]prompts (hybrid):  22%|██▏       | 4/18 [00:00<00:01, 12.30it/s]prompts (hybrid):  33%|███▎      | 6/18 [00:00<00:00, 14.20it/s]prompts (hybrid):  44%|████▍     | 8/18 [00:00<00:00, 13.82it/s]prompts (hybrid):  56%|█████▌    | 10/18 [00:00<00:00, 14.06it/s]prompts (hybrid):  67%|██████▋   | 12/18 [00:00<00:00, 12.01it/s]prompts (hybrid):  78%|███████▊  | 14/18 [00:01<00:00, 11.22it/s]prompts (hybrid):  89%|████████▉ | 16/18 [00:01<00:00, 10.43it/s]prompts (hybrid): 100%|██████████| 18/18 [00:01<00:00, 11.06it/s]                                                                 prompts (hybrid):   0%|          | 0/18 [00:00<?, ?it/s]prompts (hybrid):   6%|▌         | 1/18 [00:00<00:03,  5.64it/s]prompts (hybrid):  17%|█▋        | 3/18 [00:00<00:01,  8.13it/s]prompts (hybrid):  22%|██▏       | 4/18 [00:00<00:01,  8.28it/s]prompts (hybrid):  28%|██▊       | 5/18 [00:00<00:01,  8.68it/s]prompts (hybrid):  33%|███▎      | 6/18 [00:00<00:01,  8.16it/s]prompts (hybrid):  39%|███▉      | 7/18 [00:00<00:01,  8.43it/s]prompts (hybrid):  44%|████▍     | 8/18 [00:00<00:01,  8.11it/s]prompts (hybrid):  56%|█████▌    | 10/18 [00:01<00:00, 10.35it/s]prompts (hybrid):  67%|██████▋   | 12/18 [00:01<00:00, 10.14it/s]prompts (hybrid):  78%|███████▊  | 14/18 [00:01<00:00,  9.58it/s]prompts (hybrid):  89%|████████▉ | 16/18 [00:01<00:00, 10.43it/s]prompts (hybrid): 100%|██████████| 18/18 [00:01<00:00, 11.15it/s]                                                                 prompts (hybrid):   0%|          | 0/18 [00:00<?, ?it/s]prompts (hybrid):   6%|▌         | 1/18 [00:00<00:01,  8.70it/s]prompts (hybrid):  17%|█▋        | 3/18 [00:00<00:01, 11.90it/s]prompts (hybrid):  28%|██▊       | 5/18 [00:00<00:01, 11.24it/s]prompts (hybrid):  44%|████▍     | 8/18 [00:00<00:00, 14.57it/s]prompts (hybrid):  56%|█████▌    | 10/18 [00:00<00:00, 12.68it/s]prompts (hybrid):  67%|██████▋   | 12/18 [00:00<00:00, 11.82it/s]prompts (hybrid):  78%|███████▊  | 14/18 [00:01<00:00, 11.21it/s]prompts (hybrid):  89%|████████▉ | 16/18 [00:01<00:00, 11.21it/s]prompts (hybrid): 100%|██████████| 18/18 [00:01<00:00, 11.13it/s]                                                                 prompts (hybrid):   0%|          | 0/10 [00:00<?, ?it/s]prompts (hybrid):  10%|█         | 1/10 [00:00<00:01,  8.25it/s]prompts (hybrid):  20%|██        | 2/10 [00:00<00:01,  7.98it/s]prompts (hybrid):  40%|████      | 4/10 [00:00<00:00,  9.68it/s]prompts (hybrid):  50%|█████     | 5/10 [00:00<00:00,  9.60it/s]prompts (hybrid):  70%|███████   | 7/10 [00:00<00:00, 10.39it/s]prompts (hybrid):  90%|█████████ | 9/10 [00:00<00:00,  9.61it/s]prompts (hybrid): 100%|██████████| 10/10 [00:01<00:00,  8.89it/s]                                                                 prompts (hybrid):   0%|          | 0/16 [00:00<?, ?it/s]prompts (hybrid):  12%|█▎        | 2/16 [00:00<00:01,  9.60it/s]prompts (hybrid):  19%|█▉        | 3/16 [00:00<00:01,  9.14it/s]prompts (hybrid):  25%|██▌       | 4/16 [00:00<00:01,  8.23it/s]prompts (hybrid):  31%|███▏      | 5/16 [00:00<00:01,  8.19it/s]prompts (hybrid):  38%|███▊      | 6/16 [00:00<00:01,  8.00it/s]prompts (hybrid):  44%|████▍     | 7/16 [00:00<00:01,  8.34it/s]prompts (hybrid):  50%|█████     | 8/16 [00:00<00:00,  8.01it/s]prompts (hybrid):  56%|█████▋    | 9/16 [00:01<00:00,  8.34it/s]prompts (hybrid):  62%|██████▎   | 10/16 [00:01<00:00,  7.79it/s]prompts (hybrid):  69%|██████▉   | 11/16 [00:01<00:00,  8.02it/s]prompts (hybrid):  75%|███████▌  | 12/16 [00:01<00:00,  7.66it/s]prompts (hybrid):  81%|████████▏ | 13/16 [00:01<00:00,  7.57it/s]prompts (hybrid):  88%|████████▊ | 14/16 [00:01<00:00,  7.76it/s]prompts (hybrid):  94%|█████████▍| 15/16 [00:01<00:00,  7.90it/s]                                                                 /home/worker1/thang/ClimateSAM/prompter_bench/train_decoder.py:172: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:835.)
+  total += float(loss) / 8
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 1 loss 1.0621 val FG IoU 0.3886
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 2 loss 1.0060 val FG IoU 0.3813
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 3 loss 1.0130 val FG IoU 0.3852
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 4 loss 0.9987 val FG IoU 0.3849
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 5 loss 0.9962 val FG IoU 0.3853
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 6 loss 0.9920 val FG IoU 0.3855
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 7 loss 0.9880 val FG IoU 0.3844
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 8 loss 0.9900 val FG IoU 0.3830
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 9 loss 0.9831 val FG IoU 0.3852
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 10 loss 0.9868 val FG IoU 0.3789
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 11 loss 0.9833 val FG IoU 0.3855
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 12 loss 0.9824 val FG IoU 0.3852
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 13 loss 0.9754 val FG IoU 0.3859
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 14 loss 0.9741 val FG IoU 0.3845
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 15 loss 0.9696 val FG IoU 0.3837
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 16 loss 0.9618 val FG IoU 0.3863
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 17 loss 0.9584 val FG IoU 0.3857
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 18 loss 0.9572 val FG IoU 0.3854
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 19 loss 0.9524 val FG IoU 0.3834
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 20 loss 0.9470 val FG IoU 0.3829
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 21 loss 0.9450 val FG IoU 0.3846
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 22 loss 0.9405 val FG IoU 0.3823
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 23 loss 0.9397 val FG IoU 0.3840
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 24 loss 0.9362 val FG IoU 0.3811
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 25 loss 0.9350 val FG IoU 0.3833
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 26 loss 0.9331 val FG IoU 0.3808
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 27 loss 0.9318 val FG IoU 0.3839
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 28 loss 0.9306 val FG IoU 0.3842
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 29 loss 0.9294 val FG IoU 0.3832
+[decoder_adapt_mpg_seg_s0_hybrid_oof_s0] epoch 30 loss 0.9290 val FG IoU 0.3836
+{
+  "prompter mask": {
+    "TC IoU": 0.3457687966098558,
+    "AR IoU": 0.4140792746556422,
+    "BG IoU": 0.9442590020420635,
+    "Mean IoU": 0.5680356911025205,
+    "Mean FG IoU": 0.379924035632749
+  },
+  "SAM, Phase-1 decoder": {
+    "TC IoU": 0.344181252053933,
+    "AR IoU": 0.3969995973378234,
+    "BG IoU": 0.9495582363756729,
+    "Mean IoU": 0.5635796952558098,
+    "Mean FG IoU": 0.3705904246958782,
+    "TC recall": 0.6536312849162011,
+    "TC precision": 0.5918367346938775,
+    "TC objects": 196,
+    "AR recall": 0.9106280193236715,
+    "AR precision": 0.6541471048513302,
+    "AR objects": 639
+  },
+  "SAM, adapted decoder": {
+    "TC IoU": 0.3470263483965868,
+    "AR IoU": 0.40515876745059104,
+    "BG IoU": 0.9482850392683916,
+    "Mean IoU": 0.5668233850385231,
+    "Mean FG IoU": 0.3760925579235889,
+    "TC recall": 0.6480446927374302,
+    "TC precision": 0.5979381443298969,
+    "TC objects": 194,
+    "AR recall": 0.9396135265700483,
+    "AR precision": 0.6395864106351551,
+    "AR objects": 677
+  }
+}

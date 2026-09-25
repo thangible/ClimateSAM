@@ -1,0 +1,99 @@
+/home/worker1/thang/ClimateSAM/prompter_bench/train.py:179: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:835.)
+  sums[k] = sums.get(k, 0.0) + float(v) * len(mb) / len(chunk)
+[mpg_sam_e2e_s0] epoch 1 17.0s loss 3.2201
+[mpg_sam_e2e_s0] epoch 2 32.9s loss 2.7195 | val_sam_Mean FG IoU 0.1589
+[mpg_sam_e2e_s0] epoch 3 37.8s loss 2.6775
+[mpg_sam_e2e_s0] epoch 4 10.6s loss 2.5288 | val_sam_Mean FG IoU 0.1658
+[mpg_sam_e2e_s0] epoch 5 10.8s loss 2.4928
+[mpg_sam_e2e_s0] epoch 6 33.0s loss 2.5983 | val_sam_Mean FG IoU 0.1767
+[mpg_sam_e2e_s0] epoch 7 42.7s loss 2.6130
+[mpg_sam_e2e_s0] epoch 8 45.2s loss 2.5824 | val_sam_Mean FG IoU 0.1829
+[mpg_sam_e2e_s0] epoch 9 44.8s loss 2.3410
+[mpg_sam_e2e_s0] epoch 10 44.8s loss 2.2106 | val_sam_Mean FG IoU 0.2743
+[mpg_sam_e2e_s0] epoch 11 40.3s loss 2.0432
+[mpg_sam_e2e_s0] epoch 12 28.4s loss 1.8918 | val_sam_Mean FG IoU 0.3540
+[mpg_sam_e2e_s0] epoch 13 27.0s loss 1.8387
+[mpg_sam_e2e_s0] epoch 14 27.4s loss 1.8089 | val_sam_Mean FG IoU 0.3200
+[mpg_sam_e2e_s0] epoch 15 23.6s loss 1.7605
+[mpg_sam_e2e_s0] epoch 16 18.3s loss 1.7488 | val_sam_Mean FG IoU 0.3720
+[mpg_sam_e2e_s0] epoch 17 22.4s loss 1.7142
+[mpg_sam_e2e_s0] epoch 18 22.4s loss 1.6912 | val_sam_Mean FG IoU 0.3407
+[mpg_sam_e2e_s0] epoch 19 22.5s loss 1.6685
+[mpg_sam_e2e_s0] epoch 20 17.5s loss 1.6560 | val_sam_Mean FG IoU 0.3435
+[mpg_sam_e2e_s0] epoch 21 22.3s loss 1.6428
+[mpg_sam_e2e_s0] epoch 22 22.1s loss 1.6422 | val_sam_Mean FG IoU 0.3500
+[mpg_sam_e2e_s0] epoch 23 20.7s loss 1.6147
+[mpg_sam_e2e_s0] epoch 24 21.7s loss 1.5889 | val_sam_Mean FG IoU 0.3672
+[mpg_sam_e2e_s0] epoch 25 22.1s loss 1.5769
+[mpg_sam_e2e_s0] epoch 26 21.5s loss 1.5697 | val_sam_Mean FG IoU 0.3664
+[mpg_sam_e2e_s0] epoch 27 21.8s loss 1.5541
+[mpg_sam_e2e_s0] epoch 28 21.3s loss 1.5357 | val_sam_Mean FG IoU 0.3590
+[mpg_sam_e2e_s0] epoch 29 21.3s loss 1.5135
+[mpg_sam_e2e_s0] epoch 30 16.8s loss 1.4925 | val_sam_Mean FG IoU 0.3549
+[mpg_sam_e2e_s0] epoch 31 21.1s loss 1.4980
+[mpg_sam_e2e_s0] epoch 32 21.0s loss 1.4659 | val_sam_Mean FG IoU 0.3729
+[mpg_sam_e2e_s0] epoch 33 22.9s loss 1.4553
+[mpg_sam_e2e_s0] epoch 34 22.8s loss 1.4495 | val_sam_Mean FG IoU 0.3616
+[mpg_sam_e2e_s0] epoch 35 22.7s loss 1.4309
+[mpg_sam_e2e_s0] epoch 36 22.9s loss 1.4309 | val_sam_Mean FG IoU 0.3625
+[mpg_sam_e2e_s0] epoch 37 19.6s loss 1.4254
+[mpg_sam_e2e_s0] epoch 38 20.7s loss 1.4085 | val_sam_Mean FG IoU 0.3510
+[mpg_sam_e2e_s0] epoch 39 20.4s loss 1.4048
+[mpg_sam_e2e_s0] epoch 40 20.5s loss 1.3995 | val_sam_Mean FG IoU 0.3526
+[mpg_sam_e2e_s0] epoch 41 17.6s loss 1.3863
+[mpg_sam_e2e_s0] epoch 42 17.8s loss 1.3839 | val_sam_Mean FG IoU 0.3669
+[mpg_sam_e2e_s0] epoch 43 17.6s loss 1.3836
+[mpg_sam_e2e_s0] epoch 44 17.4s loss 1.3718 | val_sam_Mean FG IoU 0.3635
+[mpg_sam_e2e_s0] epoch 45 16.7s loss 1.3603
+[mpg_sam_e2e_s0] epoch 46 17.7s loss 1.3523 | val_sam_Mean FG IoU 0.3522
+[mpg_sam_e2e_s0] epoch 47 16.2s loss 1.3476
+[mpg_sam_e2e_s0] epoch 48 17.4s loss 1.3415 | val_sam_Mean FG IoU 0.3558
+[mpg_sam_e2e_s0] epoch 49 17.2s loss 1.3409
+[mpg_sam_e2e_s0] epoch 50 17.1s loss 1.3363 | val_sam_Mean FG IoU 0.3633
+[mpg_sam_e2e_s0] epoch 51 17.3s loss 1.3322
+[mpg_sam_e2e_s0] epoch 52 15.3s loss 1.3281 | val_sam_Mean FG IoU 0.3596
+[mpg_sam_e2e_s0] epoch 53 15.3s loss 1.3314
+[mpg_sam_e2e_s0] epoch 54 15.1s loss 1.3234 | val_sam_Mean FG IoU 0.3530
+[mpg_sam_e2e_s0] epoch 55 15.1s loss 1.3191
+[mpg_sam_e2e_s0] epoch 56 15.1s loss 1.3175 | val_sam_Mean FG IoU 0.3593
+[mpg_sam_e2e_s0] epoch 57 15.0s loss 1.3196
+[mpg_sam_e2e_s0] epoch 58 14.9s loss 1.3156 | val_sam_Mean FG IoU 0.3518
+[mpg_sam_e2e_s0] epoch 59 14.7s loss 1.3156
+[mpg_sam_e2e_s0] epoch 60 14.1s loss 1.3164 | val_sam_Mean FG IoU 0.3536
+{
+  "name": "mpg_sam_e2e_s0",
+  "arch": "mpg",
+  "mode": "sam",
+  "seed": 0,
+  "encoder": "infused_mlp05",
+  "trainable_params": 671138,
+  "best_epoch": 32,
+  "train_time_min": 23.60556125243505,
+  "args": {
+    "encoder": "infused_mlp05",
+    "arch": "mpg",
+    "mode": "sam",
+    "seed": 0,
+    "epochs": 60,
+    "lr": 0.001,
+    "bs": 8,
+    "micro_bs": 8,
+    "aux_weight": 0.5,
+    "init": null,
+    "val_every": 2,
+    "name": "mpg_sam_e2e_s0",
+    "smooth": false,
+    "exclude_fold": null
+  },
+  "val_own_TC IoU": 0.34204120272280575,
+  "val_own_AR IoU": 0.3552864528300794,
+  "val_own_BG IoU": 0.9508473127294087,
+  "val_own_Mean IoU": 0.549391656094098,
+  "val_own_Mean FG IoU": 0.34866382777644256,
+  "val_sam_TC IoU": 0.34177531761645935,
+  "val_sam_AR IoU": 0.4039742330300346,
+  "val_sam_BG IoU": 0.9415070120061934,
+  "val_sam_Mean IoU": 0.5624188542175624,
+  "val_sam_Mean FG IoU": 0.372874775323247
+}

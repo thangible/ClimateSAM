@@ -27,3 +27,66 @@ Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/cs
 [msf_seg_s0] epoch 24 104.9s loss 1.8265 | val_own_Mean FG IoU 0.3556
 [msf_seg_s0] epoch 25 102.1s loss 1.8339
 [msf_seg_s0] epoch 26 80.2s loss 1.8269 | val_own_Mean FG IoU 0.3783
+[msf_seg_s0] epoch 27 86.7s loss 1.8366
+[msf_seg_s0] epoch 28 84.0s loss 1.8323 | val_own_Mean FG IoU 0.3726
+[msf_seg_s0] epoch 29 86.8s loss 1.8017
+[msf_seg_s0] epoch 30 85.7s loss 1.7743 | val_own_Mean FG IoU 0.3799
+[msf_seg_s0] epoch 31 84.5s loss 1.7831
+[msf_seg_s0] epoch 32 85.1s loss 1.7656 | val_own_Mean FG IoU 0.3762
+[msf_seg_s0] epoch 33 84.9s loss 1.7408
+[msf_seg_s0] epoch 34 83.0s loss 1.7293 | val_own_Mean FG IoU 0.3704
+[msf_seg_s0] epoch 35 83.5s loss 1.7214
+[msf_seg_s0] epoch 36 89.0s loss 1.7652 | val_own_Mean FG IoU 0.3708
+[msf_seg_s0] epoch 37 83.2s loss 1.7670
+[msf_seg_s0] epoch 38 90.8s loss 1.7273 | val_own_Mean FG IoU 0.3708
+[msf_seg_s0] epoch 39 91.4s loss 1.7384
+[msf_seg_s0] epoch 40 91.3s loss 1.7102 | val_own_Mean FG IoU 0.3783
+[msf_seg_s0] epoch 41 91.3s loss 1.7045
+[msf_seg_s0] epoch 42 90.3s loss 1.6966 | val_own_Mean FG IoU 0.3795
+[msf_seg_s0] epoch 43 91.0s loss 1.6844
+[msf_seg_s0] epoch 44 90.4s loss 1.6761 | val_own_Mean FG IoU 0.3750
+[msf_seg_s0] epoch 45 89.3s loss 1.6772
+[msf_seg_s0] epoch 46 89.2s loss 1.6672 | val_own_Mean FG IoU 0.3751
+[msf_seg_s0] epoch 47 90.5s loss 1.6663
+[msf_seg_s0] epoch 48 90.1s loss 1.6605 | val_own_Mean FG IoU 0.3776
+[msf_seg_s0] epoch 49 90.5s loss 1.6591
+[msf_seg_s0] epoch 50 89.9s loss 1.6546 | val_own_Mean FG IoU 0.3768
+[msf_seg_s0] epoch 51 90.3s loss 1.6506
+[msf_seg_s0] epoch 52 85.7s loss 1.6490 | val_own_Mean FG IoU 0.3756
+[msf_seg_s0] epoch 53 74.5s loss 1.6488
+[msf_seg_s0] epoch 54 91.7s loss 1.6445 | val_own_Mean FG IoU 0.3758
+[msf_seg_s0] epoch 55 92.4s loss 1.6446
+[msf_seg_s0] epoch 56 91.7s loss 1.6432 | val_own_Mean FG IoU 0.3775
+[msf_seg_s0] epoch 57 89.5s loss 1.6435
+[msf_seg_s0] epoch 58 90.3s loss 1.6397 | val_own_Mean FG IoU 0.3767
+[msf_seg_s0] epoch 59 89.0s loss 1.6400
+[msf_seg_s0] epoch 60 90.0s loss 1.6378 | val_own_Mean FG IoU 0.3768
+{
+  "name": "msf_seg_s0",
+  "arch": "msf",
+  "mode": "seg",
+  "seed": 0,
+  "encoder": "infused_mlp1",
+  "trainable_params": 1406474,
+  "best_epoch": 30,
+  "train_time_min": 89.44080890019735,
+  "args": {
+    "encoder": "infused_mlp1",
+    "arch": "msf",
+    "mode": "seg",
+    "seed": 0,
+    "epochs": 60,
+    "lr": 0.001,
+    "bs": 8,
+    "micro_bs": 2,
+    "aux_weight": 1.0,
+    "init": null,
+    "val_every": 2,
+    "name": "msf_seg_s0"
+  },
+  "val_own_TC IoU": 0.35958932052037534,
+  "val_own_AR IoU": 0.4001981492407085,
+  "val_own_BG IoU": 0.9482984717684653,
+  "val_own_Mean IoU": 0.5693619805098497,
+  "val_own_Mean FG IoU": 0.3798937348805419
+}

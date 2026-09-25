@@ -1,0 +1,29 @@
+{
+  "name": "msf_seg_s0",
+  "arch": "msf",
+  "mode": "seg",
+  "seed": 0,
+  "encoder": "infused_mlp1",
+  "trainable_params": 1406474,
+  "best_epoch": 30,
+  "train_time_min": 89.44080890019735,
+  "args": {
+    "encoder": "infused_mlp1",
+    "arch": "msf",
+    "mode": "seg",
+    "seed": 0,
+    "epochs": 60,
+    "lr": 0.001,
+    "bs": 8,
+    "micro_bs": 2,
+    "aux_weight": 1.0,
+    "init": null,
+    "val_every": 2,
+    "name": "msf_seg_s0"
+  },
+  "val_own_TC IoU": 0.35958932052037534,
+  "val_own_AR IoU": 0.4001981492407085,
+  "val_own_BG IoU": 0.9482984717684653,
+  "val_own_Mean IoU": 0.5693619805098497,
+  "val_own_Mean FG IoU": 0.3798937348805419
+}

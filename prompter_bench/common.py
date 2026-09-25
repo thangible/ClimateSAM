@@ -240,17 +240,22 @@ class SegMetrics:
         self.tp, self.fp, self.fn = {}, {}, {}
         for c in ('TC', 'AR', 'BG'):
             self.tp[c] = self.fp[c] = self.fn[c] = 0
+        self.per_image = []  # [tp, fp, fn] x (TC, AR, BG) per image, for bootstrap confidence intervals
 
     def update(self, pred_tc, pred_ar, gt):
         """pred_*: bool (H, W) tensors, gt: (H, W) labels. AR wins where both classes are predicted."""
         pred_tc = pred_tc & ~pred_ar
         preds = {'TC': pred_tc, 'AR': pred_ar, 'BG': ~(pred_tc | pred_ar)}
         gts = {'TC': gt == 1, 'AR': gt == 2, 'BG': gt == 0}
+        counts = []
         for c in preds:
             p, g = preds[c], gts[c]
-            self.tp[c] += (p & g).sum().item()
-            self.fp[c] += (p & ~g).sum().item()
-            self.fn[c] += (~p & g).sum().item()
+            tp, fp, fn = (p & g).sum().item(), (p & ~g).sum().item(), (~p & g).sum().item()
+            self.tp[c] += tp
+            self.fp[c] += fp
+            self.fn[c] += fn
+            counts += [tp, fp, fn]
+        self.per_image.append(counts)
 
     def compute(self):
         iou = {c: self.tp[c] / max(self.tp[c] + self.fp[c] + self.fn[c], 1) for c in self.tp}

@@ -1,0 +1,73 @@
+[learned_prompt_k4_s0] epoch 1 loss 2.0724
+[learned_prompt_k4_s0] epoch 2 loss 1.8153 val FG 0.0718
+[learned_prompt_k4_s0] epoch 3 loss 1.7324
+[learned_prompt_k4_s0] epoch 4 loss 1.6303 val FG 0.0903
+[learned_prompt_k4_s0] epoch 5 loss 1.5831
+[learned_prompt_k4_s0] epoch 6 loss 1.5014 val FG 0.1765
+[learned_prompt_k4_s0] epoch 7 loss 1.4723
+[learned_prompt_k4_s0] epoch 8 loss 1.4572 val FG 0.2197
+[learned_prompt_k4_s0] epoch 9 loss 1.4254
+[learned_prompt_k4_s0] epoch 10 loss 1.4214 val FG 0.2292
+[learned_prompt_k4_s0] epoch 11 loss 1.4102
+[learned_prompt_k4_s0] epoch 12 loss 1.3904 val FG 0.2265
+[learned_prompt_k4_s0] epoch 13 loss 1.3844
+[learned_prompt_k4_s0] epoch 14 loss 1.3790 val FG 0.2578
+[learned_prompt_k4_s0] epoch 15 loss 1.3602
+[learned_prompt_k4_s0] epoch 16 loss 1.3642 val FG 0.2570
+[learned_prompt_k4_s0] epoch 17 loss 1.3672
+[learned_prompt_k4_s0] epoch 18 loss 1.3521 val FG 0.2428
+[learned_prompt_k4_s0] epoch 19 loss 1.3577
+[learned_prompt_k4_s0] epoch 20 loss 1.3394 val FG 0.2476
+[learned_prompt_k4_s0] epoch 21 loss 1.3374
+[learned_prompt_k4_s0] epoch 22 loss 1.3310 val FG 0.2569
+[learned_prompt_k4_s0] epoch 23 loss 1.3237
+[learned_prompt_k4_s0] epoch 24 loss 1.3242 val FG 0.2423
+[learned_prompt_k4_s0] epoch 25 loss 1.3240
+[learned_prompt_k4_s0] epoch 26 loss 1.3172 val FG 0.2733
+[learned_prompt_k4_s0] epoch 27 loss 1.3081
+[learned_prompt_k4_s0] epoch 28 loss 1.3080 val FG 0.2551
+[learned_prompt_k4_s0] epoch 29 loss 1.3084
+[learned_prompt_k4_s0] epoch 30 loss 1.3052 val FG 0.2728
+[learned_prompt_k4_s0] epoch 31 loss 1.2985
+[learned_prompt_k4_s0] epoch 32 loss 1.2956 val FG 0.2653
+[learned_prompt_k4_s0] epoch 33 loss 1.2994
+[learned_prompt_k4_s0] epoch 34 loss 1.2980 val FG 0.2820
+[learned_prompt_k4_s0] epoch 35 loss 1.2968
+[learned_prompt_k4_s0] epoch 36 loss 1.2932 val FG 0.2691
+[learned_prompt_k4_s0] epoch 37 loss 1.2889
+[learned_prompt_k4_s0] epoch 38 loss 1.2796 val FG 0.2521
+[learned_prompt_k4_s0] epoch 39 loss 1.2853
+[learned_prompt_k4_s0] epoch 40 loss 1.2834 val FG 0.2765
+[learned_prompt_k4_s0] epoch 41 loss 1.2853
+[learned_prompt_k4_s0] epoch 42 loss 1.2809 val FG 0.2629
+[learned_prompt_k4_s0] epoch 43 loss 1.2865
+[learned_prompt_k4_s0] epoch 44 loss 1.2825 val FG 0.2795
+[learned_prompt_k4_s0] epoch 45 loss 1.2903
+[learned_prompt_k4_s0] epoch 46 loss 1.2803 val FG 0.2821
+[learned_prompt_k4_s0] epoch 47 loss 1.2803
+[learned_prompt_k4_s0] epoch 48 loss 1.2800 val FG 0.2764
+[learned_prompt_k4_s0] epoch 49 loss 1.2829
+[learned_prompt_k4_s0] epoch 50 loss 1.2790 val FG 0.2684
+[learned_prompt_k4_s0] epoch 51 loss 1.2772
+[learned_prompt_k4_s0] epoch 52 loss 1.2783 val FG 0.2778
+[learned_prompt_k4_s0] epoch 53 loss 1.2763
+[learned_prompt_k4_s0] epoch 54 loss 1.2762 val FG 0.2839
+[learned_prompt_k4_s0] epoch 55 loss 1.2811
+[learned_prompt_k4_s0] epoch 56 loss 1.2833 val FG 0.2766
+[learned_prompt_k4_s0] epoch 57 loss 1.2783
+[learned_prompt_k4_s0] epoch 58 loss 1.2823 val FG 0.2721
+[learned_prompt_k4_s0] epoch 59 loss 1.2708
+[learned_prompt_k4_s0] epoch 60 loss 1.2834 val FG 0.2750
+{
+  "TC IoU": 0.23723306258887014,
+  "AR IoU": 0.3330732387129745,
+  "BG IoU": 0.9278467867567513,
+  "Mean IoU": 0.4993843626861986,
+  "Mean FG IoU": 0.28515315065092234,
+  "TC recall": 0.8659217877094972,
+  "TC precision": 0.19188191881918815,
+  "TC objects": 813,
+  "AR recall": 0.9782608695652174,
+  "AR precision": 0.20849107625743646,
+  "AR objects": 3698
+}

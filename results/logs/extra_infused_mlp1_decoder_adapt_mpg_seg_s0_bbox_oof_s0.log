@@ -1,0 +1,68 @@
+prompts (bbox):   0%|          | 0/18 [00:00<?, ?it/s]prompts (bbox):   6%|▌         | 1/18 [00:00<00:11,  1.45it/s]prompts (bbox):  11%|█         | 2/18 [00:00<00:06,  2.39it/s]prompts (bbox):  17%|█▋        | 3/18 [00:01<00:04,  3.04it/s]prompts (bbox):  22%|██▏       | 4/18 [00:01<00:03,  3.58it/s]prompts (bbox):  28%|██▊       | 5/18 [00:01<00:03,  4.06it/s]prompts (bbox):  33%|███▎      | 6/18 [00:01<00:02,  4.29it/s]prompts (bbox):  39%|███▉      | 7/18 [00:01<00:02,  4.50it/s]prompts (bbox):  44%|████▍     | 8/18 [00:02<00:02,  4.51it/s]prompts (bbox):  50%|█████     | 9/18 [00:02<00:01,  4.70it/s]prompts (bbox):  56%|█████▌    | 10/18 [00:02<00:01,  4.64it/s]prompts (bbox):  61%|██████    | 11/18 [00:02<00:01,  4.55it/s]prompts (bbox):  67%|██████▋   | 12/18 [00:03<00:01,  4.42it/s]prompts (bbox):  72%|███████▏  | 13/18 [00:03<00:01,  4.37it/s]prompts (bbox):  78%|███████▊  | 14/18 [00:03<00:00,  4.46it/s]prompts (bbox):  83%|████████▎ | 15/18 [00:03<00:00,  4.42it/s]prompts (bbox):  89%|████████▉ | 16/18 [00:03<00:00,  4.56it/s]prompts (bbox):  94%|█████████▍| 17/18 [00:04<00:00,  4.57it/s]prompts (bbox): 100%|██████████| 18/18 [00:04<00:00,  4.50it/s]                                                               prompts (bbox):   0%|          | 0/18 [00:00<?, ?it/s]prompts (bbox):   6%|▌         | 1/18 [00:00<00:03,  5.05it/s]prompts (bbox):  11%|█         | 2/18 [00:00<00:03,  5.09it/s]prompts (bbox):  17%|█▋        | 3/18 [00:00<00:03,  5.00it/s]prompts (bbox):  22%|██▏       | 4/18 [00:00<00:02,  5.19it/s]prompts (bbox):  28%|██▊       | 5/18 [00:01<00:02,  4.88it/s]prompts (bbox):  33%|███▎      | 6/18 [00:01<00:02,  4.81it/s]prompts (bbox):  39%|███▉      | 7/18 [00:01<00:02,  4.74it/s]prompts (bbox):  44%|████▍     | 8/18 [00:01<00:02,  4.74it/s]prompts (bbox):  50%|█████     | 9/18 [00:01<00:01,  4.87it/s]prompts (bbox):  56%|█████▌    | 10/18 [00:02<00:01,  4.87it/s]prompts (bbox):  61%|██████    | 11/18 [00:02<00:01,  5.18it/s]prompts (bbox):  67%|██████▋   | 12/18 [00:02<00:01,  5.06it/s]prompts (bbox):  72%|███████▏  | 13/18 [00:02<00:00,  5.21it/s]prompts (bbox):  78%|███████▊  | 14/18 [00:02<00:00,  4.92it/s]prompts (bbox):  83%|████████▎ | 15/18 [00:03<00:00,  4.90it/s]prompts (bbox):  89%|████████▉ | 16/18 [00:03<00:00,  4.79it/s]prompts (bbox):  94%|█████████▍| 17/18 [00:03<00:00,  4.80it/s]prompts (bbox): 100%|██████████| 18/18 [00:03<00:00,  4.63it/s]                                                               prompts (bbox):   0%|          | 0/18 [00:00<?, ?it/s]prompts (bbox):   6%|▌         | 1/18 [00:00<00:03,  4.58it/s]prompts (bbox):  11%|█         | 2/18 [00:00<00:03,  4.46it/s]prompts (bbox):  17%|█▋        | 3/18 [00:00<00:03,  4.63it/s]prompts (bbox):  22%|██▏       | 4/18 [00:00<00:03,  4.50it/s]prompts (bbox):  28%|██▊       | 5/18 [00:01<00:02,  4.44it/s]prompts (bbox):  33%|███▎      | 6/18 [00:01<00:02,  4.56it/s]prompts (bbox):  39%|███▉      | 7/18 [00:01<00:02,  4.51it/s]prompts (bbox):  44%|████▍     | 8/18 [00:01<00:02,  4.50it/s]prompts (bbox):  50%|█████     | 9/18 [00:01<00:01,  4.56it/s]prompts (bbox):  56%|█████▌    | 10/18 [00:02<00:01,  4.60it/s]prompts (bbox):  61%|██████    | 11/18 [00:02<00:01,  4.77it/s]prompts (bbox):  67%|██████▋   | 12/18 [00:02<00:01,  4.65it/s]prompts (bbox):  72%|███████▏  | 13/18 [00:02<00:01,  4.56it/s]prompts (bbox):  78%|███████▊  | 14/18 [00:03<00:00,  4.47it/s]prompts (bbox):  83%|████████▎ | 15/18 [00:03<00:00,  4.54it/s]prompts (bbox):  89%|████████▉ | 16/18 [00:03<00:00,  4.43it/s]prompts (bbox):  94%|█████████▍| 17/18 [00:03<00:00,  4.40it/s]prompts (bbox): 100%|██████████| 18/18 [00:03<00:00,  4.57it/s]                                                               prompts (bbox):   0%|          | 0/18 [00:00<?, ?it/s]prompts (bbox):   6%|▌         | 1/18 [00:00<00:04,  4.22it/s]prompts (bbox):  11%|█         | 2/18 [00:00<00:03,  4.33it/s]prompts (bbox):  17%|█▋        | 3/18 [00:00<00:03,  4.49it/s]prompts (bbox):  22%|██▏       | 4/18 [00:00<00:03,  4.41it/s]prompts (bbox):  28%|██▊       | 5/18 [00:01<00:02,  4.52it/s]prompts (bbox):  33%|███▎      | 6/18 [00:01<00:02,  4.44it/s]prompts (bbox):  39%|███▉      | 7/18 [00:01<00:02,  4.55it/s]prompts (bbox):  44%|████▍     | 8/18 [00:01<00:02,  4.48it/s]prompts (bbox):  50%|█████     | 9/18 [00:02<00:02,  4.49it/s]prompts (bbox):  56%|█████▌    | 10/18 [00:02<00:01,  4.58it/s]prompts (bbox):  61%|██████    | 11/18 [00:02<00:01,  4.76it/s]prompts (bbox):  67%|██████▋   | 12/18 [00:02<00:01,  4.70it/s]prompts (bbox):  72%|███████▏  | 13/18 [00:02<00:01,  4.48it/s]prompts (bbox):  78%|███████▊  | 14/18 [00:03<00:00,  4.46it/s]prompts (bbox):  83%|████████▎ | 15/18 [00:03<00:00,  4.47it/s]prompts (bbox):  89%|████████▉ | 16/18 [00:03<00:00,  4.55it/s]prompts (bbox):  94%|█████████▍| 17/18 [00:03<00:00,  4.61it/s]prompts (bbox): 100%|██████████| 18/18 [00:03<00:00,  4.93it/s]                                                               prompts (bbox):   0%|          | 0/18 [00:00<?, ?it/s]prompts (bbox):   6%|▌         | 1/18 [00:00<00:04,  4.05it/s]prompts (bbox):  11%|█         | 2/18 [00:00<00:03,  4.36it/s]prompts (bbox):  17%|█▋        | 3/18 [00:00<00:03,  4.79it/s]prompts (bbox):  22%|██▏       | 4/18 [00:00<00:02,  4.94it/s]prompts (bbox):  28%|██▊       | 5/18 [00:01<00:02,  4.72it/s]prompts (bbox):  33%|███▎      | 6/18 [00:01<00:02,  4.79it/s]prompts (bbox):  39%|███▉      | 7/18 [00:01<00:02,  4.99it/s]prompts (bbox):  44%|████▍     | 8/18 [00:01<00:02,  4.81it/s]prompts (bbox):  50%|█████     | 9/18 [00:01<00:01,  4.71it/s]prompts (bbox):  56%|█████▌    | 10/18 [00:02<00:01,  4.75it/s]prompts (bbox):  61%|██████    | 11/18 [00:02<00:01,  4.69it/s]prompts (bbox):  67%|██████▋   | 12/18 [00:02<00:01,  4.57it/s]prompts (bbox):  72%|███████▏  | 13/18 [00:02<00:01,  4.71it/s]prompts (bbox):  78%|███████▊  | 14/18 [00:02<00:00,  4.63it/s]prompts (bbox):  83%|████████▎ | 15/18 [00:03<00:00,  4.71it/s]prompts (bbox):  89%|████████▉ | 16/18 [00:03<00:00,  4.73it/s]prompts (bbox):  94%|█████████▍| 17/18 [00:03<00:00,  4.97it/s]prompts (bbox): 100%|██████████| 18/18 [00:03<00:00,  5.27it/s]                                                               prompts (bbox):   0%|          | 0/10 [00:00<?, ?it/s]prompts (bbox):  10%|█         | 1/10 [00:00<00:01,  5.02it/s]prompts (bbox):  20%|██        | 2/10 [00:00<00:01,  5.20it/s]prompts (bbox):  30%|███       | 3/10 [00:00<00:01,  4.85it/s]prompts (bbox):  40%|████      | 4/10 [00:00<00:01,  5.09it/s]prompts (bbox):  50%|█████     | 5/10 [00:00<00:00,  5.02it/s]prompts (bbox):  60%|██████    | 6/10 [00:01<00:00,  5.14it/s]prompts (bbox):  70%|███████   | 7/10 [00:01<00:00,  5.14it/s]prompts (bbox):  80%|████████  | 8/10 [00:01<00:00,  5.00it/s]prompts (bbox):  90%|█████████ | 9/10 [00:01<00:00,  4.81it/s]prompts (bbox): 100%|██████████| 10/10 [00:02<00:00,  4.95it/s]                                                               prompts (bbox):   0%|          | 0/16 [00:00<?, ?it/s]prompts (bbox):   6%|▋         | 1/16 [00:00<00:02,  5.23it/s]prompts (bbox):  12%|█▎        | 2/16 [00:00<00:03,  4.55it/s]prompts (bbox):  19%|█▉        | 3/16 [00:00<00:02,  4.54it/s]prompts (bbox):  25%|██▌       | 4/16 [00:00<00:02,  4.49it/s]prompts (bbox):  31%|███▏      | 5/16 [00:01<00:02,  4.58it/s]prompts (bbox):  38%|███▊      | 6/16 [00:01<00:02,  4.46it/s]prompts (bbox):  44%|████▍     | 7/16 [00:01<00:01,  4.86it/s]prompts (bbox):  50%|█████     | 8/16 [00:01<00:01,  4.97it/s]prompts (bbox):  56%|█████▋    | 9/16 [00:01<00:01,  4.94it/s]prompts (bbox):  62%|██████▎   | 10/16 [00:02<00:01,  4.97it/s]prompts (bbox):  69%|██████▉   | 11/16 [00:02<00:01,  4.83it/s]prompts (bbox):  75%|███████▌  | 12/16 [00:02<00:00,  4.87it/s]prompts (bbox):  81%|████████▏ | 13/16 [00:02<00:00,  4.81it/s]prompts (bbox):  88%|████████▊ | 14/16 [00:02<00:00,  4.84it/s]prompts (bbox):  94%|█████████▍| 15/16 [00:03<00:00,  4.81it/s]                                                               /home/worker1/thang/ClimateSAM/prompter_bench/train_decoder.py:172: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:835.)
+  total += float(loss) / 8
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 1 loss 1.0702 val FG IoU 0.3753
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 2 loss 1.0346 val FG IoU 0.3733
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 3 loss 1.0266 val FG IoU 0.3742
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 4 loss 1.0166 val FG IoU 0.3725
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 5 loss 1.0161 val FG IoU 0.3754
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 6 loss 1.0131 val FG IoU 0.3771
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 7 loss 1.0096 val FG IoU 0.3759
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 8 loss 1.0039 val FG IoU 0.3764
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 9 loss 0.9960 val FG IoU 0.3777
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 10 loss 0.9959 val FG IoU 0.3752
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 11 loss 0.9911 val FG IoU 0.3763
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 12 loss 0.9853 val FG IoU 0.3796
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 13 loss 0.9863 val FG IoU 0.3691
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 14 loss 0.9860 val FG IoU 0.3665
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 15 loss 0.9752 val FG IoU 0.3661
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 16 loss 0.9660 val FG IoU 0.3744
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 17 loss 0.9612 val FG IoU 0.3737
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 18 loss 0.9566 val FG IoU 0.3727
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 19 loss 0.9497 val FG IoU 0.3730
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 20 loss 0.9454 val FG IoU 0.3738
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 21 loss 0.9411 val FG IoU 0.3731
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 22 loss 0.9361 val FG IoU 0.3739
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 23 loss 0.9313 val FG IoU 0.3736
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 24 loss 0.9279 val FG IoU 0.3714
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 25 loss 0.9237 val FG IoU 0.3717
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 26 loss 0.9221 val FG IoU 0.3686
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 27 loss 0.9169 val FG IoU 0.3716
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 28 loss 0.9154 val FG IoU 0.3730
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 29 loss 0.9134 val FG IoU 0.3711
+[decoder_adapt_mpg_seg_s0_bbox_oof_s0] epoch 30 loss 0.9129 val FG IoU 0.3720
+{
+  "prompter mask": {
+    "TC IoU": 0.3457687966098558,
+    "AR IoU": 0.4140792746556422,
+    "BG IoU": 0.9442590020420635,
+    "Mean IoU": 0.5680356911025205,
+    "Mean FG IoU": 0.379924035632749
+  },
+  "SAM, Phase-1 decoder": {
+    "TC IoU": 0.3440511245616291,
+    "AR IoU": 0.39157825574429433,
+    "BG IoU": 0.9403844653697422,
+    "Mean IoU": 0.5586712818918885,
+    "Mean FG IoU": 0.36781469015296175,
+    "TC recall": 0.6536312849162011,
+    "TC precision": 0.5888324873096447,
+    "TC objects": 197,
+    "AR recall": 0.9516908212560387,
+    "AR precision": 0.4983783783783784,
+    "AR objects": 925
+  },
+  "SAM, adapted decoder": {
+    "TC IoU": 0.34242879682421623,
+    "AR IoU": 0.4041163349393794,
+    "BG IoU": 0.943376419674206,
+    "Mean IoU": 0.5633071838126006,
+    "Mean FG IoU": 0.3732725658817978,
+    "TC recall": 0.6536312849162011,
+    "TC precision": 0.5742574257425743,
+    "TC objects": 202,
+    "AR recall": 0.9299516908212561,
+    "AR precision": 0.6174785100286533,
+    "AR objects": 698
+  }
+}

@@ -7,3 +7,77 @@
 14:27 start infused_mlp1/mpg_seg_fold3
 14:32 done infused_mlp1/mpg_seg_fold3
 14:32 start infused_mlp1/mpg_seg_fold4
+14:36 done infused_mlp1/mpg_seg_fold4
+14:36 start infused_mlp1/mpg_seg_smooth_s0
+14:40 done infused_mlp1/mpg_seg_smooth_s0
+14:40 start infused_mlp1/mpg_seg_smooth_s1
+14:44 done infused_mlp1/mpg_seg_smooth_s1
+14:44 start infused_mlp1/mpg_seg_smooth_s2
+14:49 done infused_mlp1/mpg_seg_smooth_s2
+14:49 start infused_mlp1/decoder_adapt_mpg_seg_s0_bbox_s0
+15:12 done infused_mlp1/decoder_adapt_mpg_seg_s0_bbox_s0
+15:12 start infused_mlp1/decoder_adapt_mpg_seg_s0_bbox_oof_s0
+15:37 done infused_mlp1/decoder_adapt_mpg_seg_s0_bbox_oof_s0
+15:37 start infused_mlp1/decoder_adapt_mpg_seg_s0_hybrid_oof_s0
+15:50 done infused_mlp1/decoder_adapt_mpg_seg_s0_hybrid_oof_s0
+15:56 start infused_mlp1/learned_prompt_k4_s0
+FAILED infused_mlp1/learned_prompt_k4_s0
+15:56 done infused_mlp1/learned_prompt_k4_s0
+15:56 start infused_mlp1/learned_prompt_k4_s1
+FAILED infused_mlp1/learned_prompt_k4_s1
+15:56 done infused_mlp1/learned_prompt_k4_s1
+15:56 start infused_mlp1/learned_prompt_k4_s2
+FAILED infused_mlp1/learned_prompt_k4_s2
+15:56 done infused_mlp1/learned_prompt_k4_s2
+15:56 start infused_mlp1/learned_prompt_k16_s0
+FAILED infused_mlp1/learned_prompt_k16_s0
+15:56 done infused_mlp1/learned_prompt_k16_s0
+15:57 start infused_mlp1/learned_prompt_k4_s0
+16:11 done infused_mlp1/learned_prompt_k4_s0
+16:11 start infused_mlp1/learned_prompt_k4_s1
+16:24 done infused_mlp1/learned_prompt_k4_s1
+16:24 start infused_mlp1/learned_prompt_k4_s2
+16:35 done infused_mlp1/learned_prompt_k4_s2
+16:35 start infused_mlp1/learned_prompt_k16_s0
+16:39 start infused_mlp05/mpg_seg_fold0
+16:43 done infused_mlp05/mpg_seg_fold0
+16:43 start infused_mlp05/mpg_seg_fold1
+16:48 done infused_mlp05/mpg_seg_fold1
+16:48 start infused_mlp05/mpg_seg_fold2
+16:50 done infused_mlp1/learned_prompt_k16_s0
+16:52 done infused_mlp05/mpg_seg_fold2
+16:52 start infused_mlp05/mpg_seg_fold3
+16:56 done infused_mlp05/mpg_seg_fold3
+16:56 start infused_mlp05/mpg_seg_fold4
+16:59 done infused_mlp05/mpg_seg_fold4
+16:59 start infused_mlp05/mpg_seg_smooth_s0
+17:03 done infused_mlp05/mpg_seg_smooth_s0
+17:03 start infused_mlp05/mpg_seg_smooth_s1
+17:07 done infused_mlp05/mpg_seg_smooth_s1
+17:07 start infused_mlp05/mpg_seg_smooth_s2
+FAILED infused_mlp05/mpg_seg_smooth_s2
+17:07 done infused_mlp05/mpg_seg_smooth_s2
+17:07 start infused_mlp05/decoder_adapt_mpg_seg_s0_bbox_s0
+FAILED infused_mlp05/decoder_adapt_mpg_seg_s0_bbox_s0
+17:07 done infused_mlp05/decoder_adapt_mpg_seg_s0_bbox_s0
+17:07 start infused_mlp05/decoder_adapt_mpg_seg_s0_bbox_oof_s0
+FAILED infused_mlp05/decoder_adapt_mpg_seg_s0_bbox_oof_s0
+17:07 done infused_mlp05/decoder_adapt_mpg_seg_s0_bbox_oof_s0
+17:07 start infused_mlp05/decoder_adapt_mpg_seg_s0_hybrid_oof_s0
+FAILED infused_mlp05/decoder_adapt_mpg_seg_s0_hybrid_oof_s0
+17:07 done infused_mlp05/decoder_adapt_mpg_seg_s0_hybrid_oof_s0
+skip mpg_seg_fold0
+skip mpg_seg_fold1
+skip mpg_seg_fold2
+skip mpg_seg_fold3
+skip mpg_seg_fold4
+skip mpg_seg_smooth_s0
+skip mpg_seg_smooth_s1
+18:10 start infused_mlp05/mpg_seg_smooth_s2
+18:12 done infused_mlp05/mpg_seg_smooth_s2
+18:12 start infused_mlp05/decoder_adapt_mpg_seg_s0_bbox_s0
+18:29 done infused_mlp05/decoder_adapt_mpg_seg_s0_bbox_s0
+18:29 start infused_mlp05/decoder_adapt_mpg_seg_s0_bbox_oof_s0
+18:46 done infused_mlp05/decoder_adapt_mpg_seg_s0_bbox_oof_s0
+18:46 start infused_mlp05/decoder_adapt_mpg_seg_s0_hybrid_oof_s0
+18:55 done infused_mlp05/decoder_adapt_mpg_seg_s0_hybrid_oof_s0

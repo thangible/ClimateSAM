@@ -1,0 +1,94 @@
+/home/worker1/thang/ClimateSAM/prompter_bench/train.py:179: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:835.)
+  sums[k] = sums.get(k, 0.0) + float(v) * len(mb) / len(chunk)
+[msf_token_seg_s1] epoch 1 40.5s loss 4.1339
+[msf_token_seg_s1] epoch 2 45.7s loss 3.3800 | val_own_Mean FG IoU 0.3166
+[msf_token_seg_s1] epoch 3 45.3s loss 3.2727
+[msf_token_seg_s1] epoch 4 37.6s loss 3.1493 | val_own_Mean FG IoU 0.3518
+[msf_token_seg_s1] epoch 5 37.7s loss 3.1225
+[msf_token_seg_s1] epoch 6 36.5s loss 3.2198 | val_own_Mean FG IoU 0.3631
+[msf_token_seg_s1] epoch 7 35.5s loss 3.0819
+[msf_token_seg_s1] epoch 8 35.6s loss 3.0519 | val_own_Mean FG IoU 0.3463
+[msf_token_seg_s1] epoch 9 35.6s loss 3.0354
+[msf_token_seg_s1] epoch 10 35.5s loss 2.9849 | val_own_Mean FG IoU 0.3515
+[msf_token_seg_s1] epoch 11 35.5s loss 2.9477
+[msf_token_seg_s1] epoch 12 35.5s loss 2.9649 | val_own_Mean FG IoU 0.3717
+[msf_token_seg_s1] epoch 13 35.5s loss 2.9340
+[msf_token_seg_s1] epoch 14 36.2s loss 2.8864 | val_own_Mean FG IoU 0.3592
+[msf_token_seg_s1] epoch 15 37.6s loss 2.8902
+[msf_token_seg_s1] epoch 16 37.6s loss 2.8688 | val_own_Mean FG IoU 0.3703
+[msf_token_seg_s1] epoch 17 37.6s loss 2.8091
+[msf_token_seg_s1] epoch 18 37.6s loss 2.8607 | val_own_Mean FG IoU 0.3633
+[msf_token_seg_s1] epoch 19 36.3s loss 2.8530
+[msf_token_seg_s1] epoch 20 35.6s loss 2.8849 | val_own_Mean FG IoU 0.3594
+[msf_token_seg_s1] epoch 21 36.7s loss 2.8615
+[msf_token_seg_s1] epoch 22 37.5s loss 2.8218 | val_own_Mean FG IoU 0.3648
+[msf_token_seg_s1] epoch 23 37.3s loss 2.7822
+[msf_token_seg_s1] epoch 24 35.6s loss 2.7465 | val_own_Mean FG IoU 0.3705
+[msf_token_seg_s1] epoch 25 37.3s loss 2.7206
+[msf_token_seg_s1] epoch 26 37.6s loss 2.7392 | val_own_Mean FG IoU 0.3764
+[msf_token_seg_s1] epoch 27 37.6s loss 2.7419
+[msf_token_seg_s1] epoch 28 37.5s loss 2.7378 | val_own_Mean FG IoU 0.3734
+[msf_token_seg_s1] epoch 29 37.6s loss 2.7259
+[msf_token_seg_s1] epoch 30 37.6s loss 2.7176 | val_own_Mean FG IoU 0.3703
+[msf_token_seg_s1] epoch 31 37.6s loss 2.6941
+[msf_token_seg_s1] epoch 32 37.5s loss 2.6542 | val_own_Mean FG IoU 0.3727
+[msf_token_seg_s1] epoch 33 37.5s loss 2.6326
+[msf_token_seg_s1] epoch 34 37.6s loss 2.6305 | val_own_Mean FG IoU 0.3764
+[msf_token_seg_s1] epoch 35 37.7s loss 2.6203
+[msf_token_seg_s1] epoch 36 37.5s loss 2.6113 | val_own_Mean FG IoU 0.3733
+[msf_token_seg_s1] epoch 37 37.7s loss 2.6076
+[msf_token_seg_s1] epoch 38 35.9s loss 2.5903 | val_own_Mean FG IoU 0.3635
+[msf_token_seg_s1] epoch 39 35.6s loss 2.5742
+[msf_token_seg_s1] epoch 40 37.7s loss 2.5534 | val_own_Mean FG IoU 0.3719
+[msf_token_seg_s1] epoch 41 37.9s loss 2.5423
+[msf_token_seg_s1] epoch 42 37.9s loss 2.5377 | val_own_Mean FG IoU 0.3743
+[msf_token_seg_s1] epoch 43 37.6s loss 2.5235
+[msf_token_seg_s1] epoch 44 37.6s loss 2.5211 | val_own_Mean FG IoU 0.3712
+[msf_token_seg_s1] epoch 45 37.6s loss 2.5077
+[msf_token_seg_s1] epoch 46 37.6s loss 2.5070 | val_own_Mean FG IoU 0.3728
+[msf_token_seg_s1] epoch 47 37.7s loss 2.5081
+[msf_token_seg_s1] epoch 48 36.6s loss 2.4935 | val_own_Mean FG IoU 0.3696
+[msf_token_seg_s1] epoch 49 35.5s loss 2.4881
+[msf_token_seg_s1] epoch 50 36.3s loss 2.4865 | val_own_Mean FG IoU 0.3702
+[msf_token_seg_s1] epoch 51 37.6s loss 2.4818
+[msf_token_seg_s1] epoch 52 37.7s loss 2.4755 | val_own_Mean FG IoU 0.3720
+[msf_token_seg_s1] epoch 53 37.6s loss 2.4729
+[msf_token_seg_s1] epoch 54 36.9s loss 2.4744 | val_own_Mean FG IoU 0.3716
+[msf_token_seg_s1] epoch 55 35.8s loss 2.4681
+[msf_token_seg_s1] epoch 56 37.2s loss 2.4676 | val_own_Mean FG IoU 0.3714
+[msf_token_seg_s1] epoch 57 35.7s loss 2.4640
+[msf_token_seg_s1] epoch 58 35.6s loss 2.4655 | val_own_Mean FG IoU 0.3712
+[msf_token_seg_s1] epoch 59 35.6s loss 2.4610
+[msf_token_seg_s1] epoch 60 35.5s loss 2.4579 | val_own_Mean FG IoU 0.3713
+{
+  "name": "msf_token_seg_s1",
+  "arch": "msf_token",
+  "mode": "seg",
+  "seed": 1,
+  "encoder": "infused_mlp1",
+  "trainable_params": 1415180,
+  "best_epoch": 34,
+  "train_time_min": 38.38821144898733,
+  "args": {
+    "encoder": "infused_mlp1",
+    "arch": "msf_token",
+    "mode": "seg",
+    "seed": 1,
+    "epochs": 60,
+    "lr": 0.001,
+    "bs": 8,
+    "micro_bs": 2,
+    "aux_weight": 1.0,
+    "init": null,
+    "val_every": 2,
+    "name": "msf_token_seg_s1",
+    "smooth": false,
+    "exclude_fold": null
+  },
+  "val_own_TC IoU": 0.35466919027828053,
+  "val_own_AR IoU": 0.398225753444288,
+  "val_own_BG IoU": 0.9478436025620184,
+  "val_own_Mean IoU": 0.5669128487615289,
+  "val_own_Mean FG IoU": 0.37644747186128424
+}

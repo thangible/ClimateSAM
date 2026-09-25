@@ -1,0 +1,31 @@
+{
+  "name": "logreg_last_seg_s2",
+  "arch": "logreg_last",
+  "mode": "seg",
+  "seed": 2,
+  "encoder": "infused_mlp05",
+  "trainable_params": 1538,
+  "best_epoch": 46,
+  "train_time_min": 2.948936625321706,
+  "args": {
+    "encoder": "infused_mlp05",
+    "arch": "logreg_last",
+    "mode": "seg",
+    "seed": 2,
+    "epochs": 60,
+    "lr": 0.001,
+    "bs": 8,
+    "micro_bs": 8,
+    "aux_weight": 1.0,
+    "init": null,
+    "val_every": 2,
+    "name": "logreg_last_seg_s2",
+    "smooth": false,
+    "exclude_fold": null
+  },
+  "val_own_TC IoU": 0.31616003245614405,
+  "val_own_AR IoU": 0.3793587798489451,
+  "val_own_BG IoU": 0.9433828126749583,
+  "val_own_Mean IoU": 0.5463005416600158,
+  "val_own_Mean FG IoU": 0.3477594061525446
+}

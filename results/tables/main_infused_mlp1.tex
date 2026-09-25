@@ -9,9 +9,49 @@ Ground truth (oracle) & Prompter mask (no SAM) & 1.000 & 1.000 & 1.000 & 1.000 &
  & SAM + box & 0.723 & 0.625 & 0.971 & 0.773 & 0.674 \\
  & SAM + hybrid & 0.872 & 0.920 & 0.994 & 0.929 & 0.896 \\
 \midrule
+CG-Net (official weights) & Prompter mask (no SAM) & 0.327 & 0.333 & 0.926 & 0.529 & 0.330 \\
+ & SAM + box & 0.318 & 0.342 & 0.931 & 0.530 & 0.330 \\
+ & SAM + hybrid & 0.327 & 0.339 & 0.929 & 0.532 & 0.333 \\
+\midrule
 CG-Net (fine-tuned) & Prompter mask (no SAM) & 0.349 & 0.382 & 0.940 & 0.557 & 0.366 \\
  & SAM + box & 0.341 & 0.369 & 0.939 & 0.550 & 0.355 \\
  & SAM + hybrid & 0.349 & 0.384 & 0.941 & 0.558 & 0.367 \\
+\midrule
+Logistic regression, ViT block 1 & Prompter mask (no SAM) & 0.195$\pm$0.001 & 0.319$\pm$0.001 & 0.927$\pm$0.004 & 0.480$\pm$0.002 & 0.257$\pm$0.001 \\
+ & SAM + box & 0.200$\pm$0.002 & 0.321$\pm$0.003 & 0.925$\pm$0.004 & 0.482$\pm$0.003 & 0.260$\pm$0.002 \\
+ & SAM + hybrid & 0.213$\pm$0.000 & 0.316$\pm$0.002 & 0.939$\pm$0.001 & 0.489$\pm$0.001 & 0.264$\pm$0.001 \\
+\midrule
+Logistic regression, ViT block 12 & Prompter mask (no SAM) & 0.301$\pm$0.004 & 0.385$\pm$0.001 & 0.938$\pm$0.001 & 0.541$\pm$0.002 & 0.343$\pm$0.002 \\
+ & SAM + box & 0.291$\pm$0.001 & 0.362$\pm$0.001 & 0.932$\pm$0.001 & 0.528$\pm$0.000 & 0.326$\pm$0.000 \\
+ & SAM + hybrid & 0.304$\pm$0.004 & 0.373$\pm$0.002 & 0.946$\pm$0.000 & 0.541$\pm$0.002 & 0.338$\pm$0.002 \\
+\midrule
+Multi-scale fusion & Prompter mask (no SAM) & 0.333$\pm$0.002 & 0.403$\pm$0.004 & 0.944$\pm$0.003 & 0.560$\pm$0.001 & 0.368$\pm$0.003 \\
+ & SAM + box & 0.339$\pm$0.001 & 0.385$\pm$0.002 & 0.941$\pm$0.003 & 0.555$\pm$0.001 & 0.362$\pm$0.001 \\
+ & SAM + hybrid & 0.330$\pm$0.002 & 0.388$\pm$0.010 & 0.949$\pm$0.001 & 0.556$\pm$0.003 & 0.359$\pm$0.005 \\
+\midrule
+Multi-scale fusion + token gate & Prompter mask (no SAM) & 0.324$\pm$0.001 & 0.399$\pm$0.003 & 0.944$\pm$0.002 & 0.556$\pm$0.001 & 0.362$\pm$0.001 \\
+ & SAM + box & 0.336$\pm$0.002 & 0.382$\pm$0.003 & 0.940$\pm$0.002 & 0.553$\pm$0.001 & 0.359$\pm$0.002 \\
+ & SAM + hybrid & 0.329$\pm$0.004 & 0.387$\pm$0.006 & 0.949$\pm$0.001 & 0.555$\pm$0.003 & 0.358$\pm$0.005 \\
+\midrule
+Mask-prompt generator (segmentation loss) & Prompter mask (no SAM) & 0.344$\pm$0.003 & 0.413$\pm$0.001 & 0.944$\pm$0.000 & 0.567$\pm$0.002 & 0.379$\pm$0.002 \\
+ & SAM + box & 0.343$\pm$0.006 & 0.391$\pm$0.001 & 0.940$\pm$0.001 & 0.558$\pm$0.002 & 0.367$\pm$0.003 \\
+ & SAM + hybrid & 0.342$\pm$0.004 & 0.398$\pm$0.002 & 0.949$\pm$0.000 & 0.563$\pm$0.002 & 0.370$\pm$0.002 \\
+\midrule
+Mask-prompt generator (end-to-end via SAM) & Prompter mask (no SAM) & 0.335$\pm$0.010 & 0.378$\pm$0.019 & 0.941$\pm$0.006 & 0.551$\pm$0.010 & 0.356$\pm$0.014 \\
+ & SAM + box & 0.336$\pm$0.011 & 0.385$\pm$0.005 & 0.940$\pm$0.007 & 0.554$\pm$0.003 & 0.360$\pm$0.005 \\
+ & SAM + hybrid & 0.334$\pm$0.009 & 0.402$\pm$0.007 & 0.946$\pm$0.003 & 0.561$\pm$0.004 & 0.368$\pm$0.008 \\
+\midrule
+Mask-prompt generator (two-stage) & Prompter mask (no SAM) & 0.338$\pm$0.005 & 0.409$\pm$0.002 & 0.938$\pm$0.002 & 0.562$\pm$0.000 & 0.374$\pm$0.001 \\
+ & SAM + box & 0.334$\pm$0.003 & 0.386$\pm$0.004 & 0.935$\pm$0.002 & 0.552$\pm$0.001 & 0.360$\pm$0.001 \\
+ & SAM + hybrid & 0.337$\pm$0.007 & 0.411$\pm$0.002 & 0.947$\pm$0.001 & 0.565$\pm$0.002 & 0.374$\pm$0.004 \\
+\midrule
+Mask-prompt generator (segmentation loss, label smoothing) & Prompter mask (no SAM) & 0.338$\pm$0.009 & 0.412$\pm$0.001 & 0.943$\pm$0.001 & 0.564$\pm$0.003 & 0.375$\pm$0.005 \\
+ & SAM + box & 0.340$\pm$0.007 & 0.388$\pm$0.003 & 0.939$\pm$0.001 & 0.556$\pm$0.002 & 0.364$\pm$0.003 \\
+ & SAM + hybrid & 0.335$\pm$0.007 & 0.401$\pm$0.002 & 0.949$\pm$0.000 & 0.562$\pm$0.003 & 0.368$\pm$0.005 \\
+\midrule
+Learned static prompts (4 tokens / class) & SAM + learned static prompts & 0.237$\pm$0.001 & 0.324$\pm$0.008 & 0.926$\pm$0.005 & 0.495$\pm$0.004 & 0.280$\pm$0.004 \\
+\midrule
+Learned static prompts (16 tokens / class) & SAM + learned static prompts & 0.248 & 0.329 & 0.930 & 0.502 & 0.288 \\
 \bottomrule
 \end{tabular}
 \caption{Automatic prompting on the ClimateNet test set (61 images), frozen ClimateSAM (Infused Token, MLP ratio 1.0). Learned prompters: mean$\pm$std over 3 seeds, checkpoint selected on 40 held-out training images.}

@@ -1,0 +1,31 @@
+{
+  "name": "mpg_seg_fold0",
+  "arch": "mpg",
+  "mode": "seg",
+  "seed": 0,
+  "encoder": "infused_mlp05",
+  "trainable_params": 671138,
+  "best_epoch": 32,
+  "train_time_min": 4.5850398421287535,
+  "args": {
+    "encoder": "infused_mlp05",
+    "arch": "mpg",
+    "mode": "seg",
+    "seed": 0,
+    "epochs": 60,
+    "lr": 0.001,
+    "bs": 8,
+    "micro_bs": 8,
+    "aux_weight": 1.0,
+    "init": null,
+    "val_every": 2,
+    "name": "mpg_seg_fold0",
+    "smooth": false,
+    "exclude_fold": 0
+  },
+  "val_own_TC IoU": 0.36294564081478814,
+  "val_own_AR IoU": 0.40823118859600216,
+  "val_own_BG IoU": 0.9453481792314788,
+  "val_own_Mean IoU": 0.5721750028807564,
+  "val_own_Mean FG IoU": 0.3855884147053952
+}

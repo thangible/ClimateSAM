@@ -1,0 +1,27 @@
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{llccccc}
+\toprule
+Prompter, prompts, training prompts & Output & TC IoU & AR IoU & Mean FG IoU & TC recall / prec. & AR recall / prec. \\
+\midrule
+CG-Net (fine-tuned), bbox, in-sample & prompter mask & 0.349 & 0.382 & 0.366 &  &  \\
+ & SAM, Phase-1 decoder & 0.341 & 0.369 & 0.355 & 0.67 / 0.56 & 0.90 / 0.53 \\
+ & SAM, adapted decoder & 0.345 & 0.384 & 0.364 & 0.64 / 0.58 & 0.88 / 0.58 \\
+\midrule
+Mask-prompt generator, bbox, out-of-fold & prompter mask & 0.346 & 0.414 & 0.380 &  &  \\
+ & SAM, Phase-1 decoder & 0.344 & 0.392 & 0.368 & 0.65 / 0.59 & 0.95 / 0.50 \\
+ & SAM, adapted decoder & 0.342 & 0.404 & 0.373 & 0.65 / 0.57 & 0.93 / 0.62 \\
+\midrule
+Mask-prompt generator, bbox, in-sample & prompter mask & 0.346 & 0.414 & 0.380 &  &  \\
+ & SAM, Phase-1 decoder & 0.344 & 0.392 & 0.368 & 0.65 / 0.59 & 0.95 / 0.50 \\
+ & SAM, adapted decoder & 0.343 & 0.404 & 0.374 & 0.65 / 0.59 & 0.95 / 0.55 \\
+\midrule
+Mask-prompt generator, hybrid, out-of-fold & prompter mask & 0.346 & 0.414 & 0.380 &  &  \\
+ & SAM, Phase-1 decoder & 0.344 & 0.397 & 0.371 & 0.65 / 0.59 & 0.91 / 0.65 \\
+ & SAM, adapted decoder & 0.347 & 0.405 & 0.376 & 0.65 / 0.60 & 0.94 / 0.64 \\
+\bottomrule
+\end{tabular}
+\caption{Adapting the HQ decoder parts to generated prompts (test set). Phase-1 decoder = the frozen decoder of all other experiments; adapted = best validation epoch of 30.}
+\label{tab:decoder_adaptation_infused_mlp1}
+\end{table}

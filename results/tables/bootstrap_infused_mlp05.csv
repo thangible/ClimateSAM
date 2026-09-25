@@ -1,0 +1,38 @@
+Comparison (B minus A),\Delta TC IoU [95\% CI],\Delta AR IoU [95\% CI],\Delta mean FG IoU [95\% CI],P(\DeltaFG>0)
+CG-Net (official weights): SAM + box vs. prompter mask,"-0.009 [-0.016, -0.002]","+0.009 [+0.004, +0.015]","+0.000 [-0.004, +0.005]",0.52
+CG-Net (official weights): SAM + hybrid vs. prompter mask,"+0.001 [-0.002, +0.004]","+0.006 [+0.005, +0.008]","+0.003 [+0.002, +0.005]",1.00
+CG-Net (fine-tuned): SAM + box vs. prompter mask,"-0.009 [-0.017, +0.001]","-0.007 [-0.012, -0.002]","-0.008 [-0.013, -0.002]",0.01
+CG-Net (fine-tuned): SAM + hybrid vs. prompter mask,"-0.001 [-0.005, +0.002]","+0.003 [+0.001, +0.004]","+0.001 [-0.001, +0.003]",0.75
+"Logistic regression, ViT block 1: SAM + box vs. prompter mask","+0.001 [-0.007, +0.009]","+0.007 [+0.000, +0.014]","+0.004 [-0.002, +0.010]",0.92
+"Logistic regression, ViT block 1: SAM + hybrid vs. prompter mask","+0.002 [-0.004, +0.008]","+0.005 [-0.001, +0.010]","+0.003 [-0.001, +0.007]",0.94
+"Logistic regression, ViT block 1: mean(prompter, SAM hybrid) vs. prompter mask","+0.002 [-0.003, +0.008]","+0.005 [-0.001, +0.010]","+0.004 [-0.001, +0.007]",0.96
+"Logistic regression, ViT block 12: SAM + box vs. prompter mask","+0.002 [-0.010, +0.013]","-0.011 [-0.018, -0.005]","-0.005 [-0.013, +0.003]",0.12
+"Logistic regression, ViT block 12: SAM + hybrid vs. prompter mask","+0.005 [-0.001, +0.010]","-0.021 [-0.033, -0.010]","-0.008 [-0.015, -0.002]",0.00
+"Logistic regression, ViT block 12: mean(prompter, SAM hybrid) vs. prompter mask","+0.005 [-0.000, +0.010]","-0.018 [-0.029, -0.008]","-0.007 [-0.013, -0.001]",0.01
+Multi-scale fusion: SAM + box vs. prompter mask,"+0.007 [-0.002, +0.016]","-0.013 [-0.019, -0.007]","-0.003 [-0.008, +0.002]",0.12
+Multi-scale fusion: SAM + hybrid vs. prompter mask,"+0.007 [+0.002, +0.011]","-0.005 [-0.011, -0.000]","+0.001 [-0.003, +0.004]",0.63
+"Multi-scale fusion: mean(prompter, SAM hybrid) vs. prompter mask","+0.006 [+0.003, +0.009]","-0.004 [-0.009, +0.000]","+0.001 [-0.002, +0.004]",0.76
+Multi-scale fusion + token gate: SAM + box vs. prompter mask,"+0.007 [-0.003, +0.017]","-0.014 [-0.020, -0.009]","-0.003 [-0.009, +0.003]",0.16
+Multi-scale fusion + token gate: SAM + hybrid vs. prompter mask,"+0.010 [+0.003, +0.016]","+0.000 [-0.006, +0.006]","+0.005 [+0.001, +0.009]",0.99
+"Multi-scale fusion + token gate: mean(prompter, SAM hybrid) vs. prompter mask","+0.009 [+0.005, +0.013]","+0.001 [-0.004, +0.007]","+0.005 [+0.002, +0.009]",1.00
+Mask-prompt generator (segmentation loss): SAM + box vs. prompter mask,"+0.003 [-0.004, +0.009]","-0.014 [-0.020, -0.009]","-0.006 [-0.010, -0.001]",0.01
+Mask-prompt generator (segmentation loss): SAM + hybrid vs. prompter mask,"+0.002 [-0.001, +0.005]","-0.005 [-0.010, -0.000]","-0.002 [-0.005, +0.001]",0.15
+"Mask-prompt generator (segmentation loss): mean(prompter, SAM hybrid) vs. prompter mask","+0.002 [-0.000, +0.005]","-0.004 [-0.009, +0.000]","-0.001 [-0.004, +0.002]",0.22
+Mask-prompt generator (end-to-end via SAM): SAM + box vs. prompter mask,"+0.005 [-0.003, +0.013]","+0.033 [+0.025, +0.041]","+0.019 [+0.013, +0.025]",1.00
+Mask-prompt generator (end-to-end via SAM): SAM + hybrid vs. prompter mask,"+0.006 [+0.003, +0.009]","+0.008 [+0.001, +0.014]","+0.007 [+0.002, +0.011]",1.00
+"Mask-prompt generator (end-to-end via SAM): mean(prompter, SAM hybrid) vs. prompter mask","+0.006 [+0.003, +0.008]","+0.009 [+0.003, +0.015]","+0.007 [+0.004, +0.011]",1.00
+Mask-prompt generator (two-stage): SAM + box vs. prompter mask,"+0.006 [-0.003, +0.016]","-0.017 [-0.023, -0.011]","-0.005 [-0.012, +0.001]",0.04
+Mask-prompt generator (two-stage): SAM + hybrid vs. prompter mask,"+0.004 [+0.001, +0.008]","+0.002 [-0.003, +0.008]","+0.003 [+0.000, +0.007]",0.98
+"Mask-prompt generator (two-stage): mean(prompter, SAM hybrid) vs. prompter mask","+0.005 [+0.002, +0.008]","+0.003 [-0.002, +0.008]","+0.004 [+0.001, +0.007]",0.99
+"Mask-prompt generator (segmentation loss, label smoothing): SAM + box vs. prompter mask","+0.004 [-0.004, +0.011]","-0.011 [-0.016, -0.006]","-0.004 [-0.009, +0.001]",0.08
+"Mask-prompt generator (segmentation loss, label smoothing): SAM + hybrid vs. prompter mask","+0.002 [-0.002, +0.005]","-0.006 [-0.011, -0.001]","-0.002 [-0.005, +0.001]",0.11
+"Mask-prompt generator (segmentation loss, label smoothing): mean(prompter, SAM hybrid) vs. prompter mask","+0.002 [-0.000, +0.005]","-0.005 [-0.010, -0.000]","-0.001 [-0.004, +0.002]",0.19
+Mask-prompt generator (segmentation loss) vs. CG-Net (fine-tuned) (prompter masks),"-0.019 [-0.042, +0.003]","+0.028 [+0.017, +0.040]","+0.005 [-0.008, +0.019]",0.76
+Mask-prompt generator (segmentation loss) vs. Multi-scale fusion (prompter masks),"+0.000 [-0.011, +0.012]","+0.001 [-0.006, +0.007]","+0.000 [-0.006, +0.007]",0.54
+"Mask-prompt generator (segmentation loss) vs. Logistic regression, ViT block 12 (prompter masks)","+0.035 [+0.019, +0.052]","+0.021 [+0.012, +0.030]","+0.028 [+0.018, +0.038]",1.00
+Multi-scale fusion + token gate vs. Multi-scale fusion (prompter masks),"-0.011 [-0.021, -0.001]","-0.006 [-0.010, -0.001]","-0.008 [-0.014, -0.003]",0.00
+"Logistic regression, ViT block 12 vs. Logistic regression, ViT block 1 (prompter masks)","+0.111 [+0.085, +0.137]","+0.084 [+0.069, +0.100]","+0.097 [+0.082, +0.113]",1.00
+"Mask-prompt generator (segmentation loss, label smoothing) vs. Mask-prompt generator (segmentation loss) (prompter masks)","+0.004 [-0.001, +0.008]","-0.001 [-0.004, +0.002]","+0.001 [-0.001, +0.004]",0.83
+Multi-scale fusion vs. CG-Net (fine-tuned) (prompter masks),"-0.019 [-0.043, +0.005]","+0.028 [+0.016, +0.039]","+0.004 [-0.010, +0.019]",0.73
+Mask-prompt generator (two-stage): SAM + hybrid vs. segmentation-loss generator mask,"+0.001 [-0.005, +0.006]","+0.003 [-0.001, +0.006]","+0.002 [-0.001, +0.005]",0.84
+Mask-prompt generator (end-to-end via SAM): SAM + hybrid vs. segmentation-loss generator mask,"-0.002 [-0.010, +0.007]","-0.052 [-0.068, -0.035]","-0.027 [-0.036, -0.018]",0.00

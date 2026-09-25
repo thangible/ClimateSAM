@@ -1,0 +1,26 @@
+{
+  "name": "learned_prompt_k4_s2",
+  "k": 4,
+  "seed": 2,
+  "trainable_params": 2048,
+  "best_epoch": 52,
+  "train_time_min": 11.76103994846344,
+  "val_TC IoU": 0.24021400054954825,
+  "val_AR IoU": 0.3082487526771001,
+  "val_BG IoU": 0.9162077667616,
+  "val_Mean IoU": 0.48822350666274944,
+  "val_Mean FG IoU": 0.2742313766133242,
+  "test": {
+    "TC IoU": 0.23614393971951236,
+    "AR IoU": 0.3174257352281744,
+    "BG IoU": 0.9203394798130529,
+    "Mean IoU": 0.49130305158691323,
+    "Mean FG IoU": 0.2767848374738434,
+    "TC recall": 0.888268156424581,
+    "TC precision": 0.19786729857819907,
+    "TC objects": 844,
+    "AR recall": 0.9830917874396136,
+    "AR precision": 0.17736318407960194,
+    "AR objects": 4020
+  }
+}

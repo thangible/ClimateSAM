@@ -1,0 +1,11 @@
+| Prompter, prompts, training prompts | Output | TC IoU | AR IoU | Mean FG IoU | TC recall / prec. | AR recall / prec. |
+|---|---|---|---|---|---|---|
+| Mask-prompt generator, bbox, out-of-fold | prompter mask | 0.337 | 0.414 | 0.376 |  |  |
+|  | SAM, Phase-1 decoder | 0.340 | 0.399 | 0.369 | 0.62 / 0.55 | 0.95 / 0.56 |
+|  | SAM, adapted decoder | 0.316 | 0.390 | 0.353 | 0.63 / 0.52 | 0.91 / 0.62 |
+| Mask-prompt generator, bbox, in-sample | prompter mask | 0.337 | 0.414 | 0.376 |  |  |
+|  | SAM, Phase-1 decoder | 0.340 | 0.399 | 0.369 | 0.62 / 0.55 | 0.95 / 0.56 |
+|  | SAM, adapted decoder | 0.340 | 0.404 | 0.372 | 0.63 / 0.56 | 0.93 / 0.64 |
+| Mask-prompt generator, hybrid, out-of-fold | prompter mask | 0.337 | 0.414 | 0.376 |  |  |
+|  | SAM, Phase-1 decoder | 0.339 | 0.413 | 0.376 | 0.62 / 0.56 | 0.92 / 0.63 |
+|  | SAM, adapted decoder | 0.338 | 0.416 | 0.377 | 0.63 / 0.55 | 0.94 / 0.62 |

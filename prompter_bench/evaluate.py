@@ -121,8 +121,12 @@ def evaluate_method(name, predict, data, climatesam, device, out_dir, kinds=KIND
         rows.append({'method': name, 'output': 'fused_hybrid', **fused.compute(), **fused_obj.compute()})
     decomposition = {cls: {k: i / max(u, 1) for k, (i, u) in d.items()} for cls, d in dec.items()}
     os.makedirs(out_dir, exist_ok=True)
+    per_image = {'own': own.per_image, **{f'sam_{k}': sam[k].per_image for k in kinds}}
+    if hard is None and 'hybrid' in kinds:
+        per_image['fused_hybrid'] = fused.per_image
     with open(os.path.join(out_dir, f'{name}.json'), 'w') as f:
-        json.dump({'rows': rows, 'error_decomposition': decomposition}, f, indent=2)
+        json.dump({'rows': rows, 'error_decomposition': decomposition, 'per_image_counts': per_image,
+                   'per_image_names': [data.cache.names[i] for i in range(len(data))]}, f)
     np.savez_compressed(os.path.join(out_dir, f'{name}_examples.npz'),
                         **{f'{i}__{k}': v for i, ex in examples.items() for k, v in ex.items()})
     return rows, decomposition

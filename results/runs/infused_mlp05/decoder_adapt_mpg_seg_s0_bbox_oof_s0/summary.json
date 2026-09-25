@@ -1,0 +1,43 @@
+{
+  "name": "decoder_adapt_mpg_seg_s0_bbox_oof_s0",
+  "prompter": "mpg_seg_s0",
+  "kind": "bbox",
+  "trainable_params": 1210656,
+  "best_epoch": 14,
+  "train_time_min": 16.71349983215332,
+  "test": {
+    "prompter mask": {
+      "TC IoU": 0.337495976677465,
+      "AR IoU": 0.4144469804142424,
+      "BG IoU": 0.9413425689172773,
+      "Mean IoU": 0.5644285086696615,
+      "Mean FG IoU": 0.37597147854585367
+    },
+    "SAM, Phase-1 decoder": {
+      "TC IoU": 0.3396415708207745,
+      "AR IoU": 0.39915879057009085,
+      "BG IoU": 0.9390176524900407,
+      "Mean IoU": 0.5592726712936353,
+      "Mean FG IoU": 0.3694001806954327,
+      "TC recall": 0.6201117318435754,
+      "TC precision": 0.5545023696682465,
+      "TC objects": 211,
+      "AR recall": 0.9541062801932367,
+      "AR precision": 0.5562659846547315,
+      "AR objects": 782
+    },
+    "SAM, adapted decoder": {
+      "TC IoU": 0.316349422897854,
+      "AR IoU": 0.39017380715863564,
+      "BG IoU": 0.943625152128104,
+      "Mean IoU": 0.5500494607281979,
+      "Mean FG IoU": 0.3532616150282448,
+      "TC recall": 0.6312849162011173,
+      "TC precision": 0.5207373271889402,
+      "TC objects": 217,
+      "AR recall": 0.9130434782608695,
+      "AR precision": 0.6214511041009464,
+      "AR objects": 634
+    }
+  }
+}

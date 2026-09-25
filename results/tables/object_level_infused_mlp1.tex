@@ -6,9 +6,18 @@
 Prompter & TC recall & TC precision & AR recall & AR precision & TC obj./img & AR obj./img \\
 \midrule
 Ground truth (oracle) & 1.000 & 1.000 & 1.000 & 1.000 & 2.9 & 6.8 \\
+CG-Net (official weights) & 0.726 & 0.411 & 0.935 & 0.571 & 5.1 & 11.1 \\
 CG-Net (fine-tuned) & 0.682 & 0.513 & 0.908 & 0.567 & 3.9 & 11.9 \\
+Logistic regression, ViT block 1 & 0.767$\pm$0.006 & 0.265$\pm$0.016 & 0.967$\pm$0.004 & 0.324$\pm$0.018 & 8.8 & 25.2 \\
+Logistic regression, ViT block 12 & 0.739$\pm$0.012 & 0.419$\pm$0.018 & 0.966$\pm$0.004 & 0.418$\pm$0.010 & 5.1 & 17.6 \\
+Multi-scale fusion & 0.670$\pm$0.030 & 0.529$\pm$0.061 & 0.956$\pm$0.001 & 0.482$\pm$0.017 & 4.0 & 17.4 \\
+Multi-scale fusion + token gate & 0.670$\pm$0.020 & 0.448$\pm$0.016 & 0.960$\pm$0.005 & 0.444$\pm$0.025 & 4.7 & 20.3 \\
+Mask-prompt generator (segmentation loss) & 0.661$\pm$0.009 & 0.563$\pm$0.031 & 0.951$\pm$0.001 & 0.514$\pm$0.024 & 3.5 & 14.9 \\
+Mask-prompt generator (end-to-end via SAM) & 0.652$\pm$0.012 & 0.521$\pm$0.050 & 0.963$\pm$0.007 & 0.362$\pm$0.107 & 3.7 & 90.0 \\
+Mask-prompt generator (two-stage) & 0.667$\pm$0.006 & 0.546$\pm$0.039 & 0.962$\pm$0.003 & 0.430$\pm$0.008 & 3.7 & 18.0 \\
+Mask-prompt generator (segmentation loss, label smoothing) & 0.648$\pm$0.015 & 0.558$\pm$0.026 & 0.953$\pm$0.010 & 0.495$\pm$0.007 & 3.5 & 15.2 \\
 \bottomrule
 \end{tabular}
-\caption{Object-level detection of the prompter masks: a ground-truth object is found if any predicted pixel overlaps it; a predicted object is correct if it overlaps any ground-truth object. The ground truth has 2.6 TC and 7.4 AR objects per image (Table 2.3).}
+\caption{Object-level detection of the prompter masks: a ground-truth object is found if any predicted pixel overlaps it; a predicted object is correct if it overlaps any ground-truth object. Objects are 8-connected components of at least 20 pixels; with this counting the test set has 2.9 TC and 6.8 AR objects per image.}
 \label{tab:object_level_infused_mlp1}
 \end{table}

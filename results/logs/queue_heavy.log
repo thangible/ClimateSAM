@@ -1,1 +1,16 @@
 13:55 start infused_mlp1/msf_seg_s0
+15:24 done infused_mlp1/msf_seg_s0
+15:24 start infused_mlp1/msf_seg_s1
+16:57 done infused_mlp1/msf_seg_s1
+16:57 start infused_mlp1/msf_seg_s2
+18:03 done infused_mlp1/msf_seg_s2
+18:03 start infused_mlp1/msf_token_seg_s0
+19:05 done infused_mlp1/msf_token_seg_s0
+19:05 start infused_mlp1/msf_token_seg_s1
+19:43 done infused_mlp1/msf_token_seg_s1
+19:43 start infused_mlp1/msf_token_seg_s2
+20:21 done infused_mlp1/msf_token_seg_s2
+20:22 start infused_mlp05/msf_seg_s0
+20:58 done infused_mlp05/msf_seg_s0
+20:58 start infused_mlp05/msf_token_seg_s0
+21:36 done infused_mlp05/msf_token_seg_s0

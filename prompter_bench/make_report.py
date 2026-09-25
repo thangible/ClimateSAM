@@ -32,6 +32,9 @@ METHODS = {  # key -> (display name, trainable parameters are filled in from the
     'mpg_seg': 'Mask-prompt generator (segmentation loss)',
     'mpg_sam_e2e': 'Mask-prompt generator (end-to-end via SAM)',
     'mpg_twostage': 'Mask-prompt generator (two-stage)',
+    'mpg_seg_smooth': 'Mask-prompt generator (segmentation loss, label smoothing)',
+    'learned_prompt_k4': 'Learned static prompts (4 tokens / class)',
+    'learned_prompt_k16': 'Learned static prompts (16 tokens / class)',
 }
 OUTPUTS = {
     'own': 'Prompter mask (no SAM)',
@@ -43,6 +46,7 @@ OUTPUTS = {
     'sam_bbox+mask': 'SAM + box + mask',
     'sam_hybrid': 'SAM + hybrid',
     'fused_hybrid': 'mean(prompter, SAM hybrid)',
+    'sam_static': 'SAM + learned static prompts',
 }
 METRICS = ['TC IoU', 'AR IoU', 'BG IoU', 'Mean IoU', 'Mean FG IoU']
 TC_COLOR, AR_COLOR = '#2ca02c', '#1f4fd1'
@@ -65,13 +69,17 @@ def load_eval(encoder):
             rows.append({**r, 'method': method_key(name), 'seed': seed})
         for cls, v in d['error_decomposition'].items():
             dec.append({'method': method_key(name), 'seed': seed, 'class': cls, **v})
+    for f in sorted(glob.glob(os.path.join(RESULTS, 'runs', encoder, 'learned_prompt_*', 'summary.json'))):
+        d = json.load(open(f))
+        rows.append({'method': method_key(d['name']), 'seed': d['seed'], 'output': 'sam_static', **d['test']})
     return pd.DataFrame(rows), pd.DataFrame(dec)
 
 
 def load_runs(encoder):
     summaries, logs = [], {}
     for d in sorted(glob.glob(os.path.join(RESULTS, 'runs', encoder, '*'))):
-        if not os.path.exists(os.path.join(d, 'summary.json')):
+        name = os.path.basename(d)
+        if not os.path.exists(os.path.join(d, 'summary.json')) or name.startswith('decoder_adapt') or '_fold' in name:
             continue
         s = json.load(open(os.path.join(d, 'summary.json')))
         s['method'] = method_key(s['name'])
@@ -103,6 +111,12 @@ def write_table(name, header, body, caption, label, colspec=None):
     lines += ['\\bottomrule', '\\end{tabular}', f'\\caption{{{caption}}}', f'\\label{{{label}}}', '\\end{table}']
     with open(os.path.join(TABLES, f'{name}.tex'), 'w') as f:
         f.write('\n'.join(lines) + '\n')
+    plain = lambda c: re.sub(r'\$\\pm\$', ' ± ', re.sub(r'\$\\Delta\$', 'Δ', c)).replace('\\%', '%').replace('$', '').replace('\\_', '_')
+    with open(os.path.join(TABLES, f'{name}.md'), 'w') as f:
+        f.write('| ' + ' | '.join(plain(h) for h in header) + ' |\n|' + '---|' * len(header) + '\n')
+        for row in body:
+            if row != 'MIDRULE':
+                f.write('| ' + ' | '.join(plain(c) for c in row) + ' |\n')
     with open(os.path.join(TABLES, f'{name}.csv'), 'w', newline='') as f:
         w = csv.writer(f)
         w.writerow([re.sub(r'\\[a-z]+|[{}$]', '', h) for h in header])
@@ -126,12 +140,14 @@ def main_tables(encoder, ev, dec, runs):
     m, s, n = mean_std(ev, ['method', 'output'], METRICS)
     body = []
     for meth in order:
-        for out in ('own', 'sam_bbox', 'sam_hybrid'):
+        first = True
+        for out in ('own', 'sam_bbox', 'sam_hybrid', 'sam_static'):
             if (meth, out) not in m.index:
                 continue
             key = (meth, out)
-            body.append([METHODS[meth] if out == 'own' else '', OUTPUTS[out]] +
+            body.append([METHODS[meth] if first else '', OUTPUTS[out]] +
                         [fmt(m.loc[key, c], s.loc[key, c], n.loc[key]) for c in METRICS])
+            first = False
         body.append('MIDRULE')
     write_table(f'main_{tag}', ['Prompter', 'Output'] + METRICS, body[:-1],
                 f'Automatic prompting on the ClimateNet test set (61 images), frozen ClimateSAM ({ENCODER_NAMES[encoder]}). '
@@ -159,10 +175,13 @@ def main_tables(encoder, ev, dec, runs):
     m2, s2, n2 = mean_std(own, ['method'], obj_cols + ['TC objects', 'AR objects'])
     body = [[METHODS[k]] + [fmt(m2.loc[k, c], s2.loc[k, c], n2.loc[k]) for c in obj_cols] +
             [f"{m2.loc[k, 'TC objects'] / 61:.1f}", f"{m2.loc[k, 'AR objects'] / 61:.1f}"] for k in order if k in m2.index]
+    gt_obj = (f"{m2.loc['oracle_gt', 'TC objects'] / 61:.1f} TC and {m2.loc['oracle_gt', 'AR objects'] / 61:.1f} AR"
+              if 'oracle_gt' in m2.index else 'the ground-truth number of')
     write_table(f'object_level_{tag}', ['Prompter'] + obj_cols + ['TC obj./img', 'AR obj./img'], body,
                 'Object-level detection of the prompter masks: a ground-truth object is found if any predicted pixel '
-                'overlaps it; a predicted object is correct if it overlaps any ground-truth object. The ground truth '
-                'has 2.6 TC and 7.4 AR objects per image (Table 2.3).', f'tab:object_level_{tag}')
+                'overlaps it; a predicted object is correct if it overlaps any ground-truth object. Objects are '
+                f'8-connected components of at least 20 pixels; with this counting the test set has {gt_obj} objects per image.',
+                f'tab:object_level_{tag}')
 
     # Table D: error decomposition of the own masks
     dcols = ['as_is', 'no_false_objects', 'add_missed_objects', 'perfect_detection', 'perfect_shape_of_detected']
@@ -205,16 +224,16 @@ def fig_methods(encoder, ev):
     if ev.empty:
         return
     order = [k for k in METHODS if k in set(ev['method']) and k != 'oracle_gt']
-    outs = ['own', 'sam_bbox', 'sam_point', 'sam_hybrid']
+    outs = ['own', 'sam_bbox', 'sam_point', 'sam_hybrid', 'sam_static']
     m, s, _ = mean_std(ev, ['method', 'output'], ['TC IoU', 'AR IoU'])
     fig, axes = plt.subplots(1, 2, figsize=(14, 4.8), sharey=True)
-    colors = ['#444444', '#e07b39', '#c9a227', '#3a7dc9']
+    colors = ['#444444', '#e07b39', '#c9a227', '#3a7dc9', '#8e5ea2']
     for ax, cls in zip(axes, ('TC IoU', 'AR IoU')):
         x = np.arange(len(order))
         for j, out in enumerate(outs):
             vals = [m.loc[(k, out), cls] if (k, out) in m.index else np.nan for k in order]
             errs = [s.loc[(k, out), cls] if (k, out) in s.index else 0 for k in order]
-            ax.bar(x + (j - 1.5) * 0.2, vals, 0.2, yerr=errs, label=OUTPUTS[out], color=colors[j], capsize=2)
+            ax.bar(x + (j - 2) * 0.17, vals, 0.17, yerr=errs, label=OUTPUTS[out], color=colors[j], capsize=2)
         ax.set_xticks(x)
         ax.set_xticklabels([METHODS[k] for k in order], rotation=35, ha='right', fontsize=8)
         ax.set_title(cls.replace(' IoU', ''))
@@ -395,6 +414,141 @@ def fig_examples(encoder, methods=('oracle_gt', 'cgnet_finetuned', 'msf_seg_s0',
         savefig(fig, f'examples_{encoder}_img{img}')
 
 
+def load_counts(encoder):
+    """method -> output -> (n_images, 9) per-image [tp, fp, fn] x (TC, AR, BG), summed over seeds."""
+    counts = defaultdict(dict)
+    for f in sorted(glob.glob(os.path.join(RESULTS, 'eval', encoder, '*.json'))):
+        d = json.load(open(f))
+        if 'per_image_counts' not in d:
+            continue
+        key = method_key(os.path.basename(f)[:-5])
+        for out, arr in d['per_image_counts'].items():
+            a = np.array(arr, dtype=np.float64)
+            counts[key][out] = counts[key].get(out, 0) + a
+    for f in sorted(glob.glob(os.path.join(RESULTS, 'runs', encoder, 'learned_prompt_*', 'test_per_image_counts.json'))):
+        key = method_key(os.path.basename(os.path.dirname(f)))
+        counts[key]['sam_static'] = counts[key].get('sam_static', 0) + np.array(json.load(open(f)), dtype=np.float64)
+    return counts
+
+
+def iou_from(c):
+    """c: (..., 9) summed counts -> TC, AR IoU."""
+    tc = c[..., 0] / np.maximum(c[..., 0] + c[..., 1] + c[..., 2], 1)
+    ar = c[..., 3] / np.maximum(c[..., 3] + c[..., 4] + c[..., 5], 1)
+    return tc, ar
+
+
+def bootstrap(a, b, n=2000, seed=0):
+    """Paired bootstrap over test images of (IoU of b) - (IoU of a); returns dict of mean / CI / P(>0)."""
+    rng = np.random.default_rng(seed)
+    idx = rng.integers(0, len(a), size=(n, len(a)))
+    ta, aa = iou_from(a[idx].sum(1))
+    tb, ab = iou_from(b[idx].sum(1))
+    out = {}
+    for name, d in (('TC', tb - ta), ('AR', ab - aa), ('FG', (tb + ab - ta - aa) / 2)):
+        t0a, a0a = iou_from(a.sum(0))
+        t0b, a0b = iou_from(b.sum(0))
+        point = {'TC': t0b - t0a, 'AR': a0b - a0a, 'FG': (t0b + a0b - t0a - a0a) / 2}[name]
+        out[name] = (point, np.percentile(d, 2.5), np.percentile(d, 97.5), (d > 0).mean())
+    return out
+
+
+def bootstrap_table(encoder):
+    counts = load_counts(encoder)
+    if not counts:
+        return
+    comps = []
+    for m in METHODS:
+        if m == 'oracle_gt' or m not in counts:
+            continue
+        for out in ('sam_bbox', 'sam_hybrid', 'fused_hybrid'):
+            if out in counts[m]:
+                comps.append((f'{METHODS[m]}: {OUTPUTS[out]} vs. prompter mask', (m, 'own'), (m, out)))
+    pairs = [('mpg_seg', 'cgnet_finetuned'), ('mpg_seg', 'msf_seg'), ('mpg_seg', 'logreg_last_seg'),
+             ('msf_token_seg', 'msf_seg'), ('logreg_last_seg', 'logreg_l0_seg'), ('mpg_seg_smooth', 'mpg_seg'),
+             ('msf_seg', 'cgnet_finetuned')]
+    for b, a in pairs:
+        if a in counts and b in counts:
+            comps.append((f'{METHODS.get(b, b)} vs. {METHODS.get(a, a)} (prompter masks)', (a, 'own'), (b, 'own')))
+    for b in ('mpg_twostage', 'mpg_sam_e2e'):
+        if b in counts and 'mpg_seg' in counts:
+            comps.append((f'{METHODS[b]}: SAM + hybrid vs. segmentation-loss generator mask', ('mpg_seg', 'own'), (b, 'sam_hybrid')))
+    for b in ('learned_prompt_k4', 'learned_prompt_k16'):
+        if b in counts and 'mpg_seg' in counts:
+            comps.append((f'{METHODS[b]} vs. segmentation-loss generator mask', ('mpg_seg', 'own'), (b, 'sam_static')))
+    body, rows = [], []
+    for label, (ma, oa), (mb, ob) in comps:
+        a, b = counts[ma][oa], counts[mb][ob]
+        # IoU is a ratio of summed counts, so pooling a different number of seeds on each side does not bias it
+        r = bootstrap(a, b)
+        cells = [f'{r[k][0]:+.3f} [{r[k][1]:+.3f}, {r[k][2]:+.3f}]' for k in ('TC', 'AR', 'FG')]
+        body.append([label] + cells + [f"{r['FG'][3]:.2f}"])
+        rows.append({'comparison': label, **{f'{k} {n}': r[k][i] for k in ('TC', 'AR', 'FG')
+                                               for i, n in enumerate(('delta', 'ci_low', 'ci_high', 'p_positive'))}})
+    write_table(f'bootstrap_{encoder}', ['Comparison (B minus A)', '$\\Delta$ TC IoU [95\\% CI]', '$\\Delta$ AR IoU [95\\% CI]',
+                                         '$\\Delta$ mean FG IoU [95\\% CI]', 'P($\\Delta$FG$>$0)'], body,
+                f'Paired bootstrap over the 61 test images (2000 resamples; learned prompters: the three seeds pooled). '
+                f'{ENCODER_NAMES[encoder]}.', f'tab:bootstrap_{encoder}', 'lcccc')
+
+
+def decoder_table(encoder):
+    runs = sorted(glob.glob(os.path.join(RESULTS, 'runs', encoder, 'decoder_adapt_*', 'summary.json')))
+    if not runs:
+        return
+    labels = {'cgnet_finetuned': 'CG-Net (fine-tuned)', 'mpg_seg_s0': 'Mask-prompt generator'}
+    body, fig, ax = [], *plt.subplots(figsize=(7, 4))
+    for f in runs:
+        d = json.load(open(f))
+        oof = 'out-of-fold' if '_oof' in d['name'] else 'in-sample'
+        head = f"{labels.get(d['prompter'], d['prompter'])}, {d['kind']}, {oof}"
+        for k, v in d['test'].items():
+            obj = (f"{v['TC recall']:.2f} / {v['TC precision']:.2f}", f"{v['AR recall']:.2f} / {v['AR precision']:.2f}") \
+                if 'TC recall' in v else ('', '')
+            body.append([head if k == 'prompter mask' else '', k, f"{v['TC IoU']:.3f}", f"{v['AR IoU']:.3f}",
+                         f"{v['Mean FG IoU']:.3f}", *obj])
+        body.append('MIDRULE')
+        log = pd.read_csv(os.path.join(os.path.dirname(f), 'log.csv'))
+        ax.plot(log['epoch'], log['val_Mean FG IoU'], marker='o', ms=2, label=head)
+    write_table(f'decoder_adaptation_{encoder}', ['Prompter, prompts, training prompts', 'Output', 'TC IoU', 'AR IoU',
+                                                  'Mean FG IoU', 'TC recall / prec.', 'AR recall / prec.'], body[:-1],
+                'Adapting the HQ decoder parts to generated prompts (test set). Phase-1 decoder = the frozen decoder of '
+                'all other experiments; adapted = best validation epoch of 30.', f'tab:decoder_adaptation_{encoder}',
+                'llccccc')
+    ax.set_xlabel('epoch (0 = Phase-1 decoder)')
+    ax.set_ylabel('validation mean FG IoU (SAM output)')
+    ax.grid(alpha=0.3)
+    ax.legend(fontsize=7)
+    savefig(fig, f'decoder_adaptation_{encoder}')
+
+
+def fig_sam_minus_prompter(encoder):
+    """SAM output minus the prompter's own mask, with paired-bootstrap 95% intervals (the central Section 4.3 claim)."""
+    counts = load_counts(encoder)
+    order = [k for k in METHODS if k in counts and k != 'oracle_gt' and 'own' in counts[k]]
+    if not order:
+        return
+    outs = [('sam_bbox', '#e07b39'), ('sam_point', '#c9a227'), ('sam_hybrid', '#3a7dc9')]
+    fig, axes = plt.subplots(1, 3, figsize=(15, 0.45 * len(order) + 1.5), sharey=True)
+    for ax, metric in zip(axes, ('TC', 'AR', 'FG')):
+        for j, (out, color) in enumerate(outs):
+            for i, k in enumerate(order):
+                if out not in counts[k]:
+                    continue
+                r = bootstrap(counts[k]['own'], counts[k][out])[metric]
+                y = i + (j - 1) * 0.25
+                ax.errorbar(r[0], y, xerr=[[r[0] - r[1]], [r[2] - r[0]]], fmt='o', color=color, ms=4, capsize=2,
+                            label=OUTPUTS[out] if i == 0 else None)
+        ax.axvline(0, color='k', lw=0.8)
+        ax.set_title({'TC': 'TC IoU', 'AR': 'AR IoU', 'FG': 'mean FG IoU'}[metric] + ': SAM minus prompter mask')
+        ax.grid(axis='x', alpha=0.3)
+    axes[0].set_yticks(range(len(order)))
+    axes[0].set_yticklabels([METHODS[k] for k in order], fontsize=8)
+    axes[0].invert_yaxis()
+    axes[0].legend(fontsize=7, loc='lower left')
+    fig.suptitle(f'Does SAM improve on its prompter? Paired bootstrap 95% intervals, 61 test images ({ENCODER_NAMES[encoder]})')
+    savefig(fig, f'sam_minus_prompter_{encoder}')
+
+
 def exploratory():
     """Curves + summary of the first exploratory runs (encoder retrain_infused_05, BCE loss, selection on test)."""
     d = os.path.join(RESULTS, '07_exploratory_runs')
@@ -432,6 +586,31 @@ def exploratory():
                 'selected on the test set -- optimistic, superseded by Section 04).', 'tab:exploratory')
 
 
+def speed_table():
+    f = os.path.join(RESULTS, '04_sam_feature_prompters', 'speed.csv')
+    if not os.path.exists(f):
+        return
+    d = pd.read_csv(f)
+    body = [[r['prompter'], f"{int(r['params']):,}", f"{r['GFLOPs']:.2f}", f"{r['latency_ms']:.2f}"] for _, r in d.iterrows()]
+    write_table('speed', ['Model', 'Parameters', 'GFLOPs / image', 'Latency (ms, A100, batch 1)'], body,
+                'Cost of the prompters on top of the frozen ClimateSAM encoder (forward pass, one image; FLOPs counted '
+                'with torch.utils.flop\\_counter, latency = median of 20 runs). The encoder and one decoder call are '
+                'listed for reference.', 'tab:speed', 'lccc')
+
+
+def render_readme():
+    """results/README.template.md -> results/README.md, with {{table:NAME}} replaced by tables/NAME.md."""
+    tpl = os.path.join(RESULTS, 'README.template.md')
+    if not os.path.exists(tpl):
+        return
+    text = open(tpl).read()
+    for name in re.findall(r'\{\{table:([\w.-]+)\}\}', text):
+        f = os.path.join(TABLES, f'{name}.md')
+        text = text.replace(f'{{{{table:{name}}}}}', open(f).read() if os.path.exists(f) else f'*(table {name} not generated yet)*')
+    with open(os.path.join(RESULTS, 'README.md'), 'w') as f:
+        f.write('<!-- generated from README.template.md by prompter_bench/make_report.py -->\n' + text)
+
+
 def main():
     exploratory()
     for encoder in ENCODER_NAMES:
@@ -448,8 +627,13 @@ def main():
         fig_decomposition(encoder, dec)
         fig_oracle(encoder)
         fig_examples(encoder)
+        bootstrap_table(encoder)
+        fig_sam_minus_prompter(encoder)
+        decoder_table(encoder)
     fig_table413()
     table413()
+    speed_table()
+    render_readme()
 
 
 if __name__ == '__main__':

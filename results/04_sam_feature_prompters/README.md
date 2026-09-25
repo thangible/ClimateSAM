@@ -54,7 +54,47 @@ Training modes of the mask-prompt generator (`../figures/diagram_training_modes.
 6. `exp/cgnet_weight.pth` was fine-tuned on all 398 training images, so its masks on training / validation images
    are far better than on test images (validation mean FG IoU 0.45 vs. 0.37 on test) — relevant whenever its outputs
    on training images are used (`05_decoder_adaptation`).
+7. The official ClimateNet CG-Net checkpoint (`pretrained/weights_cgnet.pth`) predicts background everywhere in
+   `eval()` mode: its stored BatchNorm running statistics do not match its weights. It is evaluated here with batch
+   statistics (batch of 4 images, running statistics untouched), which restores sensible predictions; this is probably
+   also why it needed fine-tuning.
 
-## Results
+## Results (primary checkpoint; full tables in the top-level `README.md` and `../tables/`)
 
-(filled in from `../tables/` once all runs are finished — see the top-level `README.md`)
+Prompter masks (no SAM), mean over 3 seeds, test set:
+
+| Prompter | Params | TC IoU | AR IoU | Mean FG IoU |
+|---|---|---|---|---|
+| CG-Net, official weights | 494 k | 0.327 | 0.333 | 0.330 |
+| CG-Net, fine-tuned | 494 k | 0.349 | 0.382 | 0.366 |
+| Logistic regression, ViT block 1 | 1.5 k | 0.195 | 0.319 | 0.257 |
+| Logistic regression, ViT block 12 | 1.5 k | 0.301 | 0.385 | 0.343 |
+| Multi-scale fusion | 1.41 M | 0.333 | 0.403 | 0.368 |
+| Multi-scale fusion + token gate | 1.42 M | 0.324 | 0.399 | 0.362 |
+| **Mask-prompt generator** | 0.67 M | **0.344** | **0.413** | **0.379** |
+| Mask-prompt generator, label smoothing | 0.67 M | 0.338 | 0.412 | 0.375 |
+| Mask-prompt generator, end-to-end via SAM | 0.67 M | 0.335 | 0.378 | 0.356 |
+| Mask-prompt generator, two-stage | 0.67 M | 0.338 | 0.409 | 0.374 |
+
+SAM prompted by these masks (`../tables/prompt_conversion_*`, `../tables/bootstrap_*`,
+`../figures/sam_minus_prompter_*.png`):
+
+- Points are always clearly worse than the prompter mask (−0.03 … −0.08 mean FG IoU).
+- Tight boxes: roughly equal for TC, −0.01 … −0.02 for AR.
+- Hybrid prompts (TC box + mask, AR mask): the best conversion; within ±0.01 of the prompter mask, slightly positive
+  only for the weaker prompters (logistic regression on block 1: +0.007; end-to-end generator: +0.012) and slightly
+  negative for the strong ones (multi-scale fusion −0.009, mask-prompt generator −0.009).
+- Averaging the prompter's and SAM's probabilities (`fused_hybrid`) behaves like the hybrid output.
+
+Significance (paired bootstrap over the 61 test images, seeds pooled): the mask-prompt generator beats the fine-tuned
+CG-Net on AR (+0.031, 95 % CI [+0.020, +0.043]) with equal TC (−0.005 [−0.030, +0.020]), multi-scale fusion on mean
+FG IoU (+0.011 [+0.003, +0.019]) and the block-12 linear probe (+0.036 [+0.025, +0.046]). The token gate lowers
+multi-scale fusion by −0.006 [−0.009, −0.003]; label smoothing −0.004 [−0.007, −0.000].
+
+Object level (`../tables/object_level_*`): all prompters find 91–97 % of the ARs but only 64–77 % of the TCs; the
+precision of the predicted blobs is 0.4–0.6 (logistic regression: 0.27–0.42, i.e. many fragments). Error decomposition
+(`../tables/error_decomposition_*`): for AR, giving every detected river its true shape lifts IoU from ~0.41 to
+~0.8, while perfect detection only reaches ~0.49; for TC, perfect detection (~0.58) and perfect shapes (~0.64)
+matter about equally.
+
+Efficiency (`speed.csv`): parameters, forward FLOPs and latency per prompter.

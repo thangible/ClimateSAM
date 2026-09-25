@@ -77,14 +77,23 @@ class MaskPrompt(nn.Module):
 
 
 class CGNet(nn.Module):
-    """ClimateNet CG-Net on the raw TMQ/U850/V850/PSL fields (3-class softmax -> per-class log-odds)."""
+    """
+    ClimateNet CG-Net on the raw TMQ/U850/V850/PSL fields (3-class softmax -> per-class log-odds).
+    batch_stats: the official checkpoint's BatchNorm running statistics do not match its weights (with them it
+    predicts background everywhere), so it is run with batch statistics (momentum 0: nothing is updated).
+    """
 
-    def __init__(self, weights):
+    def __init__(self, weights, batch_stats=False):
         super().__init__()
         self.net = CGNetModule(classes=3, channels=4)
         self.net.load_state_dict(torch.load(weights, map_location='cpu'))
+        self.bns = [m for m in self.net.modules() if isinstance(m, nn.BatchNorm2d)] if batch_stats else []
+        for bn in self.bns:
+            bn.momentum = 0.0
 
     def forward(self, batch):
+        for bn in self.bns:
+            bn.train()
         logp = F.log_softmax(self.net(batch['cgnet']).float(), dim=1)
         # log-odds of "class c" vs "not class c"
         odds = torch.stack([logp[:, c] - torch.log1p(-logp[:, c].exp().clamp(max=1 - 1e-6)) for c in (1, 2)], dim=1)
@@ -112,7 +121,7 @@ def build(arch, sam_type='vit_b', climatesam=None):
         layers = [L // 2 - 1, L - 1]
         return MaskPrompt(D, layers), layers
     if arch == 'cgnet_official':
-        return CGNet(os.path.join(ROOT, 'pretrained', 'weights_cgnet.pth')), []
+        return CGNet(os.path.join(ROOT, 'pretrained', 'weights_cgnet.pth'), batch_stats=True), []
     if arch == 'cgnet_finetuned':
         return CGNet(os.path.join(ROOT, 'exp', 'cgnet_weight.pth')), []
     raise ValueError(arch)
