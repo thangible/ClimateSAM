@@ -1,0 +1,60 @@
+# 04 — Prompters, compared under one protocol (Section 4.3)
+
+Scripts: `prompter_bench/train.py`, `prompter_bench/prompters.py`, `prompter_bench/evaluate.py` · per-run logs and
+checkpoints: `../runs/<encoder>/<run>/` (`log.csv` = every epoch, `summary.json`, `best.pth`) · test results:
+`../eval/<encoder>/<run>.json` and `../eval/<encoder>/all_results.csv` · tables: `../tables/main_*.tex`,
+`../tables/prompt_conversion_*.tex`, `../tables/object_level_*.tex`, `../tables/error_decomposition_*.tex`,
+`../tables/cost_*.tex` · figures: `../figures/methods_*.png`, `../figures/training_curves_*.png`,
+`../figures/error_decomposition_*.png`, `../figures/examples_*.png`.
+
+Protocol: `../00_setup/README.md` (frozen primary checkpoint, 358 / 40 / 61 split, Table 4.4 loss, 60 epochs,
+selection on validation, 3 seeds).
+
+## The prompters
+
+All learned prompters read the cached outputs of the frozen ClimateSAM encoder and predict two logit maps (TC, AR).
+They were re-implemented behind one interface (`prompter_bench/prompters.py`); the network code is the thesis code in
+`model/`.
+
+| Prompter | Input | Architecture | Trainable params | Notes |
+|---|---|---|---|---|
+| CG-Net (official) | TMQ, U850, V850, PSL | ClimateNet CG-Net, official weights (`pretrained/weights_cgnet.pth`) | 494 k | not retrained |
+| CG-Net (fine-tuned) | same | the thesis' fine-tuned CG-Net (`exp/cgnet_weight.pth`) | 494 k | fine-tuned on **all** 398 training images |
+| Logistic regression, ViT block 1 | block-1 output (64×64×768) | 1×1 conv 768 → 2 | 1.5 k | = thesis `LogisticRegressionPrompter`, which reads `feat_list[0]`, i.e. the **first** ViT block |
+| Logistic regression, ViT block 12 | last block | same | 1.5 k | the obvious fix: the last block carries the semantics |
+| Multi-scale fusion | all 12 blocks | thesis Figure 3.9 (`model/prompt_generator.py`), 4 groups of 3 blocks, nearest upsampling to 1024², deep supervision | 1.41 M | 2-channel head (see bug 2 below) |
+| Multi-scale fusion + token gate | all 12 blocks | `model/prompt_generator_token.py`: the fused features gated per channel by the decoder's refined TC / AR HQ tokens, two binary heads (these produce the prompts) + the multiclass head as auxiliary output | 1.42 M | the gate inputs are fixed vectors (the decoder is frozen), so the gate is a learned per-class channel weighting |
+| **Mask-prompt generator** (new) | neck embedding + blocks 6 and 12 | 1×1 projections → 3 ConvNeXt blocks at 64×64 (dilation 1/2/4) → 2 transposed convs to 256×256 → 2 logits (`model/mask_prompt_generator.py`, `../figures/diagram_mask_prompt_generator.png`) | 0.67 M | outputs directly at SAM's dense-prompt resolution |
+
+Training modes of the mask-prompt generator (`../figures/diagram_training_modes.png`):
+
+- **segmentation loss** — like every other prompter: loss on its own maps.
+- **end-to-end via SAM** — the maps are turned into prompts differentiably (AR: logit map → dense prompt;
+  TC: one box per blob + TC logit map as dense prompt) and passed through the frozen prompt encoder and decoder;
+  loss on SAM's output + 0.5 × loss on the own maps. The box coordinates are not differentiated; the gradient reaches
+  the generator through the dense prompts.
+- **two-stage** — the segmentation-loss model (same seed), then 30 epochs end-to-end at lr 1e-4 (own-map loss
+  weight 1).
+- **label smoothing** (ablation) — segmentation loss with the Gaussian-smoothed targets of Section 3.5
+  (TC kernel 3 σ 5, AR kernel 9 σ 20, Table 4.5).
+
+## Bugs in the original prompter pipelines (fixed here)
+
+1. `test_prompt_effect.py` decodes images from `ClimateSAM.set_infer_img()`, which **skips the input adapter**
+   (see `02_table_4_13_recheck`; −0.00…−0.03 IoU).
+2. The multi-scale generators predict 3 channels but `compute_generator_loss` supervises only channels 1 (TC) and
+   2 (AR) as independent sigmoids; the **background channel receives no loss**, yet the final prediction is the
+   3-channel argmax, i.e. TC / AR compete with an untrained random projection. Here all prompters use two sigmoid
+   channels thresholded at 0.
+3. The logistic-regression prompter classifies the **first** ViT block (`feat_list[0]`), whose features are close
+   to the input; both blocks are compared here.
+4. Several scripts call `StreamSegMetrics.update(pred, gt)` although the signature is `update(gt, pred)`. IoU is
+   symmetric (unaffected); Mean / FreqW accuracy are not.
+5. All original scripts select the best epoch on the test set (optimistic numbers).
+6. `exp/cgnet_weight.pth` was fine-tuned on all 398 training images, so its masks on training / validation images
+   are far better than on test images (validation mean FG IoU 0.45 vs. 0.37 on test) — relevant whenever its outputs
+   on training images are used (`05_decoder_adaptation`).
+
+## Results
+
+(filled in from `../tables/` once all runs are finished — see the top-level `README.md`)

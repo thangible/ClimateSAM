@@ -1,0 +1,33 @@
+/home/worker1/thang/ClimateSAM/prompter_bench/train.py:179: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:835.)
+  sums[k] = sums.get(k, 0.0) + float(v) * len(mb) / len(chunk)
+[mpg_sam_e2e_s0] epoch 1 13.7s loss 2.9991
+[mpg_sam_e2e_s0] epoch 2 15.1s loss 2.6819 | val_sam_Mean FG IoU 0.2756
+[mpg_sam_e2e_s0] epoch 3 52.6s loss 2.3541
+[mpg_sam_e2e_s0] epoch 4 40.7s loss 2.1605 | val_sam_Mean FG IoU 0.3023
+[mpg_sam_e2e_s0] epoch 5 33.9s loss 2.0209
+[mpg_sam_e2e_s0] epoch 6 32.3s loss 1.9395 | val_sam_Mean FG IoU 0.3335
+[mpg_sam_e2e_s0] epoch 7 30.5s loss 1.8921
+[mpg_sam_e2e_s0] epoch 8 30.4s loss 1.9221 | val_sam_Mean FG IoU 0.3298
+[mpg_sam_e2e_s0] epoch 9 31.0s loss 1.8936
+[mpg_sam_e2e_s0] epoch 10 29.1s loss 1.8288 | val_sam_Mean FG IoU 0.3427
+[mpg_sam_e2e_s0] epoch 11 29.4s loss 1.8337
+[mpg_sam_e2e_s0] epoch 12 29.4s loss 1.8002 | val_sam_Mean FG IoU 0.3489
+[mpg_sam_e2e_s0] epoch 13 30.0s loss 1.8054
+[mpg_sam_e2e_s0] epoch 14 30.9s loss 1.8811 | val_sam_Mean FG IoU 0.3373
+[mpg_sam_e2e_s0] epoch 15 29.2s loss 1.7796
+[mpg_sam_e2e_s0] epoch 16 30.4s loss 1.7372 | val_sam_Mean FG IoU 0.3606
+[mpg_sam_e2e_s0] epoch 17 29.0s loss 1.7067
+[mpg_sam_e2e_s0] epoch 18 26.7s loss 1.6912 | val_sam_Mean FG IoU 0.3515
+[mpg_sam_e2e_s0] epoch 19 29.2s loss 1.6851
+[mpg_sam_e2e_s0] epoch 20 29.7s loss 1.6722 | val_sam_Mean FG IoU 0.3683
+[mpg_sam_e2e_s0] epoch 21 29.1s loss 1.6470
+[mpg_sam_e2e_s0] epoch 22 27.9s loss 1.6404 | val_sam_Mean FG IoU 0.3442
+[mpg_sam_e2e_s0] epoch 23 28.4s loss 1.6151
+[mpg_sam_e2e_s0] epoch 24 29.6s loss 1.6068 | val_sam_Mean FG IoU 0.3655
+[mpg_sam_e2e_s0] epoch 25 24.0s loss 1.5944
+[mpg_sam_e2e_s0] epoch 26 20.4s loss 1.5965 | val_sam_Mean FG IoU 0.3696
+[mpg_sam_e2e_s0] epoch 27 18.4s loss 1.5616
+[mpg_sam_e2e_s0] epoch 28 22.3s loss 1.5906 | val_sam_Mean FG IoU 0.3559
+[mpg_sam_e2e_s0] epoch 29 20.2s loss 1.5489
+[mpg_sam_e2e_s0] epoch 30 22.9s loss 1.5514 | val_sam_Mean FG IoU 0.3553

@@ -1,0 +1,3 @@
+Prompter,Class,As is,No false objects,Add missed objects,Perfect detection,Perfect shape
+CG-Net (fine-tuned),TC,0.349,0.439,0.457,0.575,0.620
+CG-Net (fine-tuned),AR,0.382,0.437,0.421,0.482,0.787

@@ -1,0 +1,16 @@
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lccccc}
+\toprule
+Run & Best epoch & SAM TC & SAM AR & Generator TC & Generator AR \\
+\midrule
+end-to-end via SAM (from scratch) & 65 & 0.280 & 0.391 & 0.234 & 0.339 \\
+end-to-end, 4 ViT blocks & 20 & 0.288 & 0.379 & 0.187 & 0.304 \\
+segmentation loss only & 10 & 0.325 & 0.265 & 0.330 & 0.410 \\
+two-stage (seg. loss -> via SAM) & 10 & 0.311 & 0.389 & 0.303 & 0.390 \\
+\bottomrule
+\end{tabular}
+\caption{First exploratory runs of the mask-prompt generator (encoder retrain\_infused\_05, BCE + Tversky loss, selected on the test set -- optimistic, superseded by Section 04).}
+\label{tab:exploratory}
+\end{table}

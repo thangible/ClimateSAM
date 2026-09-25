@@ -236,6 +236,24 @@ def parse():
     parser.add_argument('--ar_sigma', type=float, default=2.0, help='Sigma for AR blur')
     parser.add_argument('--tc_sigma', type=float, default=1.0, help='Sigma for TC blur')
 
+    # Mask-prompt generator (train_mask_prompt_generator.py)
+    parser.add_argument(
+        '--gen_feature_layers', default=[-7, -1], nargs='+', type=int,
+        help="Indices of the ViT blocks whose features feed the mask-prompt generator. Default is [-7, -1]."
+    )
+    parser.add_argument(
+        '--gen_num_blocks', default=3, type=int,
+        help="Number of ConvNeXt blocks in the mask-prompt generator. Default is 3."
+    )
+    parser.add_argument(
+        '--aux_weight', default=0.5, type=float,
+        help="Weight of the loss on the generator's own mask prompt (the main loss is on SAM's output). Default is 0.5."
+    )
+    parser.add_argument(
+        '--sam_loss_weight', default=1.0, type=float,
+        help="Weight of the loss on SAM's output masks. Set to 0 to train the generator alone. Default is 1.0."
+    )
+
     args = parser.parse_args()
 
     return args

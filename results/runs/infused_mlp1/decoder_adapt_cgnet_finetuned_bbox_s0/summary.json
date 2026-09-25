@@ -1,0 +1,43 @@
+{
+  "name": "decoder_adapt_cgnet_finetuned_bbox_s0",
+  "prompter": "cgnet_finetuned",
+  "kind": "bbox",
+  "trainable_params": 1210656,
+  "best_epoch": 21,
+  "train_time_min": 21.28587259054184,
+  "test": {
+    "prompter mask": {
+      "TC IoU": 0.3494265437841852,
+      "AR IoU": 0.38167364307274343,
+      "BG IoU": 0.9398951437028797,
+      "Mean IoU": 0.5569984435199361,
+      "Mean FG IoU": 0.36555009342846434
+    },
+    "SAM, Phase-1 decoder": {
+      "TC IoU": 0.3413480598150997,
+      "AR IoU": 0.3690496143067156,
+      "BG IoU": 0.9393587812326915,
+      "Mean IoU": 0.5499188184515023,
+      "Mean FG IoU": 0.35519883706090766,
+      "TC recall": 0.6703910614525139,
+      "TC precision": 0.5576036866359446,
+      "TC objects": 217,
+      "AR recall": 0.8985507246376812,
+      "AR precision": 0.5336658354114714,
+      "AR objects": 802
+    },
+    "SAM, adapted decoder": {
+      "TC IoU": 0.3449328421802508,
+      "AR IoU": 0.38378001957809493,
+      "BG IoU": 0.9420303184034098,
+      "Mean IoU": 0.5569143933872519,
+      "Mean FG IoU": 0.36435643087917285,
+      "TC recall": 0.6424581005586593,
+      "TC precision": 0.5792079207920793,
+      "TC objects": 202,
+      "AR recall": 0.8816425120772947,
+      "AR precision": 0.5800000000000001,
+      "AR objects": 700
+    }
+  }
+}

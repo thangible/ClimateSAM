@@ -1,0 +1,3 @@
+Prompter,TC recall,TC precision,AR recall,AR precision,TC obj./img,AR obj./img
+Ground truth (oracle),1.000,1.000,1.000,1.000,2.9,6.8
+CG-Net (fine-tuned),0.682,0.513,0.908,0.567,3.9,11.9

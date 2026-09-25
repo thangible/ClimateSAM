@@ -1,0 +1,14 @@
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lcccccc}
+\toprule
+Prompter & TC recall & TC precision & AR recall & AR precision & TC obj./img & AR obj./img \\
+\midrule
+Ground truth (oracle) & 1.000 & 1.000 & 1.000 & 1.000 & 2.9 & 6.8 \\
+CG-Net (fine-tuned) & 0.682 & 0.513 & 0.908 & 0.567 & 3.9 & 11.9 \\
+\bottomrule
+\end{tabular}
+\caption{Object-level detection of the prompter masks: a ground-truth object is found if any predicted pixel overlaps it; a predicted object is correct if it overlaps any ground-truth object. The ground truth has 2.6 TC and 7.4 AR objects per image (Table 2.3).}
+\label{tab:object_level_infused_mlp1}
+\end{table}

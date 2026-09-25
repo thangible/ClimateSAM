@@ -1,0 +1,3 @@
+Prompter,Prompter mask (no SAM),SAM + box,SAM + box (+10%),SAM + points,SAM + box + points,SAM + mask logits,SAM + box + mask,SAM + hybrid
+Ground truth (oracle),1.00 / 1.00,0.72 / 0.62,0.59 / 0.57,0.53 / 0.58,0.58 / 0.60,0.77 / 0.92,0.87 / 0.88,0.87 / 0.92
+CG-Net (fine-tuned),0.35 / 0.38,0.34 / 0.37,0.31 / 0.36,0.28 / 0.34,0.32 / 0.36,0.34 / 0.38,0.35 / 0.38,0.35 / 0.38

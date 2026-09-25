@@ -1,0 +1,77 @@
+ClimateSAM weights loaded from ./exp/best_weights/infused_token_vit_b_0.5_retrain_infused_05_00-005.pth
+Generator trainable params: 867,746
+ClimateDataset initialized with 398 samples. Enlarge Ratio [0, 0], Prompt Type random
+ClimateDataset initialized with 61 samples. Enlarge Ratio [0, 0], Prompt Type random
+Epoch 1 (8.8s) - gen_TC: 1.0685, sam_TC: 1.1084, gen_AR: 1.1665, sam_AR: 1.7272, total: 3.9531
+Epoch 2 (8.1s) - gen_TC: 1.0572, sam_TC: 1.1096, gen_AR: 0.9858, sam_AR: 1.3622, total: 3.4933
+Epoch 3 (8.0s) - gen_TC: 1.0542, sam_TC: 1.1103, gen_AR: 0.8686, sam_AR: 0.8993, total: 2.9710
+Epoch 4 (8.5s) - gen_TC: 1.0172, sam_TC: 1.2091, gen_AR: 0.7966, sam_AR: 0.8115, total: 2.9275
+Epoch 5 (16.7s) - gen_TC: 0.9925, sam_TC: 1.8906, gen_AR: 0.8011, sam_AR: 0.7990, total: 3.5864
+  valid - SAM IoU TC: 0.14%, AR: 35.15% | generator IoU TC: 3.70%, AR: 33.26%
+Epoch 6 (14.0s) - gen_TC: 1.0297, sam_TC: 1.4364, gen_AR: 0.7823, sam_AR: 0.7861, total: 3.1285
+Epoch 7 (25.3s) - gen_TC: 1.0082, sam_TC: 2.0245, gen_AR: 0.7791, sam_AR: 0.7895, total: 3.7077
+Epoch 8 (25.9s) - gen_TC: 1.0212, sam_TC: 1.8868, gen_AR: 0.7583, sam_AR: 0.7676, total: 3.5441
+Epoch 9 (18.9s) - gen_TC: 1.0189, sam_TC: 1.7835, gen_AR: 0.7439, sam_AR: 0.7388, total: 3.4037
+Epoch 10 (15.2s) - gen_TC: 1.0124, sam_TC: 1.6151, gen_AR: 0.7457, sam_AR: 0.7368, total: 3.2310
+  valid - SAM IoU TC: 1.33%, AR: 37.32% | generator IoU TC: 2.34%, AR: 30.73%
+Epoch 11 (32.1s) - gen_TC: 1.0185, sam_TC: 1.6703, gen_AR: 0.7224, sam_AR: 0.7252, total: 3.2659
+Epoch 12 (32.1s) - gen_TC: 1.0136, sam_TC: 1.5080, gen_AR: 0.7206, sam_AR: 0.7295, total: 3.1047
+Epoch 13 (33.4s) - gen_TC: 0.9342, sam_TC: 1.2862, gen_AR: 0.7119, sam_AR: 0.7059, total: 2.8152
+Epoch 14 (33.5s) - gen_TC: 0.8360, sam_TC: 1.1434, gen_AR: 0.7047, sam_AR: 0.6974, total: 2.6112
+Epoch 15 (33.2s) - gen_TC: 0.7892, sam_TC: 1.0097, gen_AR: 0.7089, sam_AR: 0.7098, total: 2.4686
+  valid - SAM IoU TC: 24.78%, AR: 37.29% | generator IoU TC: 10.18%, AR: 30.29%
+Epoch 16 (33.6s) - gen_TC: 0.7771, sam_TC: 0.9933, gen_AR: 0.6945, sam_AR: 0.6837, total: 2.4128
+Epoch 17 (31.3s) - gen_TC: 0.7784, sam_TC: 1.0051, gen_AR: 0.6961, sam_AR: 0.6886, total: 2.4310
+Epoch 18 (33.0s) - gen_TC: 0.7512, sam_TC: 0.9282, gen_AR: 0.6981, sam_AR: 0.6913, total: 2.3441
+Epoch 19 (33.2s) - gen_TC: 0.7322, sam_TC: 0.8892, gen_AR: 0.6964, sam_AR: 0.6789, total: 2.2824
+Epoch 20 (32.7s) - gen_TC: 0.7293, sam_TC: 0.8824, gen_AR: 0.7044, sam_AR: 0.7143, total: 2.3136
+  valid - SAM IoU TC: 28.81%, AR: 37.91% | generator IoU TC: 18.71%, AR: 30.43%
+Epoch 21 (33.1s) - gen_TC: 0.7020, sam_TC: 0.8242, gen_AR: 0.6829, sam_AR: 0.6702, total: 2.1869
+Epoch 22 (33.2s) - gen_TC: 0.7036, sam_TC: 0.8340, gen_AR: 0.6872, sam_AR: 0.6701, total: 2.1995
+Epoch 23 (32.6s) - gen_TC: 0.6973, sam_TC: 0.8222, gen_AR: 0.6723, sam_AR: 0.6590, total: 2.1660
+Epoch 24 (32.2s) - gen_TC: 0.6879, sam_TC: 0.8071, gen_AR: 0.6744, sam_AR: 0.6676, total: 2.1558
+Epoch 25 (32.2s) - gen_TC: 0.6863, sam_TC: 0.8088, gen_AR: 0.6708, sam_AR: 0.6603, total: 2.1476
+  valid - SAM IoU TC: 29.33%, AR: 37.19% | generator IoU TC: 23.96%, AR: 31.32%
+Epoch 26 (32.8s) - gen_TC: 0.6735, sam_TC: 0.7844, gen_AR: 0.6764, sam_AR: 0.6560, total: 2.1154
+Epoch 27 (32.7s) - gen_TC: 0.6790, sam_TC: 0.7797, gen_AR: 0.6698, sam_AR: 0.6419, total: 2.0961
+Epoch 28 (32.1s) - gen_TC: 0.6575, sam_TC: 0.7665, gen_AR: 0.6589, sam_AR: 0.6367, total: 2.0614
+Epoch 29 (32.9s) - gen_TC: 0.6607, sam_TC: 0.7604, gen_AR: 0.6575, sam_AR: 0.6202, total: 2.0397
+Epoch 30 (29.6s) - gen_TC: 0.6488, sam_TC: 0.7429, gen_AR: 0.6607, sam_AR: 0.6248, total: 2.0225
+  valid - SAM IoU TC: 27.76%, AR: 38.76% | generator IoU TC: 21.27%, AR: 31.60%
+Epoch 31 (32.6s) - gen_TC: 0.6509, sam_TC: 0.7453, gen_AR: 0.6505, sam_AR: 0.6305, total: 2.0266
+Epoch 32 (32.6s) - gen_TC: 0.6420, sam_TC: 0.7402, gen_AR: 0.6535, sam_AR: 0.6250, total: 2.0130
+Epoch 33 (31.3s) - gen_TC: 0.6333, sam_TC: 0.7129, gen_AR: 0.6468, sam_AR: 0.6149, total: 1.9678
+Epoch 34 (32.8s) - gen_TC: 0.6374, sam_TC: 0.7257, gen_AR: 0.6463, sam_AR: 0.6238, total: 1.9914
+Epoch 35 (30.5s) - gen_TC: 0.6262, sam_TC: 0.7093, gen_AR: 0.6480, sam_AR: 0.6081, total: 1.9545
+  valid - SAM IoU TC: 27.91%, AR: 36.83% | generator IoU TC: 21.26%, AR: 31.41%
+Epoch 36 (19.1s) - gen_TC: 0.6244, sam_TC: 0.7099, gen_AR: 0.6433, sam_AR: 0.6084, total: 1.9522
+Epoch 37 (19.2s) - gen_TC: 0.6243, sam_TC: 0.7060, gen_AR: 0.6412, sam_AR: 0.5979, total: 1.9367
+Epoch 38 (19.3s) - gen_TC: 0.6182, sam_TC: 0.6948, gen_AR: 0.6369, sam_AR: 0.6067, total: 1.9291
+Epoch 39 (19.2s) - gen_TC: 0.6147, sam_TC: 0.6910, gen_AR: 0.6363, sam_AR: 0.5941, total: 1.9106
+Epoch 40 (19.4s) - gen_TC: 0.6107, sam_TC: 0.6971, gen_AR: 0.6310, sam_AR: 0.5980, total: 1.9160
+  valid - SAM IoU TC: 28.47%, AR: 36.43% | generator IoU TC: 21.13%, AR: 32.14%
+Epoch 41 (19.4s) - gen_TC: 0.6132, sam_TC: 0.6824, gen_AR: 0.6306, sam_AR: 0.5931, total: 1.8974
+Epoch 42 (19.0s) - gen_TC: 0.6076, sam_TC: 0.6759, gen_AR: 0.6312, sam_AR: 0.5788, total: 1.8741
+Epoch 43 (19.0s) - gen_TC: 0.6085, sam_TC: 0.6790, gen_AR: 0.6282, sam_AR: 0.5894, total: 1.8867
+Epoch 44 (19.1s) - gen_TC: 0.6044, sam_TC: 0.6743, gen_AR: 0.6305, sam_AR: 0.5854, total: 1.8771
+Epoch 45 (29.3s) - gen_TC: 0.6022, sam_TC: 0.6763, gen_AR: 0.6254, sam_AR: 0.5831, total: 1.8732
+  valid - SAM IoU TC: 27.94%, AR: 36.82% | generator IoU TC: 21.80%, AR: 32.35%
+Epoch 46 (31.8s) - gen_TC: 0.6027, sam_TC: 0.6774, gen_AR: 0.6254, sam_AR: 0.5804, total: 1.8718
+Epoch 47 (31.4s) - gen_TC: 0.5963, sam_TC: 0.6751, gen_AR: 0.6260, sam_AR: 0.5731, total: 1.8594
+Epoch 48 (31.4s) - gen_TC: 0.5949, sam_TC: 0.6751, gen_AR: 0.6247, sam_AR: 0.5782, total: 1.8631
+Epoch 49 (32.3s) - gen_TC: 0.5980, sam_TC: 0.6846, gen_AR: 0.6205, sam_AR: 0.5675, total: 1.8613
+Epoch 50 (31.3s) - gen_TC: 0.5916, sam_TC: 0.6802, gen_AR: 0.6199, sam_AR: 0.5703, total: 1.8562
+  valid - SAM IoU TC: 27.91%, AR: 37.24% | generator IoU TC: 22.85%, AR: 32.28%
+Epoch 51 (31.9s) - gen_TC: 0.5955, sam_TC: 0.6863, gen_AR: 0.6199, sam_AR: 0.5687, total: 1.8628
+Epoch 52 (32.5s) - gen_TC: 0.5934, sam_TC: 0.6742, gen_AR: 0.6154, sam_AR: 0.5703, total: 1.8489
+Epoch 53 (31.5s) - gen_TC: 0.5905, sam_TC: 0.6734, gen_AR: 0.6186, sam_AR: 0.5650, total: 1.8429
+Epoch 54 (30.2s) - gen_TC: 0.5897, sam_TC: 0.6751, gen_AR: 0.6196, sam_AR: 0.5687, total: 1.8484
+Epoch 55 (32.9s) - gen_TC: 0.5897, sam_TC: 0.6757, gen_AR: 0.6182, sam_AR: 0.5656, total: 1.8452
+  valid - SAM IoU TC: 28.80%, AR: 37.46% | generator IoU TC: 23.43%, AR: 32.65%
+Epoch 56 (32.2s) - gen_TC: 0.5898, sam_TC: 0.6732, gen_AR: 0.6169, sam_AR: 0.5656, total: 1.8421
+Epoch 57 (32.6s) - gen_TC: 0.5902, sam_TC: 0.6725, gen_AR: 0.6166, sam_AR: 0.5662, total: 1.8421
+Epoch 58 (32.9s) - gen_TC: 0.5884, sam_TC: 0.6788, gen_AR: 0.6167, sam_AR: 0.5599, total: 1.8412
+Epoch 59 (32.5s) - gen_TC: 0.5888, sam_TC: 0.6732, gen_AR: 0.6175, sam_AR: 0.5613, total: 1.8377
+Epoch 60 (32.4s) - gen_TC: 0.5868, sam_TC: 0.6710, gen_AR: 0.6162, sam_AR: 0.5561, total: 1.8286
+  valid - SAM IoU TC: 28.21%, AR: 37.46% | generator IoU TC: 23.09%, AR: 32.64%
+Best (epoch 20): SAM IoU TC 28.81%, AR 37.91% | generator IoU TC 18.71%, AR 30.43%

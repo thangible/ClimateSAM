@@ -1,0 +1,140 @@
+{
+  "rows": [
+    {
+      "method": "cgnet_finetuned",
+      "output": "own",
+      "TC IoU": 0.3494265437841852,
+      "AR IoU": 0.38167364307274343,
+      "BG IoU": 0.9398951437028797,
+      "Mean IoU": 0.5569984435199361,
+      "Mean FG IoU": 0.36555009342846434,
+      "TC recall": 0.6815642458100558,
+      "TC precision": 0.5127118644067796,
+      "TC objects": 236,
+      "AR recall": 0.9082125603864735,
+      "AR precision": 0.5673076923076923,
+      "AR objects": 728
+    },
+    {
+      "method": "cgnet_finetuned",
+      "output": "sam_bbox",
+      "TC IoU": 0.3413480598150997,
+      "AR IoU": 0.3690496143067156,
+      "BG IoU": 0.9393587812326915,
+      "Mean IoU": 0.5499188184515023,
+      "Mean FG IoU": 0.35519883706090766,
+      "TC recall": 0.6703910614525139,
+      "TC precision": 0.5576036866359446,
+      "TC objects": 217,
+      "AR recall": 0.8985507246376812,
+      "AR precision": 0.5336658354114714,
+      "AR objects": 802
+    },
+    {
+      "method": "cgnet_finetuned",
+      "output": "sam_bbox_e10",
+      "TC IoU": 0.30732935347085016,
+      "AR IoU": 0.35832512471619343,
+      "BG IoU": 0.9273767833953078,
+      "Mean IoU": 0.5310104205274505,
+      "Mean FG IoU": 0.3328272390935218,
+      "TC recall": 0.6703910614525139,
+      "TC precision": 0.5405405405405406,
+      "TC objects": 222,
+      "AR recall": 0.9057971014492754,
+      "AR precision": 0.46248600223964165,
+      "AR objects": 893
+    },
+    {
+      "method": "cgnet_finetuned",
+      "output": "sam_point",
+      "TC IoU": 0.28451894500867236,
+      "AR IoU": 0.33786856048372915,
+      "BG IoU": 0.9284746412607053,
+      "Mean IoU": 0.5169540489177024,
+      "Mean FG IoU": 0.31119375274620076,
+      "TC recall": 0.6927374301675978,
+      "TC precision": 0.5428571428571429,
+      "TC objects": 210,
+      "AR recall": 0.9154589371980676,
+      "AR precision": 0.42461832061068705,
+      "AR objects": 1048
+    },
+    {
+      "method": "cgnet_finetuned",
+      "output": "sam_bbox+point",
+      "TC IoU": 0.3166444094498239,
+      "AR IoU": 0.35643264023103327,
+      "BG IoU": 0.9267483229414757,
+      "Mean IoU": 0.5332751242074443,
+      "Mean FG IoU": 0.33653852484042857,
+      "TC recall": 0.6703910614525139,
+      "TC precision": 0.5446009389671361,
+      "TC objects": 213,
+      "AR recall": 0.9009661835748792,
+      "AR precision": 0.5097087378640777,
+      "AR objects": 824
+    },
+    {
+      "method": "cgnet_finetuned",
+      "output": "sam_mask",
+      "TC IoU": 0.3440791752886209,
+      "AR IoU": 0.384442142007434,
+      "BG IoU": 0.9415197885292088,
+      "Mean IoU": 0.5566803686084213,
+      "Mean FG IoU": 0.3642606586480275,
+      "TC recall": 0.6368715083798883,
+      "TC precision": 0.6120218579234973,
+      "TC objects": 183,
+      "AR recall": 0.8864734299516909,
+      "AR precision": 0.6568965517241379,
+      "AR objects": 580
+    },
+    {
+      "method": "cgnet_finetuned",
+      "output": "sam_bbox+mask",
+      "TC IoU": 0.34889070094992003,
+      "AR IoU": 0.3822643708618879,
+      "BG IoU": 0.9424333263334834,
+      "Mean IoU": 0.5578627993817639,
+      "Mean FG IoU": 0.36557753590590397,
+      "TC recall": 0.6536312849162011,
+      "TC precision": 0.5518867924528301,
+      "TC objects": 212,
+      "AR recall": 0.893719806763285,
+      "AR precision": 0.6360708534621577,
+      "AR objects": 621
+    },
+    {
+      "method": "cgnet_finetuned",
+      "output": "sam_hybrid",
+      "TC IoU": 0.34870760451766936,
+      "AR IoU": 0.384442142007434,
+      "BG IoU": 0.9411029606183872,
+      "Mean IoU": 0.5580842357144968,
+      "Mean FG IoU": 0.36657487326255167,
+      "TC recall": 0.6536312849162011,
+      "TC precision": 0.5518867924528301,
+      "TC objects": 212,
+      "AR recall": 0.8864734299516909,
+      "AR precision": 0.6568965517241379,
+      "AR objects": 580
+    }
+  ],
+  "error_decomposition": {
+    "TC": {
+      "as_is": 0.3494265437841852,
+      "no_false_objects": 0.43929316982596744,
+      "add_missed_objects": 0.4573276815179797,
+      "perfect_detection": 0.5749446641560103,
+      "perfect_shape_of_detected": 0.6204555820199665
+    },
+    "AR": {
+      "as_is": 0.38167364307274343,
+      "no_false_objects": 0.43691653207356507,
+      "add_missed_objects": 0.42144783753111176,
+      "perfect_detection": 0.4824475856953574,
+      "perfect_shape_of_detected": 0.787270223702438
+    }
+  }
+}

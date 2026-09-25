@@ -1,0 +1,15 @@
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{llccccc}
+\toprule
+Prompter & Class & As is & No false objects & Add missed objects & Perfect detection & Perfect shape \\
+\midrule
+CG-Net (fine-tuned) & TC & 0.349 & 0.439 & 0.457 & 0.575 & 0.620 \\
+\midrule
+CG-Net (fine-tuned) & AR & 0.382 & 0.437 & 0.421 & 0.482 & 0.787 \\
+\bottomrule
+\end{tabular}
+\caption{IoU of the prompter mask after removing one error type: deleting predicted objects that touch no ground truth, adding the ground-truth objects that were missed, both, or giving every detected object its exact ground-truth shape.}
+\label{tab:decomposition_infused_mlp1}
+\end{table}

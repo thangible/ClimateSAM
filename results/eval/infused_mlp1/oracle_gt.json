@@ -1,0 +1,140 @@
+{
+  "rows": [
+    {
+      "method": "oracle_gt",
+      "output": "own",
+      "TC IoU": 1.0,
+      "AR IoU": 1.0,
+      "BG IoU": 1.0,
+      "Mean IoU": 1.0,
+      "Mean FG IoU": 1.0,
+      "TC recall": 1.0,
+      "TC precision": 1.0,
+      "TC objects": 179,
+      "AR recall": 1.0,
+      "AR precision": 1.0,
+      "AR objects": 414
+    },
+    {
+      "method": "oracle_gt",
+      "output": "sam_bbox",
+      "TC IoU": 0.7232015781672568,
+      "AR IoU": 0.6248849347605928,
+      "BG IoU": 0.970650908833702,
+      "Mean IoU": 0.7729124739205172,
+      "Mean FG IoU": 0.6740432564639248,
+      "TC recall": 1.0,
+      "TC precision": 1.0,
+      "TC objects": 170,
+      "AR recall": 1.0,
+      "AR precision": 0.7742504409171076,
+      "AR objects": 567
+    },
+    {
+      "method": "oracle_gt",
+      "output": "sam_bbox_e10",
+      "TC IoU": 0.5857811657587257,
+      "AR IoU": 0.5688811119498346,
+      "BG IoU": 0.9586736995771237,
+      "Mean IoU": 0.7044453257618946,
+      "Mean FG IoU": 0.5773311388542801,
+      "TC recall": 1.0,
+      "TC precision": 0.9759036144578314,
+      "TC objects": 166,
+      "AR recall": 1.0,
+      "AR precision": 0.6656534954407295,
+      "AR objects": 658
+    },
+    {
+      "method": "oracle_gt",
+      "output": "sam_point",
+      "TC IoU": 0.5271947290167333,
+      "AR IoU": 0.5774953953311172,
+      "BG IoU": 0.9623879090356965,
+      "Mean IoU": 0.689026011127849,
+      "Mean FG IoU": 0.5523450621739252,
+      "TC recall": 1.0,
+      "TC precision": 0.9171597633136095,
+      "TC objects": 169,
+      "AR recall": 1.0,
+      "AR precision": 0.627808988764045,
+      "AR objects": 712
+    },
+    {
+      "method": "oracle_gt",
+      "output": "sam_bbox+point",
+      "TC IoU": 0.5826990896415977,
+      "AR IoU": 0.6039670585420496,
+      "BG IoU": 0.962048945652772,
+      "Mean IoU": 0.7162383646121397,
+      "Mean FG IoU": 0.5933330740918237,
+      "TC recall": 1.0,
+      "TC precision": 0.9695121951219512,
+      "TC objects": 164,
+      "AR recall": 1.0,
+      "AR precision": 0.7319223985890653,
+      "AR objects": 567
+    },
+    {
+      "method": "oracle_gt",
+      "output": "sam_mask",
+      "TC IoU": 0.7736176205834775,
+      "AR IoU": 0.920187685310458,
+      "BG IoU": 0.9937609651563343,
+      "Mean IoU": 0.8958554236834232,
+      "Mean FG IoU": 0.8469026529469678,
+      "TC recall": 0.9832402234636871,
+      "TC precision": 1.0,
+      "TC objects": 173,
+      "AR recall": 0.9903381642512077,
+      "AR precision": 1.0,
+      "AR objects": 402
+    },
+    {
+      "method": "oracle_gt",
+      "output": "sam_bbox+mask",
+      "TC IoU": 0.8716233047547275,
+      "AR IoU": 0.8832047662407206,
+      "BG IoU": 0.9921151085314989,
+      "Mean IoU": 0.9156477265089823,
+      "Mean FG IoU": 0.877414035497724,
+      "TC recall": 1.0,
+      "TC precision": 1.0,
+      "TC objects": 171,
+      "AR recall": 0.9927536231884058,
+      "AR precision": 1.0,
+      "AR objects": 403
+    },
+    {
+      "method": "oracle_gt",
+      "output": "sam_hybrid",
+      "TC IoU": 0.8719570447114612,
+      "AR IoU": 0.920187685310458,
+      "BG IoU": 0.9942997479037785,
+      "Mean IoU": 0.9288148259752326,
+      "Mean FG IoU": 0.8960723650109597,
+      "TC recall": 1.0,
+      "TC precision": 1.0,
+      "TC objects": 171,
+      "AR recall": 0.9903381642512077,
+      "AR precision": 1.0,
+      "AR objects": 402
+    }
+  ],
+  "error_decomposition": {
+    "TC": {
+      "as_is": 1.0,
+      "no_false_objects": 1.0,
+      "add_missed_objects": 1.0,
+      "perfect_detection": 1.0,
+      "perfect_shape_of_detected": 1.0
+    },
+    "AR": {
+      "as_is": 1.0,
+      "no_false_objects": 1.0,
+      "add_missed_objects": 1.0,
+      "perfect_detection": 1.0,
+      "perfect_shape_of_detected": 1.0
+    }
+  }
+}

@@ -1,0 +1,92 @@
+/home/worker1/thang/ClimateSAM/prompter_bench/train.py:166: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:835.)
+  sums[k] = sums.get(k, 0.0) + float(v) * len(mb) / len(chunk)
+[logreg_l0_seg_s1] epoch 1 1.7s loss 1.7398
+[logreg_l0_seg_s1] epoch 2 1.2s loss 1.5635 | val_own_Mean FG IoU 0.2070
+[logreg_l0_seg_s1] epoch 3 1.2s loss 1.4984
+[logreg_l0_seg_s1] epoch 4 1.2s loss 1.4688 | val_own_Mean FG IoU 0.2182
+[logreg_l0_seg_s1] epoch 5 1.2s loss 1.4452
+[logreg_l0_seg_s1] epoch 6 1.2s loss 1.4325 | val_own_Mean FG IoU 0.2251
+[logreg_l0_seg_s1] epoch 7 1.2s loss 1.4230
+[logreg_l0_seg_s1] epoch 8 1.2s loss 1.4141 | val_own_Mean FG IoU 0.2269
+[logreg_l0_seg_s1] epoch 9 1.2s loss 1.4070
+[logreg_l0_seg_s1] epoch 10 1.2s loss 1.4016 | val_own_Mean FG IoU 0.2289
+[logreg_l0_seg_s1] epoch 11 1.2s loss 1.3955
+[logreg_l0_seg_s1] epoch 12 1.2s loss 1.3892 | val_own_Mean FG IoU 0.2323
+[logreg_l0_seg_s1] epoch 13 1.2s loss 1.3869
+[logreg_l0_seg_s1] epoch 14 1.2s loss 1.3826 | val_own_Mean FG IoU 0.2393
+[logreg_l0_seg_s1] epoch 15 1.2s loss 1.3796
+[logreg_l0_seg_s1] epoch 16 1.2s loss 1.3789 | val_own_Mean FG IoU 0.2414
+[logreg_l0_seg_s1] epoch 17 1.2s loss 1.3737
+[logreg_l0_seg_s1] epoch 18 1.2s loss 1.3725 | val_own_Mean FG IoU 0.2366
+[logreg_l0_seg_s1] epoch 19 1.2s loss 1.3702
+[logreg_l0_seg_s1] epoch 20 1.2s loss 1.3672 | val_own_Mean FG IoU 0.2446
+[logreg_l0_seg_s1] epoch 21 1.2s loss 1.3652
+[logreg_l0_seg_s1] epoch 22 1.2s loss 1.3627 | val_own_Mean FG IoU 0.2456
+[logreg_l0_seg_s1] epoch 23 1.2s loss 1.3605
+[logreg_l0_seg_s1] epoch 24 1.2s loss 1.3589 | val_own_Mean FG IoU 0.2447
+[logreg_l0_seg_s1] epoch 25 1.2s loss 1.3591
+[logreg_l0_seg_s1] epoch 26 1.2s loss 1.3560 | val_own_Mean FG IoU 0.2463
+[logreg_l0_seg_s1] epoch 27 0.9s loss 1.3568
+[logreg_l0_seg_s1] epoch 28 0.9s loss 1.3548 | val_own_Mean FG IoU 0.2469
+[logreg_l0_seg_s1] epoch 29 0.9s loss 1.3523
+[logreg_l0_seg_s1] epoch 30 0.9s loss 1.3531 | val_own_Mean FG IoU 0.2491
+[logreg_l0_seg_s1] epoch 31 1.2s loss 1.3508
+[logreg_l0_seg_s1] epoch 32 1.2s loss 1.3509 | val_own_Mean FG IoU 0.2499
+[logreg_l0_seg_s1] epoch 33 1.3s loss 1.3486
+[logreg_l0_seg_s1] epoch 34 1.2s loss 1.3497 | val_own_Mean FG IoU 0.2499
+[logreg_l0_seg_s1] epoch 35 1.1s loss 1.3484
+[logreg_l0_seg_s1] epoch 36 1.2s loss 1.3461 | val_own_Mean FG IoU 0.2527
+[logreg_l0_seg_s1] epoch 37 1.1s loss 1.3475
+[logreg_l0_seg_s1] epoch 38 1.8s loss 1.3466 | val_own_Mean FG IoU 0.2486
+[logreg_l0_seg_s1] epoch 39 1.4s loss 1.3450
+[logreg_l0_seg_s1] epoch 40 1.4s loss 1.3448 | val_own_Mean FG IoU 0.2512
+[logreg_l0_seg_s1] epoch 41 1.5s loss 1.3440
+[logreg_l0_seg_s1] epoch 42 1.5s loss 1.3440 | val_own_Mean FG IoU 0.2483
+[logreg_l0_seg_s1] epoch 43 1.4s loss 1.3450
+[logreg_l0_seg_s1] epoch 44 1.5s loss 1.3428 | val_own_Mean FG IoU 0.2516
+[logreg_l0_seg_s1] epoch 45 1.4s loss 1.3419
+[logreg_l0_seg_s1] epoch 46 1.7s loss 1.3413 | val_own_Mean FG IoU 0.2486
+[logreg_l0_seg_s1] epoch 47 1.4s loss 1.3427
+[logreg_l0_seg_s1] epoch 48 1.4s loss 1.3411 | val_own_Mean FG IoU 0.2507
+[logreg_l0_seg_s1] epoch 49 1.4s loss 1.3410
+[logreg_l0_seg_s1] epoch 50 1.4s loss 1.3409 | val_own_Mean FG IoU 0.2526
+[logreg_l0_seg_s1] epoch 51 1.4s loss 1.3420
+[logreg_l0_seg_s1] epoch 52 1.5s loss 1.3410 | val_own_Mean FG IoU 0.2504
+[logreg_l0_seg_s1] epoch 53 1.5s loss 1.3404
+[logreg_l0_seg_s1] epoch 54 1.9s loss 1.3412 | val_own_Mean FG IoU 0.2515
+[logreg_l0_seg_s1] epoch 55 1.4s loss 1.3403
+[logreg_l0_seg_s1] epoch 56 1.6s loss 1.3406 | val_own_Mean FG IoU 0.2517
+[logreg_l0_seg_s1] epoch 57 1.5s loss 1.3402
+[logreg_l0_seg_s1] epoch 58 1.4s loss 1.3412 | val_own_Mean FG IoU 0.2515
+[logreg_l0_seg_s1] epoch 59 1.5s loss 1.3402
+[logreg_l0_seg_s1] epoch 60 1.2s loss 1.3400 | val_own_Mean FG IoU 0.2515
+{
+  "name": "logreg_l0_seg_s1",
+  "arch": "logreg_l0",
+  "mode": "seg",
+  "seed": 1,
+  "encoder": "infused_mlp1",
+  "trainable_params": 1538,
+  "best_epoch": 36,
+  "train_time_min": 1.4094947497049968,
+  "args": {
+    "encoder": "infused_mlp1",
+    "arch": "logreg_l0",
+    "mode": "seg",
+    "seed": 1,
+    "epochs": 60,
+    "lr": 0.001,
+    "bs": 8,
+    "micro_bs": 8,
+    "aux_weight": 1.0,
+    "init": null,
+    "val_every": 2,
+    "name": "logreg_l0_seg_s1"
+  },
+  "val_own_TC IoU": 0.20373616275409054,
+  "val_own_AR IoU": 0.30157151941650356,
+  "val_own_BG IoU": 0.9323494066914145,
+  "val_own_Mean IoU": 0.47921902962066953,
+  "val_own_Mean FG IoU": 0.25265384108529704
+}

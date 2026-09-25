@@ -1,0 +1,33 @@
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{lccccccc}
+\toprule
+Prompt type & Pos. & Neg. & Enlarge & IoU AR & IoU TC & IoU AR (orig. script) & IoU TC (orig. script) \\
+\midrule
+CG-Net alone (baseline) &  &  &  & 0.3817 & 0.3494 &  &  \\
+\midrule
+point+bbox & 10 & 5 & 0.0 & 0.3602 & 0.3447 & 0.3560 & 0.3430 \\
+bbox & 0 & 0 & 0.0 & 0.3750 & 0.3423 & 0.3758 & 0.3404 \\
+point+bbox & 15 & 10 & 0.0 & 0.3524 & 0.3420 & 0.3490 & 0.3399 \\
+bbox & 0 & 0 & -0.1 & 0.3327 & 0.3322 & 0.3355 & 0.3310 \\
+bbox & 0 & 0 & 0.1 & 0.3625 & 0.3122 & 0.3572 & 0.3109 \\
+point & 10 & 10 & 0.0 & 0.3376 & 0.3054 & 0.3297 & 0.3060 \\
+point & 1 & 3 & 0.0 & 0.2856 & 0.3016 & 0.2859 & 0.3001 \\
+point & 5 & 5 & 0.0 & 0.3425 & 0.2996 & 0.3380 & 0.3047 \\
+point & 5 & 10 & 0.0 & 0.3402 & 0.2980 & 0.3342 & 0.3065 \\
+point & 1 & 1 & 0.0 & 0.3224 & 0.2970 & 0.3214 & 0.2954 \\
+point & 2 & 2 & 0.0 & 0.3260 & 0.2910 & 0.3226 & 0.2854 \\
+point & 1 & 2 & 0.0 & 0.3013 & 0.2887 & 0.3009 & 0.2840 \\
+bbox & 0 & 0 & 0.2 & 0.3343 & 0.2661 & 0.3260 & 0.2645 \\
+bbox & 0 & 0 & -0.2 & 0.2211 & 0.2494 & 0.2271 & 0.2523 \\
+bbox & 0 & 0 & 0.3 & 0.3026 & 0.2279 & 0.2918 & 0.2268 \\
+bbox & 0 & 0 & 0.5 & 0.2437 & 0.1597 & 0.2297 & 0.1613 \\
+point+bbox+mask & 20 & 10 & 0.0 & 0.2352 & 0.1296 & 0.2469 & 0.1292 \\
+point+bbox+mask & 10 & 5 & 0.0 & 0.2316 & 0.1129 & 0.2349 & 0.1022 \\
+mask & 0 & 0 & 0.0 & 0.3794 & 0.0000 & 0.3724 & 0.0000 \\
+\bottomrule
+\end{tabular}
+\caption{SAM with CG-Net as prompter, re-run on the 61 test images (Infused Token MLP 1.0, trained without label smoothing). ``orig. script'': image passed through ClimateSAM.set\_infer\_img, which skips the learned input adapter (test\_prompt\_effect.py); other columns: input adapter applied as in training. Ordered by TC IoU.}
+\label{tab:cgnet_prompter_nosmooth}
+\end{table}

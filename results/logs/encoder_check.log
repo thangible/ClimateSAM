@@ -1,0 +1,15 @@
+ClimateDataset initialized with 61 samples. Enlarge Ratio [0, 0], Prompt Type random
+{'checkpoint': 'best_weights/infused_token_vit_b_0.5_retrain_infused_05_00-005', 'mlp_ratio': 0.5, 'gt_prompt': 'point', 'TC IoU': 0.5862, 'AR IoU': 0.5241, 'BG IoU': 0.9663, 'Mean IoU': 0.6922, 'Mean FG IoU': 0.5552}
+{'checkpoint': 'best_weights/infused_token_vit_b_0.5_retrain_infused_05_00-005', 'mlp_ratio': 0.5, 'gt_prompt': 'mask', 'TC IoU': 0.1128, 'AR IoU': 0.7404, 'BG IoU': 0.979, 'Mean IoU': 0.6107, 'Mean FG IoU': 0.4266}
+{'checkpoint': 'infused_token_vit_b_0.5_infused_token_vit_b_mlp05_CORRECTED', 'mlp_ratio': 0.5, 'gt_prompt': 'point', 'TC IoU': 0.5816, 'AR IoU': 0.5752, 'BG IoU': 0.9662, 'Mean IoU': 0.7077, 'Mean FG IoU': 0.5784}
+{'checkpoint': 'infused_token_vit_b_0.5_infused_token_vit_b_mlp05_CORRECTED', 'mlp_ratio': 0.5, 'gt_prompt': 'mask', 'TC IoU': 0.2247, 'AR IoU': 0.9049, 'BG IoU': 0.9897, 'Mean IoU': 0.7064, 'Mean FG IoU': 0.5648}
+{'checkpoint': 'infused_token_vit_b_0.5_retrain_infused_05_bbox', 'mlp_ratio': 0.5, 'gt_prompt': 'point', 'TC IoU': 0.6355, 'AR IoU': 0.5713, 'BG IoU': 0.9685, 'Mean IoU': 0.7251, 'Mean FG IoU': 0.6034}
+{'checkpoint': 'infused_token_vit_b_0.5_retrain_infused_05_bbox', 'mlp_ratio': 0.5, 'gt_prompt': 'mask', 'TC IoU': 0.0024, 'AR IoU': 0.8726, 'BG IoU': 0.9863, 'Mean IoU': 0.6204, 'Mean FG IoU': 0.4375}
+{'checkpoint': 'best_weights/infused_token_vitb_mlp1_best', 'mlp_ratio': 1.0, 'gt_prompt': 'point', 'TC IoU': 0.6308, 'AR IoU': 0.5509, 'BG IoU': 0.9678, 'Mean IoU': 0.7165, 'Mean FG IoU': 0.5909}
+{'checkpoint': 'best_weights/infused_token_vitb_mlp1_best', 'mlp_ratio': 1.0, 'gt_prompt': 'mask', 'TC IoU': 0.0006, 'AR IoU': 0.9078, 'BG IoU': 0.9883, 'Mean IoU': 0.6322, 'Mean FG IoU': 0.4542}
+{'checkpoint': 'infused_token_vit_b_1.0_infused_token_vit_b_mlp1_CORRECTED', 'mlp_ratio': 1.0, 'gt_prompt': 'point', 'TC IoU': 0.5214, 'AR IoU': 0.5793, 'BG IoU': 0.9626, 'Mean IoU': 0.6877, 'Mean FG IoU': 0.5503}
+{'checkpoint': 'infused_token_vit_b_1.0_infused_token_vit_b_mlp1_CORRECTED', 'mlp_ratio': 1.0, 'gt_prompt': 'mask', 'TC IoU': 0.7739, 'AR IoU': 0.9202, 'BG IoU': 0.9938, 'Mean IoU': 0.8959, 'Mean FG IoU': 0.847}
+{'checkpoint': 'best_weights/infused_token_vit_b_1.0_infused_token_vit_b_mlp1_CORRECTED_NOSMOOTH', 'mlp_ratio': 1.0, 'gt_prompt': 'point', 'TC IoU': 0.623, 'AR IoU': 0.5938, 'BG IoU': 0.9678, 'Mean IoU': 0.7282, 'Mean FG IoU': 0.6084}
+{'checkpoint': 'best_weights/infused_token_vit_b_1.0_infused_token_vit_b_mlp1_CORRECTED_NOSMOOTH', 'mlp_ratio': 1.0, 'gt_prompt': 'mask', 'TC IoU': 0.0013, 'AR IoU': 0.921, 'BG IoU': 0.9893, 'Mean IoU': 0.6372, 'Mean FG IoU': 0.4612}
+{'checkpoint': 'infused_token_vit_b_1.0_best_only_bbox', 'mlp_ratio': 1.0, 'gt_prompt': 'point', 'TC IoU': 0.6256, 'AR IoU': 0.5177, 'BG IoU': 0.9671, 'Mean IoU': 0.7035, 'Mean FG IoU': 0.5717}
+{'checkpoint': 'infused_token_vit_b_1.0_best_only_bbox', 'mlp_ratio': 1.0, 'gt_prompt': 'mask', 'TC IoU': 0.2385, 'AR IoU': 0.8737, 'BG IoU': 0.9877, 'Mean IoU': 0.7, 'Mean FG IoU': 0.5561}

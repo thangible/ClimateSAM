@@ -1,0 +1,46 @@
+[PATH]
+exp_dir = ./exp
+data_dir = '../data/climatenet'
+encoder_weights_name = best_weights/infused_token_vit_b_0.5_retrain_infused_05_00-005
+project_name = climate-sam-generator
+run_name = mask_prompt
+
+[BATCH CONFIG]
+train_bs = 8
+val_bs = 4
+lr = 1e-3
+
+[MODEL CONFIG]
+sam_type = vit_b
+fuse_channels = 128
+gen_num_blocks = 3
+gen_feature_layers = [-7, -1]
+
+[IMAGE ENCODER CONFIG]
+image_encoder_mlp_ratio = 0.5
+
+[TRAINING LOOP]
+max_epoch_num = 100
+valid_per_epochs = 5
+
+[LOSS CONFIG TVERSKY]
+alpha_ar_tversky = 0.5
+beta_ar_tversky = 0.5
+alpha_tc_tversky = 0.3
+beta_tc_tversky = 0.7
+
+[LOSS Weights]
+tversky_weight = 1.0
+bce_weight = 1.0
+aux_weight = 0.5
+sam_loss_weight = 1.0
+
+[LOSS CONFIG COMMON]
+bce_weight_tc = 3
+bce_weight_ar = 1
+
+[DEBUGGING]
+load_pretrained = False
+wandb = False
+save_model = True
+debugging = False

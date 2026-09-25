@@ -1,0 +1,19 @@
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{llccccc}
+\toprule
+Prompter & Output & TC IoU & AR IoU & BG IoU & Mean IoU & Mean FG IoU \\
+\midrule
+Ground truth (oracle) & Prompter mask (no SAM) & 1.000 & 1.000 & 1.000 & 1.000 & 1.000 \\
+ & SAM + box & 0.723 & 0.625 & 0.971 & 0.773 & 0.674 \\
+ & SAM + hybrid & 0.872 & 0.920 & 0.994 & 0.929 & 0.896 \\
+\midrule
+CG-Net (fine-tuned) & Prompter mask (no SAM) & 0.349 & 0.382 & 0.940 & 0.557 & 0.366 \\
+ & SAM + box & 0.341 & 0.369 & 0.939 & 0.550 & 0.355 \\
+ & SAM + hybrid & 0.349 & 0.384 & 0.941 & 0.558 & 0.367 \\
+\bottomrule
+\end{tabular}
+\caption{Automatic prompting on the ClimateNet test set (61 images), frozen ClimateSAM (Infused Token, MLP ratio 1.0). Learned prompters: mean$\pm$std over 3 seeds, checkpoint selected on 40 held-out training images.}
+\label{tab:prompters_infused_mlp1}
+\end{table}

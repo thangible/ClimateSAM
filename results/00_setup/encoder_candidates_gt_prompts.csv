@@ -1,0 +1,22 @@
+checkpoint,mlp_ratio,gt_prompt,TC IoU,AR IoU,BG IoU,Mean IoU,Mean FG IoU
+best_weights/infused_token_vit_b_0.5_retrain_infused_05_00-005,0.5,bbox,0.7564,0.6634,0.9756,0.7985,0.7099
+best_weights/infused_token_vit_b_0.5_retrain_infused_05_00-005,0.5,point,0.5862,0.5241,0.9663,0.6922,0.5552
+best_weights/infused_token_vit_b_0.5_retrain_infused_05_00-005,0.5,mask,0.1128,0.7404,0.979,0.6107,0.4266
+infused_token_vit_b_0.5_infused_token_vit_b_mlp05_CORRECTED,0.5,bbox,0.7284,0.6499,0.9727,0.7837,0.6892
+infused_token_vit_b_0.5_infused_token_vit_b_mlp05_CORRECTED,0.5,point,0.5816,0.5752,0.9662,0.7077,0.5784
+infused_token_vit_b_0.5_infused_token_vit_b_mlp05_CORRECTED,0.5,mask,0.2247,0.9049,0.9897,0.7064,0.5648
+infused_token_vit_b_0.5_retrain_infused_05_bbox,0.5,bbox,0.7411,0.6664,0.975,0.7942,0.7037
+infused_token_vit_b_0.5_retrain_infused_05_bbox,0.5,point,0.6355,0.5713,0.9685,0.7251,0.6034
+infused_token_vit_b_0.5_retrain_infused_05_bbox,0.5,mask,0.0024,0.8726,0.9863,0.6204,0.4375
+best_weights/infused_token_vitb_mlp1_best,1.0,bbox,0.7445,0.664,0.9742,0.7943,0.7043
+best_weights/infused_token_vitb_mlp1_best,1.0,point,0.6308,0.5509,0.9678,0.7165,0.5909
+best_weights/infused_token_vitb_mlp1_best,1.0,mask,0.0006,0.9078,0.9883,0.6322,0.4542
+infused_token_vit_b_1.0_infused_token_vit_b_mlp1_CORRECTED,1.0,bbox,0.7234,0.6249,0.9707,0.773,0.6742
+infused_token_vit_b_1.0_infused_token_vit_b_mlp1_CORRECTED,1.0,point,0.5214,0.5793,0.9626,0.6877,0.5503
+infused_token_vit_b_1.0_infused_token_vit_b_mlp1_CORRECTED,1.0,mask,0.7739,0.9202,0.9938,0.8959,0.847
+best_weights/infused_token_vit_b_1.0_infused_token_vit_b_mlp1_CORRECTED_NOSMOOTH,1.0,bbox,0.7331,0.6508,0.9726,0.7855,0.692
+best_weights/infused_token_vit_b_1.0_infused_token_vit_b_mlp1_CORRECTED_NOSMOOTH,1.0,point,0.623,0.5938,0.9678,0.7282,0.6084
+best_weights/infused_token_vit_b_1.0_infused_token_vit_b_mlp1_CORRECTED_NOSMOOTH,1.0,mask,0.0013,0.921,0.9893,0.6372,0.4612
+infused_token_vit_b_1.0_best_only_bbox,1.0,bbox,0.6588,0.5641,0.97,0.731,0.6114
+infused_token_vit_b_1.0_best_only_bbox,1.0,point,0.6256,0.5177,0.9671,0.7035,0.5717
+infused_token_vit_b_1.0_best_only_bbox,1.0,mask,0.2385,0.8737,0.9877,0.7,0.5561
