@@ -1,6 +1,7 @@
 \begin{table}[htbp]
 \centering
 \small
+\begin{adjustbox}{max width=\linewidth}
 \begin{tabular}{llccccc}
 \toprule
 Prompter & Output & TC IoU & AR IoU & BG IoU & Mean IoU & Mean FG IoU \\
@@ -50,6 +51,7 @@ Mask-prompt generator (segmentation loss, label smoothing) & Prompter mask (no S
  & SAM + hybrid & 0.336$\pm$0.004 & 0.403$\pm$0.004 & 0.948$\pm$0.000 & 0.562$\pm$0.001 & 0.369$\pm$0.002 \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
 \caption{Automatic prompting on the ClimateNet test set (61 images), frozen ClimateSAM (Infused Token, MLP ratio 0.5). Learned prompters: mean$\pm$std over 3 seeds, checkpoint selected on 40 held-out training images.}
 \label{tab:prompters_infused_mlp05}
 \end{table}

@@ -1,0 +1,9 @@
+22:52 start infused_mlp1/cgnet_train_seg_s0
+23:21 start infused_mlp1/cgnet_scratch_seg_s0
+23:49 done infused_mlp1/cgnet_scratch_seg_s0
+23:49 start infused_mlp1/cgnet_scratch_seg_s1
+00:14 done infused_mlp1/cgnet_scratch_seg_s1
+00:14 start infused_mlp1/cgnet_scratch_seg_s2
+00:45 done infused_mlp1/cgnet_scratch_seg_s2
+00:45 start infused_mlp1/cgnet_train_seg_s1
+01:11 done infused_mlp1/cgnet_train_seg_s1

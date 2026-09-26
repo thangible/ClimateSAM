@@ -1,0 +1,39 @@
+% ---------------------------------------------------------------------------------------------------------------
+% Appendix material for Section 4.3: complete tables, second checkpoint, bugs found in the original code.
+% ---------------------------------------------------------------------------------------------------------------
+
+\section{Complete Results of the Automatic-Prompting Benchmark}
+\label{app:auto_prompt}
+
+\input{\ResultsDir/tables/prompt_conversion_infused_mlp1}
+\input{\ResultsDir/tables/bootstrap_infused_mlp1}
+\input{\ResultsDir/tables/error_decomposition_infused_mlp1}
+\input{\ResultsDir/tables/cost_infused_mlp1}
+\input{\ResultsDir/tables/main_infused_mlp05}
+\input{\ResultsDir/tables/decoder_adaptation_infused_mlp05}
+\input{\ResultsDir/tables/table_4_13_nosmooth}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{\ResultsDir/figures/maps_test_image_45.pdf}
+\caption{Test image 45 (layout as in Figure~\ref{fig:maps_17}).}
+\label{fig:maps_45}
+\end{figure}
+
+\section{Issues Found in the Original Phase-2 Code}
+\label{app:bugs}
+
+\begin{enumerate}
+  \item \texttt{test\_\allowbreak prompt\_\allowbreak effect.\allowbreak py} encodes images with \texttt{ClimateSAM.\allowbreak set\_\allowbreak infer\_\allowbreak img()}, which feeds the
+  first three raw channels to the encoder and skips the learned input adapter (\texttt{encode\_\allowbreak images()} applies it).
+  Effect: $-0.00$ to $-0.03$ IoU.
+  \item The multi-scale generators predict three channels, of which only TC and AR are supervised (as independent
+  sigmoids) by \texttt{compute\_\allowbreak generator\_\allowbreak loss}; the untrained background channel takes part in the final argmax.
+  \item \texttt{LogisticRegressionPrompter} classifies the output of the first ViT block instead of the last.
+  \item \texttt{StreamSegMetrics.\allowbreak update(gt, pred)} is called with swapped arguments in several scripts. IoU is
+  symmetric and unaffected; mean and frequency-weighted accuracies are affected.
+  \item All original Phase-2 training scripts select the best epoch on the test set.
+  \item The official ClimateNet CG-Net checkpoint predicts background everywhere in evaluation mode, because its stored
+  BatchNorm running statistics do not match its weights; it works with batch statistics.
+  \item The fine-tuned CG-Net was trained on all 398 training images, so its outputs on training images are optimistic.
+\end{enumerate}

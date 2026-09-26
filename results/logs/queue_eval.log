@@ -319,3 +319,16 @@ FAILED eval infused_mlp1/learned_prompt_k4_s2
 20:22 eval infused_mlp1/msf_token_seg_s2
 20:58 eval infused_mlp05/msf_seg_s0
 21:36 eval infused_mlp05/msf_token_seg_s0
+23:39 eval infused_mlp1/cgnet_train_seg_s0
+23:49 eval infused_mlp1/cgnet_scratch_seg_s0
+00:26 eval infused_mlp1/cgnet_scratch_seg_s1
+00:28 eval infused_mlp1/mpg_fields_seg_s1
+00:30 eval infused_mlp1/mpg_fields_seg_s2
+00:33 eval infused_mlp1/mpg_fields_seg_s0
+00:45 eval infused_mlp1/cgnet_scratch_seg_s2
+01:12 eval infused_mlp1/cgnet_train_seg_s1
+02:27 eval infused_mlp1/msf_token_cg_seg_s0
+02:38 eval infused_mlp1/msf_sp_token_seg_s0
+03:18 eval infused_mlp1/msf_sp_token_seg_s1
+03:56 eval infused_mlp1/msf_sp_token_seg_s2
+05:25 eval infused_mlp1/msf_token_cg_seg_s1

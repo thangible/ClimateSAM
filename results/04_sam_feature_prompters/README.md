@@ -4,8 +4,8 @@ Scripts: `prompter_bench/train.py`, `prompter_bench/prompters.py`, `prompter_ben
 checkpoints: `../runs/<encoder>/<run>/` (`log.csv` = every epoch, `summary.json`, `best.pth`) · test results:
 `../eval/<encoder>/<run>.json` and `../eval/<encoder>/all_results.csv` · tables: `../tables/main_*.tex`,
 `../tables/prompt_conversion_*.tex`, `../tables/object_level_*.tex`, `../tables/error_decomposition_*.tex`,
-`../tables/cost_*.tex` · figures: `../figures/methods_*.png`, `../figures/training_curves_*.png`,
-`../figures/error_decomposition_*.png`, `../figures/examples_*.png`.
+`../tables/cost_*.tex` · figures: `../figures/prompters_mask_vs_sam.png`, `../figures/training_curves.png`,
+`../figures/error_decomposition.png`, `../figures/maps_test_image_*.png`.
 
 Protocol: `../00_setup/README.md` (frozen primary checkpoint, 358 / 40 / 61 split, Table 4.4 loss, 60 epochs,
 selection on validation, 3 seeds).
@@ -77,7 +77,7 @@ Prompter masks (no SAM), mean over 3 seeds, test set:
 | Mask-prompt generator, two-stage | 0.67 M | 0.338 | 0.409 | 0.374 |
 
 SAM prompted by these masks (`../tables/prompt_conversion_*`, `../tables/bootstrap_*`,
-`../figures/sam_minus_prompter_*.png`):
+`../figures/sam_minus_prompter.png`):
 
 - Points are always clearly worse than the prompter mask (−0.03 … −0.08 mean FG IoU).
 - Tight boxes: roughly equal for TC, −0.01 … −0.02 for AR.

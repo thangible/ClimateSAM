@@ -1,6 +1,7 @@
 \begin{table}[htbp]
 \centering
 \small
+\begin{adjustbox}{max width=\linewidth}
 \begin{tabular}{llccccc}
 \toprule
 Prompter & Class & As is & No false objects & Add missed objects & Perfect detection & Perfect shape \\
@@ -28,6 +29,7 @@ Mask-prompt generator (two-stage) & AR & 0.410$\pm$0.001 & 0.484$\pm$0.002 & 0.4
 Mask-prompt generator (segmentation loss, label smoothing) & AR & 0.409$\pm$0.003 & 0.473$\pm$0.008 & 0.424$\pm$0.003 & 0.490$\pm$0.007 & 0.816$\pm$0.011 \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
 \caption{IoU of the prompter mask after removing one error type: deleting predicted objects that touch no ground truth, adding the ground-truth objects that were missed, both, or giving every detected object its exact ground-truth shape.}
 \label{tab:decomposition_infused_mlp05}
 \end{table}

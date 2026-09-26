@@ -1,0 +1,138 @@
+wandb: WARNING Using a boolean value for 'reinit' is deprecated. Use 'return_previous' or 'finish_previous' instead.
+wandb: Tracking run with wandb version 0.21.1
+wandb: W&B syncing is set to `offline` in this directory. Run `wandb online` or set WANDB_MODE=online to enable cloud syncing.
+wandb: Run data is saved locally in /home/worker1/thang/ClimateSAM/wandb/offline-run-20260926_002749-tigddp2v
+/home/worker1/thang/ClimateSAM/prompter_bench/train.py:199: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:835.)
+  sums[k] = sums.get(k, 0.0) + float(v) * len(mb) / len(chunk)
+[mpg_fields_seg_s0] epoch 1 5.1s loss 1.7024
+[mpg_fields_seg_s0] epoch 2 3.4s loss 1.2646 | val_own_Mean FG IoU 0.3215
+[mpg_fields_seg_s0] epoch 3 4.2s loss 1.1537
+[mpg_fields_seg_s0] epoch 4 4.1s loss 1.1343 | val_own_Mean FG IoU 0.3540
+[mpg_fields_seg_s0] epoch 5 4.2s loss 1.1007
+[mpg_fields_seg_s0] epoch 6 4.2s loss 1.1156 | val_own_Mean FG IoU 0.3563
+[mpg_fields_seg_s0] epoch 7 4.2s loss 1.0688
+[mpg_fields_seg_s0] epoch 8 4.2s loss 1.0626 | val_own_Mean FG IoU 0.3480
+[mpg_fields_seg_s0] epoch 9 3.8s loss 1.0606
+[mpg_fields_seg_s0] epoch 10 3.9s loss 1.0582 | val_own_Mean FG IoU 0.3565
+[mpg_fields_seg_s0] epoch 11 4.1s loss 1.0689
+[mpg_fields_seg_s0] epoch 12 4.2s loss 1.0239 | val_own_Mean FG IoU 0.3631
+[mpg_fields_seg_s0] epoch 13 4.0s loss 1.0171
+[mpg_fields_seg_s0] epoch 14 3.4s loss 1.0069 | val_own_Mean FG IoU 0.3705
+[mpg_fields_seg_s0] epoch 15 4.2s loss 1.0086
+[mpg_fields_seg_s0] epoch 16 4.1s loss 1.0000 | val_own_Mean FG IoU 0.3607
+[mpg_fields_seg_s0] epoch 17 4.2s loss 0.9963
+[mpg_fields_seg_s0] epoch 18 4.4s loss 0.9796 | val_own_Mean FG IoU 0.3568
+[mpg_fields_seg_s0] epoch 19 4.8s loss 0.9692
+[mpg_fields_seg_s0] epoch 20 4.8s loss 0.9618 | val_own_Mean FG IoU 0.3703
+[mpg_fields_seg_s0] epoch 21 4.1s loss 0.9572
+[mpg_fields_seg_s0] epoch 22 4.1s loss 0.9467 | val_own_Mean FG IoU 0.3744
+[mpg_fields_seg_s0] epoch 23 4.2s loss 0.9436
+[mpg_fields_seg_s0] epoch 24 4.2s loss 0.9636 | val_own_Mean FG IoU 0.3747
+[mpg_fields_seg_s0] epoch 25 3.7s loss 0.9413
+[mpg_fields_seg_s0] epoch 26 3.7s loss 0.9416 | val_own_Mean FG IoU 0.3758
+[mpg_fields_seg_s0] epoch 27 4.2s loss 0.9235
+[mpg_fields_seg_s0] epoch 28 4.2s loss 0.9149 | val_own_Mean FG IoU 0.3772
+[mpg_fields_seg_s0] epoch 29 4.2s loss 0.9068
+[mpg_fields_seg_s0] epoch 30 4.3s loss 0.9931 | val_own_Mean FG IoU 0.3811
+[mpg_fields_seg_s0] epoch 31 4.0s loss 0.9316
+[mpg_fields_seg_s0] epoch 32 3.8s loss 0.9046 | val_own_Mean FG IoU 0.3788
+[mpg_fields_seg_s0] epoch 33 3.9s loss 0.8955
+[mpg_fields_seg_s0] epoch 34 4.1s loss 0.8905 | val_own_Mean FG IoU 0.3725
+[mpg_fields_seg_s0] epoch 35 4.2s loss 0.8863
+[mpg_fields_seg_s0] epoch 36 4.1s loss 0.8848 | val_own_Mean FG IoU 0.3792
+[mpg_fields_seg_s0] epoch 37 3.5s loss 0.8866
+[mpg_fields_seg_s0] epoch 38 4.2s loss 0.8910 | val_own_Mean FG IoU 0.3778
+[mpg_fields_seg_s0] epoch 39 4.2s loss 0.8947
+[mpg_fields_seg_s0] epoch 40 4.2s loss 0.8745 | val_own_Mean FG IoU 0.3796
+[mpg_fields_seg_s0] epoch 41 4.2s loss 0.8671
+[mpg_fields_seg_s0] epoch 42 4.1s loss 0.8646 | val_own_Mean FG IoU 0.3797
+[mpg_fields_seg_s0] epoch 43 4.1s loss 0.8619
+[mpg_fields_seg_s0] epoch 44 4.2s loss 0.8588 | val_own_Mean FG IoU 0.3751
+[mpg_fields_seg_s0] epoch 45 4.2s loss 0.8574
+[mpg_fields_seg_s0] epoch 46 4.2s loss 0.8555 | val_own_Mean FG IoU 0.3770
+[mpg_fields_seg_s0] epoch 47 4.2s loss 0.8530
+[mpg_fields_seg_s0] epoch 48 4.2s loss 0.8515 | val_own_Mean FG IoU 0.3779
+[mpg_fields_seg_s0] epoch 49 3.4s loss 0.8487
+[mpg_fields_seg_s0] epoch 50 4.1s loss 0.8478 | val_own_Mean FG IoU 0.3762
+[mpg_fields_seg_s0] epoch 51 4.2s loss 0.8466
+[mpg_fields_seg_s0] epoch 52 4.2s loss 0.8450 | val_own_Mean FG IoU 0.3764
+[mpg_fields_seg_s0] epoch 53 4.2s loss 0.8447
+[mpg_fields_seg_s0] epoch 54 4.2s loss 0.8427 | val_own_Mean FG IoU 0.3773
+[mpg_fields_seg_s0] epoch 55 3.8s loss 0.8430
+[mpg_fields_seg_s0] epoch 56 3.8s loss 0.8418 | val_own_Mean FG IoU 0.3782
+[mpg_fields_seg_s0] epoch 57 3.8s loss 0.8420
+[mpg_fields_seg_s0] epoch 58 3.8s loss 0.8404 | val_own_Mean FG IoU 0.3771
+[mpg_fields_seg_s0] epoch 59 3.8s loss 0.8403
+[mpg_fields_seg_s0] epoch 60 3.9s loss 0.8401 | val_own_Mean FG IoU 0.3771
+wandb:                                                                                
+wandb: 
+wandb: Run history:
+wandb:               epoch ▁▁▁▁▁▂▂▂▂▂▃▃▃▃▃▄▄▄▄▄▅▅▅▅▆▆▆▆▆▆▇▇▇▇▇▇▇███
+wandb:        epoch_time_s █▄▄▄▄▃▃▄▄▄▄▄▄▅▇▄▂▂▄▄▄▄▄▄▄▄▄▄▄▄▄▄▁▄▄▄▄▃▃▃
+wandb:                  lr ███████▇▇▇▇▇▆▆▆▆▅▅▅▅▄▄▄▄▃▃▃▃▃▂▂▂▂▂▂▁▁▁▁▁
+wandb:        train_gen_AR █▄▃▃▃▃▃▃▃▂▂▂▂▂▂▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:        train_gen_TC █▄▄▃▃▃▃▃▃▃▂▂▂▂▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:         train_total █▄▄▃▃▃▃▃▃▂▂▂▂▂▂▂▂▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:      val_own_AR IoU ▁▄▃▅▅▄▆▄▅▆▇▇▇█▇█▇█▇███████████
+wandb:      val_own_BG IoU ▂▅▁▆▃▂▅▁▂▅▇█▇▇▅▇▆▆▅█▇▆▇▇▇▇▇▇▇▇
+wandb: val_own_Mean FG IoU ▁▅▅▄▅▆▇▆▅▇▇▇▇███▇████▇██▇▇████
+wandb:    val_own_Mean IoU ▁▅▅▄▅▅▇▅▅▇▇▇▇███▇█▇██▇██▇▇████
+wandb:      val_own_TC IoU ▁▅▇▂▅▇▇▇▄▆▇▇▇▇█▇▆▇█▇▇▆▆▆▆▆▆▆▆▆
+wandb: 
+wandb: Run summary:
+wandb:                arch mpg_fields
+wandb:          best_epoch 30
+wandb:             encoder infused_mlp1
+wandb:               epoch 60
+wandb:        epoch_time_s 3.86977
+wandb:                  lr 1e-05
+wandb:                mode seg
+wandb:                name mpg_fields_seg_s0
+wandb:                seed 0
+wandb:        train_gen_AR 0.44414
+wandb:        train_gen_TC 0.396
+wandb:      train_time_min 5.28157
+wandb:         train_total 0.84014
+wandb:    trainable_params 686306
+wandb:      val_own_AR IoU 0.41247
+wandb:      val_own_BG IoU 0.94495
+wandb: val_own_Mean FG IoU 0.37715
+wandb:    val_own_Mean IoU 0.56642
+wandb:      val_own_TC IoU 0.34183
+wandb: 
+wandb: You can sync this run to the cloud by running:
+wandb: wandb sync /home/worker1/thang/ClimateSAM/wandb/offline-run-20260926_002749-tigddp2v
+wandb: Find logs at: ./wandb/offline-run-20260926_002749-tigddp2v/logs
+{
+  "name": "mpg_fields_seg_s0",
+  "arch": "mpg_fields",
+  "mode": "seg",
+  "seed": 0,
+  "encoder": "infused_mlp1",
+  "trainable_params": 686306,
+  "best_epoch": 30,
+  "train_time_min": 5.281571340560913,
+  "args": {
+    "encoder": "infused_mlp1",
+    "arch": "mpg_fields",
+    "mode": "seg",
+    "seed": 0,
+    "epochs": 60,
+    "lr": 0.001,
+    "bs": 8,
+    "micro_bs": 8,
+    "aux_weight": 1.0,
+    "init": null,
+    "val_every": 2,
+    "name": "mpg_fields_seg_s0",
+    "smooth": false,
+    "exclude_fold": null,
+    "wandb": true
+  },
+  "val_own_TC IoU": 0.35764606383999026,
+  "val_own_AR IoU": 0.404538155864282,
+  "val_own_BG IoU": 0.9401646019523876,
+  "val_own_Mean IoU": 0.5674496072188866,
+  "val_own_Mean FG IoU": 0.38109210985213615
+}

@@ -22,7 +22,7 @@ import torch.nn.functional as F
 from tqdm import tqdm
 
 from common import (RESULTS, CLASSES, SegMetrics, ObjectMetrics, FeatureCache, load_climatesam, sam_decode,
-                    union_logits, upsample, make_prompts, binary_to_score, seed_everything, MIN_OBJECT_PX)
+                    union_logits, upsample, make_prompts, binary_to_score, seed_everything, load_decoder, MIN_OBJECT_PX)
 from build_cache import ENCODERS
 from train import Batches
 import prompters
@@ -57,12 +57,13 @@ def decompose(pred, gt_mask):
 
 
 @torch.no_grad()
-def evaluate_method(name, predict, data, climatesam, device, out_dir, kinds=KINDS, hard_masks=None):
+def evaluate_method(name, predict, data, climatesam, device, out_dir, kinds=None, hard_masks=None):
     """
     predict(batch) -> (B, 2, h, w) logits (TC, AR). hard_masks(batch) -> optional (B, H, W) label map that
     replaces "logits > 0" for the own mask (CG-Net uses its 3-class argmax).
     """
     seed_everything(0)
+    kinds = kinds or KINDS
     own, own_obj = SegMetrics(), ObjectMetrics()
     sam = {k: SegMetrics() for k in kinds}
     sam_obj = {k: ObjectMetrics() for k in kinds}
@@ -137,12 +138,20 @@ def main():
     ap.add_argument('--encoder', default='infused_mlp1')
     ap.add_argument('--methods', nargs='+', default=['oracle', 'cgnet_official', 'cgnet_finetuned', 'runs'])
     ap.add_argument('--runs', default='*', help='glob over results/runs/<encoder>/')
+    ap.add_argument('--decoder', default=None, help='decoder-training run whose decoder replaces the Phase-1 one')
+    ap.add_argument('--kinds', nargs='+', default=None)
     args = ap.parse_args()
 
     device = torch.device('cuda')
     ckpt, mlp = ENCODERS[args.encoder]
     climatesam = load_climatesam(ckpt, mlp, device)
     out_dir = os.path.join(RESULTS, 'eval', args.encoder)
+    if args.decoder:  # results of a replaced decoder go to a subfolder, so they never mix with the Phase-1 tables
+        load_decoder(climatesam, args.encoder, args.decoder)
+        out_dir = os.path.join(out_dir, 'decoder', args.decoder)
+    if args.kinds:
+        global KINDS
+        KINDS = args.kinds
     test_cache = FeatureCache(args.encoder, 'test')
 
     def data_for(layers, cgnet=False):
@@ -168,11 +177,13 @@ def main():
                 model, layers = prompters.build(ck['arch'], climatesam=climatesam)
                 model.load_state_dict(ck['state_dict'])
                 model = model.to(device).eval()
+                is_cgnet = ck['arch'].startswith('cgnet')
 
                 def predict(b, model=model):
                     with torch.autocast('cuda', dtype=torch.bfloat16):
                         return model(b)['logits']
-                evaluate_method(os.path.basename(run_dir), predict, data_for(layers), climatesam, device, out_dir)
+                evaluate_method(os.path.basename(run_dir), predict, data_for(layers, cgnet=prompters.needs_fields(ck['arch'])), climatesam, device,
+                                out_dir, hard_masks=(lambda b, model=model: model(b)['argmax']) if is_cgnet else None)
                 del model
                 torch.cuda.empty_cache()
 

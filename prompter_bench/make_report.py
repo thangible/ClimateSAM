@@ -25,14 +25,20 @@ METHODS = {  # key -> (display name, trainable parameters are filled in from the
     'oracle_gt': 'Ground truth (oracle)',
     'cgnet_official': 'CG-Net (official weights)',
     'cgnet_finetuned': 'CG-Net (fine-tuned)',
+    'cgnet_train_seg': 'CG-Net (re-trained on 358 images, official init.)',
+    'cgnet_scratch_seg': 'CG-Net (trained from scratch on 358 images)',
     'logreg_l0_seg': 'Logistic regression, ViT block 1',
     'logreg_last_seg': 'Logistic regression, ViT block 12',
     'msf_seg': 'Multi-scale fusion',
     'msf_token_seg': 'Multi-scale fusion + token gate',
+    'msf_token_cg_seg': 'Multi-scale fusion + token gate, CG blocks',
+    'msf_sp_token_seg': 'Multi-scale fusion + token gate, shared weights',
     'mpg_seg': 'Mask-prompt generator (segmentation loss)',
     'mpg_sam_e2e': 'Mask-prompt generator (end-to-end via SAM)',
     'mpg_twostage': 'Mask-prompt generator (two-stage)',
     'mpg_seg_smooth': 'Mask-prompt generator (segmentation loss, label smoothing)',
+    'mpg_fields_seg': 'Mask-prompt generator + raw CG-Net fields',
+    'det_head': 'Box head on SAM features (YOLO-style)',
     'learned_prompt_k4': 'Learned static prompts (4 tokens / class)',
     'learned_prompt_k16': 'Learned static prompts (16 tokens / class)',
 }
@@ -104,14 +110,15 @@ def write_table(name, header, body, caption, label, colspec=None):
     os.makedirs(TABLES, exist_ok=True)
     colspec = colspec or 'l' + 'c' * (len(header) - 1)
     tex = lambda cells: ' & '.join(re.sub(r'(?<!\\)%', r'\\%', c) for c in cells) + ' \\\\'
-    lines = ['\\begin{table}[htbp]', '\\centering', '\\small', f'\\begin{{tabular}}{{{colspec}}}', '\\toprule',
-             tex(header), '\\midrule']
+    # adjustbox shrinks a table only if it is wider than the text (packages: booktabs, adjustbox)
+    lines = ['\\begin{table}[htbp]', '\\centering', '\\small', '\\begin{adjustbox}{max width=\\linewidth}',
+             f'\\begin{{tabular}}{{{colspec}}}', '\\toprule', tex(header), '\\midrule']
     for row in body:
         lines.append('\\midrule' if row == 'MIDRULE' else tex(row))
-    lines += ['\\bottomrule', '\\end{tabular}', f'\\caption{{{caption}}}', f'\\label{{{label}}}', '\\end{table}']
+    lines += ['\\bottomrule', '\\end{tabular}', '\\end{adjustbox}', f'\\caption{{{caption}}}', f'\\label{{{label}}}', '\\end{table}']
     with open(os.path.join(TABLES, f'{name}.tex'), 'w') as f:
         f.write('\n'.join(lines) + '\n')
-    plain = lambda c: re.sub(r'\$\\pm\$', ' ± ', re.sub(r'\$\\Delta\$', 'Δ', c)).replace('\\%', '%').replace('$', '').replace('\\_', '_')
+    plain = lambda c: re.sub(r'\$\\pm\$', ' ± ', re.sub(r'\$\\Delta\$', 'Δ', c.replace('$^\\circ$', '°').replace('\\footnotesize ', ''))).replace('\\%', '%').replace('$', '').replace('\\_', '_')
     with open(os.path.join(TABLES, f'{name}.md'), 'w') as f:
         f.write('| ' + ' | '.join(plain(h) for h in header) + ' |\n|' + '---|' * len(header) + '\n')
         for row in body:
@@ -213,7 +220,13 @@ def main_tables(encoder, ev, dec, runs):
 # ------------------------------------------------------------
 # FIGURES
 # ------------------------------------------------------------
+MAKE_FIGS = False  # figures now come from figures.py (one visual grammar); this module writes tables + README
+
+
 def savefig(fig, name):
+    if not MAKE_FIGS:
+        plt.close(fig)
+        return
     os.makedirs(FIGS, exist_ok=True)
     fig.savefig(os.path.join(FIGS, f'{name}.png'), dpi=200, bbox_inches='tight')
     fig.savefig(os.path.join(FIGS, f'{name}.pdf'), bbox_inches='tight')
@@ -464,7 +477,10 @@ def bootstrap_table(encoder):
         for out in ('sam_bbox', 'sam_hybrid', 'fused_hybrid'):
             if out in counts[m]:
                 comps.append((f'{METHODS[m]}: {OUTPUTS[out]} vs. prompter mask', (m, 'own'), (m, out)))
-    pairs = [('mpg_seg', 'cgnet_finetuned'), ('mpg_seg', 'msf_seg'), ('mpg_seg', 'logreg_last_seg'),
+    pairs = [('mpg_seg', 'cgnet_finetuned'), ('mpg_seg', 'cgnet_scratch_seg'), ('mpg_seg', 'cgnet_train_seg'),
+             ('cgnet_scratch_seg', 'cgnet_finetuned'), ('mpg_seg', 'msf_seg'), ('mpg_seg', 'logreg_last_seg'),
+             ('msf_token_cg_seg', 'msf_token_seg'), ('msf_sp_token_seg', 'msf_token_seg'), ('mpg_seg', 'msf_sp_token_seg'),
+             ('mpg_fields_seg', 'mpg_seg'), ('mpg_fields_seg', 'cgnet_scratch_seg'),
              ('msf_token_seg', 'msf_seg'), ('logreg_last_seg', 'logreg_l0_seg'), ('mpg_seg_smooth', 'mpg_seg'),
              ('msf_seg', 'cgnet_finetuned')]
     for b, a in pairs:
@@ -598,6 +614,125 @@ def speed_table():
                 'listed for reference.', 'tab:speed', 'lccc')
 
 
+
+# ------------------------------------------------------------
+# ORACLE STUDY, POST-HOC STUDY, PROMPT-ROBUST DECODERS
+# ------------------------------------------------------------
+DECODERS = {  # decoder run -> display name (Phase 1 = the frozen decoder of the checkpoint)
+    'phase1': 'Phase-1 decoder',
+    'decoder_adapt_mpg_seg_s0_hybrid_oof_s0': 'adapted to MPG hybrid prompts (OOF)',
+    'decoder_adapt_mpg_seg_s0_bbox_oof_s0': 'adapted to MPG boxes (OOF)',
+    'robust_decoder_box_s0': 'prompt-robust, box',
+    'robust_decoder_box_s1': 'prompt-robust, box (seed 1)',
+    'robust_decoder_hybrid_s0': 'prompt-robust, hybrid',
+    'robust_decoder_hybrid_s1': 'prompt-robust, hybrid (seed 1)',
+    'robust_decoder_hybrid_gtonly_s0': 'prompt-robust, hybrid, corrupted GT only',
+}
+ORACLE_ROWS = [  # (study, prompt in oracle_sweep_*.csv, display name)
+    ('mask_format', 'box', 'tight box'),
+    ('degradation', 'box enlarge +0.2', 'box enlarged 20\\%'),
+    ('degradation', 'box enlarge -0.2', 'box shrunk 20\\%'),
+    ('degradation', 'box drop 25% objects', 'box, 25\\% of objects not prompted'),
+    ('degradation', 'box + 1 false boxes', 'box + 1 false box per class'),
+    ('degradation', 'box + 3 false boxes', 'box + 3 false boxes per class'),
+    ('mask_format', 'union logits +-10', 'mask logits $\\pm$10'),
+    ('degradation', 'mask morph -5px', 'mask eroded 5 px'),
+    ('degradation', 'mask morph +5px', 'mask dilated 5 px'),
+    ('mask_format', 'box + union logits +-10', 'box + mask logits $\\pm$10'),
+]
+
+
+def oracle_csv(encoder, decoder='phase1'):
+    f = os.path.join(RESULTS, '01_oracle_prompts', f'oracle_sweep_{encoder}' + ('' if decoder == 'phase1' else f'@{decoder}') + '.csv')
+    return pd.read_csv(f) if os.path.exists(f) else None
+
+
+def oracle_table(encoder='infused_mlp1'):
+    """Ground-truth prompts with controlled errors, Phase-1 decoder (both checkpoints) and every replaced decoder."""
+    cols = [('infused_mlp1', 'phase1', 'MLP 1.0'), ('infused_mlp05', 'phase1', 'MLP 0.5')]
+    cols += [(encoder, d, DECODERS[d]) for d in DECODERS if d != 'phase1' and oracle_csv(encoder, d) is not None]
+    data = {(e, d): oracle_csv(e, d) for e, d, _ in cols}
+    body = []
+    for study, prompt, label in ORACLE_ROWS:
+        row = [label]
+        for e, d, _ in cols:
+            df = data[(e, d)]
+            r = df[(df['study'] == study) & (df['prompt'] == prompt)] if df is not None else []
+            row.append(f"{r.iloc[0]['TC IoU']:.2f} / {r.iloc[0]['AR IoU']:.2f}" if len(r) else '--')
+        body.append(row)
+    write_table('oracle_prompts', ['Ground-truth prompt'] + [c[2] for c in cols], body,
+                'SAM prompted with prompts built from the ground truth, with controlled errors (TC IoU / AR IoU, 61 test '
+                'images). Columns: the frozen Phase-1 decoders of both checkpoints and the decoders fine-tuned on '
+                'generated or corrupted prompts (Section on decoder adaptation).', 'tab:oracle_prompts')
+
+
+def posthoc_table(encoder='infused_mlp1'):
+    files = sorted(glob.glob(os.path.join(RESULTS, '06_posthoc', f'posthoc_{encoder}_*.json')))
+    if not files:
+        return
+    order = {k: i for i, k in enumerate(METHODS)}
+    ds = sorted((json.load(open(f)) for f in files), key=lambda d: (order.get(d['method'].split('+')[0], 99), '+' in d['method']))
+    body = []
+    for d in ds:
+        first = True
+        for variant, v in d['variants'].items():
+            b = d['bootstrap_vs_seed0'].get(variant)
+            ci = f"{b['FG'][0]:+.3f} [{b['FG'][1]:+.3f}, {b['FG'][2]:+.3f}]" if b else '--'
+            label = variant + (' (mean of seeds)' if variant.startswith('single seed') else '')
+            name = ' + '.join(METHODS.get(m_, m_) for m_ in d['method'].split('+'))
+            body.append([name if first else '', label,
+                         f"{v['TC IoU']:.3f}", f"{v['AR IoU']:.3f}", f"{v['Mean FG IoU']:.3f}", ci])
+            first = False
+        th, pp = d['threshold'], d['postprocess']
+        body.append(['', f"\\footnotesize thresholds TC {th['TC']:+.2f} / AR {th['AR']:+.2f}; min. blob "
+                         f"{pp['TC']['min_area']} / {pp['AR']['min_area']} px; max. TC latitude {pp['TC']['max_lat']}$^\\circ$",
+                     '', '', '', ''])
+        body.append('MIDRULE')
+    write_table(f'posthoc_{encoder}', ['Prompter', 'Variant', 'TC IoU', 'AR IoU', 'Mean FG IoU',
+                                       '$\\Delta$ FG vs. seed 0 [95\\% CI]'], body[:-1],
+                'Evaluation-only improvements of the prompter masks (test set). Ensemble: mean of the logits of the three '
+                'seeds; calibrated: per-class logit threshold chosen on the validation images; post-processed: minimum '
+                'blob size per class and maximum TC latitude chosen on the validation images; SAM hybrid round $k$: the '
+                'post-processed mask as hybrid prompt, then SAM\'s own output fed back as the prompt. $\\Delta$: paired '
+                'bootstrap against the seed-0 prompter mask.', f'tab:posthoc_{encoder}', 'llcccc')
+
+
+def robust_decoder_table(encoder='infused_mlp1'):
+    """Replaced decoders: GT prompts (clean / corrupted) and real prompters, mean FG IoU."""
+    decs = ['phase1'] + [d for d in DECODERS if d != 'phase1' and os.path.isdir(os.path.join(RESULTS, 'eval', encoder, 'decoder', d))]
+    if len(decs) == 1:
+        return
+    body = []
+    for d in decs:
+        o = oracle_csv(encoder, d)
+        def oracle(prompt, study='mask_format'):
+            if o is None:
+                return '--'
+            r = o[(o['study'] == study) & (o['prompt'] == prompt)]
+            return f"{r.iloc[0]['Mean FG IoU']:.3f}" if len(r) else '--'
+        ev_dir = os.path.join(RESULTS, 'eval', encoder) if d == 'phase1' else os.path.join(RESULTS, 'eval', encoder, 'decoder', d)
+        def real(pattern, out):
+            vals = []
+            for f in glob.glob(os.path.join(ev_dir, f'{pattern}.json')):
+                if re.fullmatch(pattern.replace('*', r'\d+'), os.path.basename(f)[:-5]) is None and '*' in pattern:
+                    continue
+                for r in json.load(open(f))['rows']:
+                    if r['output'] == out:
+                        vals.append(r['Mean FG IoU'])
+            return f'{np.mean(vals):.3f}' if vals else '--'
+        summ = os.path.join(RESULTS, 'runs', encoder, d, 'summary.json')
+        val = json.load(open(summ)).get('val_Mean FG IoU') if os.path.exists(summ) else None
+        body.append([DECODERS[d], oracle('box'), oracle('box enlarge +0.2', 'degradation'), oracle('box + 1 false boxes', 'degradation'),
+                     oracle('box + union logits +-10'), real('mpg_seg_s*', 'sam_bbox'), real('mpg_seg_s*', 'sam_hybrid'),
+                     real('cgnet_finetuned', 'sam_bbox'), real('cgnet_finetuned', 'sam_hybrid')])
+    write_table(f'robust_decoder_{encoder}', ['Decoder', 'GT box', 'GT box +20\\%', 'GT box + 1 false', 'GT box + mask',
+                                              'MPG: box', 'MPG: hybrid', 'CG-Net: box', 'CG-Net: hybrid'], body,
+                'Mean FG IoU on the test set of SAM with replaced decoders. GT: prompts built from the ground truth '
+                '(clean or corrupted, as in the oracle study); MPG: SAM prompted by the mask-prompt generator (mean of '
+                'three seeds; its own mask reaches 0.379); CG-Net: fine-tuned CG-Net (own mask 0.366).',
+                f'tab:robust_decoder_{encoder}', 'lcccccccc')
+
+
 def render_readme():
     """results/README.template.md -> results/README.md, with {{table:NAME}} replaced by tables/NAME.md."""
     tpl = os.path.join(RESULTS, 'README.template.md')
@@ -633,6 +768,10 @@ def main():
     fig_table413()
     table413()
     speed_table()
+    oracle_table()
+    for encoder in ENCODER_NAMES:
+        posthoc_table(encoder)
+        robust_decoder_table(encoder)
     render_readme()
 
 

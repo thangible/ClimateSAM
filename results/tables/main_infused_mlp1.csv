@@ -8,6 +8,12 @@ CG-Net (official weights),Prompter mask (no SAM),0.327,0.333,0.926,0.529,0.330
 CG-Net (fine-tuned),Prompter mask (no SAM),0.349,0.382,0.940,0.557,0.366
 ,SAM + box,0.341,0.369,0.939,0.550,0.355
 ,SAM + hybrid,0.349,0.384,0.941,0.558,0.367
+"CG-Net (re-trained on 358 images, official init.)",Prompter mask (no SAM),0.350 ± 0.005,0.399 ± 0.005,0.945 ± 0.001,0.565 ± 0.003,0.375 ± 0.005
+,SAM + box,0.345 ± 0.003,0.387 ± 0.006,0.943 ± 0.001,0.558 ± 0.003,0.366 ± 0.004
+,SAM + hybrid,0.348 ± 0.007,0.400 ± 0.005,0.946 ± 0.001,0.564 ± 0.004,0.374 ± 0.006
+CG-Net (trained from scratch on 358 images),Prompter mask (no SAM),0.343 ± 0.007,0.394 ± 0.008,0.946 ± 0.004,0.561 ± 0.003,0.369 ± 0.006
+,SAM + box,0.343 ± 0.006,0.380 ± 0.002,0.942 ± 0.004,0.555 ± 0.002,0.362 ± 0.003
+,SAM + hybrid,0.339 ± 0.008,0.395 ± 0.008,0.946 ± 0.003,0.560 ± 0.003,0.367 ± 0.006
 "Logistic regression, ViT block 1",Prompter mask (no SAM),0.195 ± 0.001,0.319 ± 0.001,0.927 ± 0.004,0.480 ± 0.002,0.257 ± 0.001
 ,SAM + box,0.200 ± 0.002,0.321 ± 0.003,0.925 ± 0.004,0.482 ± 0.003,0.260 ± 0.002
 ,SAM + hybrid,0.213 ± 0.000,0.316 ± 0.002,0.939 ± 0.001,0.489 ± 0.001,0.264 ± 0.001
@@ -32,5 +38,10 @@ Mask-prompt generator (two-stage),Prompter mask (no SAM),0.338 ± 0.005,0.409 ±
 "Mask-prompt generator (segmentation loss, label smoothing)",Prompter mask (no SAM),0.338 ± 0.009,0.412 ± 0.001,0.943 ± 0.001,0.564 ± 0.003,0.375 ± 0.005
 ,SAM + box,0.340 ± 0.007,0.388 ± 0.003,0.939 ± 0.001,0.556 ± 0.002,0.364 ± 0.003
 ,SAM + hybrid,0.335 ± 0.007,0.401 ± 0.002,0.949 ± 0.000,0.562 ± 0.003,0.368 ± 0.005
+Mask-prompt generator + raw CG-Net fields,Prompter mask (no SAM),0.340 ± 0.001,0.409 ± 0.006,0.942 ± 0.004,0.564 ± 0.004,0.375 ± 0.004
+,SAM + box,0.340 ± 0.001,0.387 ± 0.008,0.938 ± 0.004,0.555 ± 0.004,0.363 ± 0.004
+,SAM + hybrid,0.337 ± 0.003,0.399 ± 0.006,0.949 ± 0.001,0.561 ± 0.002,0.368 ± 0.003
+Box head on SAM features (YOLO-style),Prompter mask (no SAM),0.084,0.168,0.718,0.323,0.126
+,SAM + box,0.095,0.321,0.887,0.434,0.208
 Learned static prompts (4 tokens / class),SAM + learned static prompts,0.237 ± 0.001,0.324 ± 0.008,0.926 ± 0.005,0.495 ± 0.004,0.280 ± 0.004
 Learned static prompts (16 tokens / class),SAM + learned static prompts,0.248,0.329,0.930,0.502,0.288

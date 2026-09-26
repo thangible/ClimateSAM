@@ -1,0 +1,134 @@
+wandb: WARNING Using a boolean value for 'reinit' is deprecated. Use 'return_previous' or 'finish_previous' instead.
+wandb: Tracking run with wandb version 0.21.1
+wandb: W&B syncing is set to `offline` in this directory. Run `wandb online` or set WANDB_MODE=online to enable cloud syncing.
+wandb: Run data is saved locally in /home/worker1/thang/ClimateSAM/wandb/offline-run-20260925_234946-d0wcma3p
+/home/worker1/thang/ClimateSAM/prompter_bench/train.py:185: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:835.)
+  sums['total'] = sums.get('total', 0.0) + float(total) * len(mb) / len(chunk)
+[cgnet_scratch_seg_s1] epoch 1 25.5s loss 0.6038
+[cgnet_scratch_seg_s1] epoch 2 23.6s loss 0.5281 | val_own_Mean FG IoU 0.3557
+[cgnet_scratch_seg_s1] epoch 3 23.2s loss 0.5177
+[cgnet_scratch_seg_s1] epoch 4 23.4s loss 0.5115 | val_own_Mean FG IoU 0.3286
+[cgnet_scratch_seg_s1] epoch 5 22.0s loss 0.5073
+[cgnet_scratch_seg_s1] epoch 6 21.0s loss 0.5068 | val_own_Mean FG IoU 0.3760
+[cgnet_scratch_seg_s1] epoch 7 23.9s loss 0.5028
+[cgnet_scratch_seg_s1] epoch 8 22.9s loss 0.4980 | val_own_Mean FG IoU 0.3679
+[cgnet_scratch_seg_s1] epoch 9 20.9s loss 0.4960
+[cgnet_scratch_seg_s1] epoch 10 21.2s loss 0.4921 | val_own_Mean FG IoU 0.3423
+[cgnet_scratch_seg_s1] epoch 11 21.2s loss 0.4919
+[cgnet_scratch_seg_s1] epoch 12 22.7s loss 0.4880 | val_own_Mean FG IoU 0.3681
+[cgnet_scratch_seg_s1] epoch 13 23.7s loss 0.4876
+[cgnet_scratch_seg_s1] epoch 14 20.9s loss 0.4864 | val_own_Mean FG IoU 0.3724
+[cgnet_scratch_seg_s1] epoch 15 21.1s loss 0.4840
+[cgnet_scratch_seg_s1] epoch 16 19.7s loss 0.4783 | val_own_Mean FG IoU 0.3861
+[cgnet_scratch_seg_s1] epoch 17 23.3s loss 0.4772
+[cgnet_scratch_seg_s1] epoch 18 21.2s loss 0.4754 | val_own_Mean FG IoU 0.3582
+[cgnet_scratch_seg_s1] epoch 19 23.3s loss 0.4715
+[cgnet_scratch_seg_s1] epoch 20 20.9s loss 0.4712 | val_own_Mean FG IoU 0.3580
+[cgnet_scratch_seg_s1] epoch 21 21.0s loss 0.4687
+[cgnet_scratch_seg_s1] epoch 22 21.1s loss 0.4670 | val_own_Mean FG IoU 0.3565
+[cgnet_scratch_seg_s1] epoch 23 21.2s loss 0.4641
+[cgnet_scratch_seg_s1] epoch 24 21.2s loss 0.4618 | val_own_Mean FG IoU 0.3702
+[cgnet_scratch_seg_s1] epoch 25 23.3s loss 0.4591
+[cgnet_scratch_seg_s1] epoch 26 23.1s loss 0.4571 | val_own_Mean FG IoU 0.3727
+[cgnet_scratch_seg_s1] epoch 27 20.9s loss 0.4562
+[cgnet_scratch_seg_s1] epoch 28 21.1s loss 0.4545 | val_own_Mean FG IoU 0.3670
+[cgnet_scratch_seg_s1] epoch 29 20.9s loss 0.4510
+[cgnet_scratch_seg_s1] epoch 30 21.2s loss 0.4498 | val_own_Mean FG IoU 0.3651
+[cgnet_scratch_seg_s1] epoch 31 23.9s loss 0.4485
+[cgnet_scratch_seg_s1] epoch 32 20.6s loss 0.4452 | val_own_Mean FG IoU 0.3678
+[cgnet_scratch_seg_s1] epoch 33 21.1s loss 0.4441
+[cgnet_scratch_seg_s1] epoch 34 19.7s loss 0.4421 | val_own_Mean FG IoU 0.3648
+[cgnet_scratch_seg_s1] epoch 35 22.9s loss 0.4406
+[cgnet_scratch_seg_s1] epoch 36 21.2s loss 0.4369 | val_own_Mean FG IoU 0.3604
+[cgnet_scratch_seg_s1] epoch 37 23.8s loss 0.4351
+[cgnet_scratch_seg_s1] epoch 38 21.1s loss 0.4360 | val_own_Mean FG IoU 0.3654
+[cgnet_scratch_seg_s1] epoch 39 21.4s loss 0.4360
+[cgnet_scratch_seg_s1] epoch 40 21.3s loss 0.4354 | val_own_Mean FG IoU 0.3653
+[cgnet_scratch_seg_s1] epoch 41 20.8s loss 0.4316
+[cgnet_scratch_seg_s1] epoch 42 21.2s loss 0.4315 | val_own_Mean FG IoU 0.3651
+[cgnet_scratch_seg_s1] epoch 43 23.4s loss 0.4313
+[cgnet_scratch_seg_s1] epoch 44 23.0s loss 0.4292 | val_own_Mean FG IoU 0.3613
+[cgnet_scratch_seg_s1] epoch 45 21.2s loss 0.4291
+[cgnet_scratch_seg_s1] epoch 46 21.2s loss 0.4274 | val_own_Mean FG IoU 0.3635
+[cgnet_scratch_seg_s1] epoch 47 21.6s loss 0.4286
+[cgnet_scratch_seg_s1] epoch 48 21.3s loss 0.4269 | val_own_Mean FG IoU 0.3656
+[cgnet_scratch_seg_s1] epoch 49 24.3s loss 0.4257
+[cgnet_scratch_seg_s1] epoch 50 34.5s loss 0.4254 | val_own_Mean FG IoU 0.3624
+[cgnet_scratch_seg_s1] epoch 51 26.2s loss 0.4237
+[cgnet_scratch_seg_s1] epoch 52 27.6s loss 0.4248 | val_own_Mean FG IoU 0.3633
+[cgnet_scratch_seg_s1] epoch 53 34.9s loss 0.4234
+[cgnet_scratch_seg_s1] epoch 54 37.8s loss 0.4250 | val_own_Mean FG IoU 0.3607
+[cgnet_scratch_seg_s1] epoch 55 37.9s loss 0.4224
+[cgnet_scratch_seg_s1] epoch 56 37.5s loss 0.4233 | val_own_Mean FG IoU 0.3622
+[cgnet_scratch_seg_s1] epoch 57 37.8s loss 0.4213
+[cgnet_scratch_seg_s1] epoch 58 40.4s loss 0.4228 | val_own_Mean FG IoU 0.3611
+[cgnet_scratch_seg_s1] epoch 59 34.7s loss 0.4234
+[cgnet_scratch_seg_s1] epoch 60 28.7s loss 0.4207 | val_own_Mean FG IoU 0.3612
+wandb:                                                                                
+wandb: 
+wandb: Run history:
+wandb:               epoch ▁▁▁▁▂▂▂▂▂▂▃▃▃▃▃▄▄▄▄▄▅▅▅▅▅▆▆▆▆▆▆▆▆▇▇▇▇▇██
+wandb:        epoch_time_s ▃▂▂▂▁▂▁▂▁▁▁▁▁▁▂▁▁▁▂▁▂▁▂▁▁▁▁▂▂▁▁▆▃▃▆▇▇▇█▄
+wandb:                  lr ██████████▇▇▇▇▇▆▆▆▆▅▅▅▅▄▄▄▄▄▃▃▃▂▂▂▂▁▁▁▁▁
+wandb:         train_total █▅▄▄▄▄▄▄▄▄▃▃▃▃▃▂▂▂▂▂▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:      val_own_AR IoU ▁▃▅▅▆█▇▇▇▅█▇█▇▇▇▇▇▇▇▇▆▆▇▆▆▆▆▆▆
+wandb:      val_own_BG IoU ▁▃▄▂▃▇▇█▆█▅▆▆▆▅▆▆▆▅▆▅▇▆▆▆▆▆▆▆▆
+wandb: val_own_Mean FG IoU ▄▁▇▆▃▆▆█▅▅▄▆▆▆▅▆▅▅▅▅▅▅▅▅▅▅▅▅▅▅
+wandb:    val_own_Mean IoU ▄▁▇▅▃▆▆█▅▅▄▆▆▆▅▆▅▅▅▅▅▅▅▅▅▅▅▅▅▅
+wandb:      val_own_TC IoU ▆▁█▆▂▅▆█▄▅▃▅▅▅▅▅▅▄▅▅▅▅▅▅▅▅▅▅▅▅
+wandb: 
+wandb: Run summary:
+wandb:                arch cgnet_scratch
+wandb:          best_epoch 16
+wandb:             encoder infused_mlp1
+wandb:               epoch 60
+wandb:        epoch_time_s 28.69711
+wandb:                  lr 1e-05
+wandb:                mode seg
+wandb:                name cgnet_scratch_seg_s1...
+wandb:                seed 1
+wandb:      train_time_min 25.14702
+wandb:         train_total 0.42066
+wandb:    trainable_params 494232
+wandb:      val_own_AR IoU 0.39906
+wandb:      val_own_BG IoU 0.94664
+wandb: val_own_Mean FG IoU 0.36122
+wandb:    val_own_Mean IoU 0.55636
+wandb:      val_own_TC IoU 0.32338
+wandb: 
+wandb: You can sync this run to the cloud by running:
+wandb: wandb sync /home/worker1/thang/ClimateSAM/wandb/offline-run-20260925_234946-d0wcma3p
+wandb: Find logs at: ./wandb/offline-run-20260925_234946-d0wcma3p/logs
+{
+  "name": "cgnet_scratch_seg_s1",
+  "arch": "cgnet_scratch",
+  "mode": "seg",
+  "seed": 1,
+  "encoder": "infused_mlp1",
+  "trainable_params": 494232,
+  "best_epoch": 16,
+  "train_time_min": 25.147015329202016,
+  "args": {
+    "encoder": "infused_mlp1",
+    "arch": "cgnet_scratch",
+    "mode": "seg",
+    "seed": 1,
+    "epochs": 60,
+    "lr": 0.001,
+    "bs": 8,
+    "micro_bs": 4,
+    "aux_weight": 1.0,
+    "init": null,
+    "val_every": 2,
+    "name": "cgnet_scratch_seg_s1",
+    "smooth": false,
+    "exclude_fold": null,
+    "wandb": true
+  },
+  "val_own_TC IoU": 0.3684776302000171,
+  "val_own_AR IoU": 0.4037666139445245,
+  "val_own_BG IoU": 0.9503589408907477,
+  "val_own_Mean IoU": 0.5742010616784298,
+  "val_own_Mean FG IoU": 0.3861221220722708
+}

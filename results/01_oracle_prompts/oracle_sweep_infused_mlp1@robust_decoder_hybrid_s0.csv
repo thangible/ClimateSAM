@@ -1,0 +1,33 @@
+encoder,decoder,study,prompt,TC IoU,AR IoU,BG IoU,Mean IoU,Mean FG IoU
+infused_mlp1,robust_decoder_hybrid_s0,mask_format,"union {0,1}",0.1241,0.741,0.9751,0.6134,0.4325
+infused_mlp1,robust_decoder_hybrid_s0,mask_format,"per-object {0,1}",0.1518,0.6834,0.9684,0.6012,0.4176
+infused_mlp1,robust_decoder_hybrid_s0,mask_format,union logits +-2,0.0671,0.8502,0.9843,0.6339,0.4586
+infused_mlp1,robust_decoder_hybrid_s0,mask_format,per-object logits +-2,0.2475,0.4337,0.9186,0.5333,0.3406
+infused_mlp1,robust_decoder_hybrid_s0,mask_format,union logits +-5,0.5584,0.9191,0.9924,0.8233,0.7387
+infused_mlp1,robust_decoder_hybrid_s0,mask_format,per-object logits +-5,0.653,0.8644,0.9888,0.8354,0.7587
+infused_mlp1,robust_decoder_hybrid_s0,mask_format,union logits +-10,0.5433,0.9007,0.9913,0.8118,0.722
+infused_mlp1,robust_decoder_hybrid_s0,mask_format,per-object logits +-10,0.5712,0.8766,0.9892,0.8123,0.7239
+infused_mlp1,robust_decoder_hybrid_s0,mask_format,union logits +-20,0.682,0.8943,0.9918,0.856,0.7882
+infused_mlp1,robust_decoder_hybrid_s0,mask_format,per-object logits +-20,0.6361,0.8886,0.9905,0.8384,0.7623
+infused_mlp1,robust_decoder_hybrid_s0,mask_format,box,0.7239,0.4598,0.9649,0.7162,0.5918
+infused_mlp1,robust_decoder_hybrid_s0,mask_format,box + per-object logits +-10,0.8782,0.8658,0.9912,0.9118,0.872
+infused_mlp1,robust_decoder_hybrid_s0,mask_format,box + union logits +-10,0.8766,0.8346,0.9894,0.9002,0.8556
+infused_mlp1,robust_decoder_hybrid_s0,degradation,box enlarge -0.3,0.2017,0.0958,0.9432,0.4136,0.1488
+infused_mlp1,robust_decoder_hybrid_s0,degradation,box enlarge -0.2,0.4258,0.1988,0.9499,0.5248,0.3123
+infused_mlp1,robust_decoder_hybrid_s0,degradation,box enlarge -0.1,0.6478,0.3287,0.958,0.6448,0.4883
+infused_mlp1,robust_decoder_hybrid_s0,degradation,box enlarge +0.0,0.7239,0.4598,0.9649,0.7162,0.5918
+infused_mlp1,robust_decoder_hybrid_s0,degradation,box enlarge +0.1,0.6346,0.5018,0.9645,0.7003,0.5682
+infused_mlp1,robust_decoder_hybrid_s0,degradation,box enlarge +0.2,0.5386,0.484,0.9592,0.6606,0.5113
+infused_mlp1,robust_decoder_hybrid_s0,degradation,box enlarge +0.3,0.4559,0.451,0.9524,0.6198,0.4534
+infused_mlp1,robust_decoder_hybrid_s0,degradation,box enlarge +0.5,0.3433,0.376,0.9346,0.5513,0.3596
+infused_mlp1,robust_decoder_hybrid_s0,degradation,mask morph -9px,0.2631,0.7584,0.9816,0.6677,0.5108
+infused_mlp1,robust_decoder_hybrid_s0,degradation,mask morph -5px,0.3868,0.8434,0.9872,0.7391,0.6151
+infused_mlp1,robust_decoder_hybrid_s0,degradation,mask morph -3px,0.4677,0.8813,0.9898,0.7796,0.6745
+infused_mlp1,robust_decoder_hybrid_s0,degradation,mask morph +0px,0.5433,0.9007,0.9913,0.8118,0.722
+infused_mlp1,robust_decoder_hybrid_s0,degradation,mask morph +3px,0.6209,0.9083,0.9921,0.8404,0.7646
+infused_mlp1,robust_decoder_hybrid_s0,degradation,mask morph +5px,0.7218,0.9023,0.9921,0.8721,0.812
+infused_mlp1,robust_decoder_hybrid_s0,degradation,mask morph +9px,0.8291,0.8548,0.9889,0.8909,0.842
+infused_mlp1,robust_decoder_hybrid_s0,degradation,box + 1 false boxes,0.6018,0.4471,0.9619,0.6702,0.5244
+infused_mlp1,robust_decoder_hybrid_s0,degradation,box + 3 false boxes,0.4555,0.4105,0.9538,0.6066,0.433
+infused_mlp1,robust_decoder_hybrid_s0,degradation,box drop 25% objects,0.5445,0.3438,0.9576,0.6153,0.4442
+infused_mlp1,robust_decoder_hybrid_s0,degradation,box drop 50% objects,0.3724,0.2416,0.9515,0.5219,0.307

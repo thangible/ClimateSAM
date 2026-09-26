@@ -1,8 +1,8 @@
 # 01 — Oracle prompts: what SAM can do with prompts built from the ground truth
 
 Scripts: `prompter_bench/oracle_sweep.py`, `prompter_bench/evaluate.py` (method `oracle_gt`) · data:
-`oracle_sweep_<encoder>.csv`, `../eval/<encoder>/oracle_gt.json` · figures: `../figures/oracle_mask_format_*.png`,
-`../figures/oracle_degradation_*.png`.
+`oracle_sweep_<encoder>.csv`, `../eval/<encoder>/oracle_gt.json` · figures: `../figures/oracle_mask_format.png`,
+`../figures/oracle_prompt_errors.png`.
 
 These experiments use no prompter at all. They answer two questions that decide how a prompter should talk to SAM:
 (1) which prompt *format* the frozen decoder understands, and (2) how SAM reacts to the kinds of errors a real

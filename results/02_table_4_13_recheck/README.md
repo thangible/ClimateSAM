@@ -1,7 +1,7 @@
 # 02 — Re-check of Table 4.13 (SAM with CG-Net as prompter)
 
 Script: `prompter_bench/table413_recheck.py` · data: `table_4_13_recheck.csv` · LaTeX: `../tables/table_4_13_corrected.tex`
-(primary checkpoint) and `../tables/table_4_13_nosmooth.tex` · figures: `../figures/table_4_13_recheck_*.png`.
+(primary checkpoint) and `../tables/table_4_13_nosmooth.tex` · figures: `../figures/table_4_13_recheck.png`.
 
 ## What was re-run
 

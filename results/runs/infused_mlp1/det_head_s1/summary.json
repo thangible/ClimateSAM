@@ -1,0 +1,20 @@
+{
+  "name": "det_head_s1",
+  "seed": 1,
+  "trainable_params": 608778,
+  "best_epoch": 14,
+  "train_time_min": 37.007656677563986,
+  "threshold": 0.7,
+  "val_TC IoU": 0.11839843124047704,
+  "val_AR IoU": 0.28439822310949686,
+  "val_BG IoU": 0.8832932168126724,
+  "val_Mean IoU": 0.4286966237208821,
+  "val_Mean FG IoU": 0.20139832717498696,
+  "test_sam_bbox": {
+    "TC IoU": 0.11841889615762068,
+    "AR IoU": 0.2854831602217228,
+    "BG IoU": 0.881249229262469,
+    "Mean IoU": 0.4283837618806041,
+    "Mean FG IoU": 0.20195102818967176
+  }
+}

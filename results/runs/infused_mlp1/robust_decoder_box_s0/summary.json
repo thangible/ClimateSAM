@@ -1,0 +1,14 @@
+{
+  "name": "robust_decoder_box_s0",
+  "mode": "box",
+  "seed": 0,
+  "real_prompts": true,
+  "trainable_params": 1210656,
+  "best_epoch": 20,
+  "train_time_min": 25.48858721256256,
+  "val_TC IoU": 0.3620782923038614,
+  "val_AR IoU": 0.39500807293583506,
+  "val_BG IoU": 0.9478456307048742,
+  "val_Mean IoU": 0.5683106653148569,
+  "val_Mean FG IoU": 0.3785431826198482
+}

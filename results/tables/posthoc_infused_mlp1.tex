@@ -1,0 +1,113 @@
+\begin{table}[htbp]
+\centering
+\small
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{llcccc}
+\toprule
+Prompter & Variant & TC IoU & AR IoU & Mean FG IoU & $\Delta$ FG vs. seed 0 [95\% CI] \\
+\midrule
+CG-Net (trained from scratch on 358 images) & single seed (mean of seeds) & 0.343 & 0.394 & 0.369 & -- \\
+ & single seed, calibrated (mean of seeds) & 0.342 & 0.397 & 0.370 & -- \\
+ & ensemble & 0.352 & 0.408 & 0.380 & +0.005 [-0.002, +0.012] \\
+ & ensemble, calibrated & 0.354 & 0.410 & 0.382 & +0.007 [+0.001, +0.013] \\
+ & ensemble, calibrated, post-processed & 0.351 & 0.410 & 0.381 & +0.006 [-0.003, +0.015] \\
+ & SAM hybrid, round 1 & 0.343 & 0.392 & 0.368 & -0.007 [-0.018, +0.003] \\
+ & SAM hybrid, round 2 & 0.334 & 0.394 & 0.364 & -0.011 [-0.022, +0.000] \\
+ & SAM hybrid, round 3 & 0.323 & 0.394 & 0.359 & -0.016 [-0.028, -0.003] \\
+ & \footnotesize thresholds TC -1.00 / AR -0.75; min. blob 800 / 800 px; max. TC latitude 90$^\circ$ &  &  &  &  \\
+\midrule
+Logistic regression, ViT block 12 & single seed (mean of seeds) & 0.301 & 0.385 & 0.343 & -- \\
+ & single seed, calibrated (mean of seeds) & 0.300 & 0.385 & 0.343 & -- \\
+ & ensemble & 0.302 & 0.386 & 0.344 & -0.001 [-0.002, +0.001] \\
+ & ensemble, calibrated & 0.302 & 0.385 & 0.344 & -0.001 [-0.003, +0.002] \\
+ & ensemble, calibrated, post-processed & 0.291 & 0.390 & 0.341 & -0.004 [-0.016, +0.009] \\
+ & SAM hybrid, round 1 & 0.292 & 0.368 & 0.330 & -0.014 [-0.027, -0.002] \\
+ & SAM hybrid, round 2 & 0.285 & 0.368 & 0.326 & -0.018 [-0.031, -0.005] \\
+ & SAM hybrid, round 3 & 0.275 & 0.368 & 0.322 & -0.023 [-0.037, -0.008] \\
+ & \footnotesize thresholds TC +0.25 / AR +0.25; min. blob 800 / 1600 px; max. TC latitude 45$^\circ$ &  &  &  &  \\
+\midrule
+Multi-scale fusion & single seed (mean of seeds) & 0.333 & 0.403 & 0.368 & -- \\
+ & single seed, calibrated (mean of seeds) & 0.333 & 0.404 & 0.369 & -- \\
+ & ensemble & 0.344 & 0.408 & 0.376 & +0.011 [+0.006, +0.017] \\
+ & ensemble, calibrated & 0.342 & 0.408 & 0.375 & +0.010 [+0.005, +0.015] \\
+ & ensemble, calibrated, post-processed & 0.342 & 0.409 & 0.375 & +0.011 [+0.006, +0.016] \\
+ & SAM hybrid, round 1 & 0.336 & 0.385 & 0.361 & -0.004 [-0.010, +0.002] \\
+ & SAM hybrid, round 2 & 0.329 & 0.389 & 0.359 & -0.006 [-0.013, +0.000] \\
+ & SAM hybrid, round 3 & 0.321 & 0.389 & 0.355 & -0.010 [-0.018, -0.002] \\
+ & \footnotesize thresholds TC +2.75 / AR +0.00; min. blob 50 / 400 px; max. TC latitude 90$^\circ$ &  &  &  &  \\
+\midrule
+Multi-scale fusion + token gate & single seed (mean of seeds) & 0.324 & 0.399 & 0.362 & -- \\
+ & single seed, calibrated (mean of seeds) & 0.323 & 0.401 & 0.362 & -- \\
+ & ensemble & 0.333 & 0.403 & 0.368 & +0.006 [+0.003, +0.009] \\
+ & ensemble, calibrated & 0.329 & 0.405 & 0.367 & +0.005 [+0.001, +0.009] \\
+ & ensemble, calibrated, post-processed & 0.319 & 0.405 & 0.362 & +0.000 [-0.010, +0.011] \\
+ & SAM hybrid, round 1 & 0.316 & 0.391 & 0.354 & -0.008 [-0.020, +0.003] \\
+ & SAM hybrid, round 2 & 0.308 & 0.393 & 0.351 & -0.011 [-0.024, +0.001] \\
+ & SAM hybrid, round 3 & 0.298 & 0.392 & 0.345 & -0.017 [-0.031, -0.004] \\
+ & \footnotesize thresholds TC +1.75 / AR -0.25; min. blob 800 / 400 px; max. TC latitude 90$^\circ$ &  &  &  &  \\
+\midrule
+Mask-prompt generator (segmentation loss) & single seed (mean of seeds) & 0.344 & 0.413 & 0.379 & -- \\
+ & single seed, calibrated (mean of seeds) & 0.343 & 0.412 & 0.378 & -- \\
+ & ensemble & 0.353 & 0.418 & 0.385 & +0.006 [+0.001, +0.010] \\
+ & ensemble, calibrated & 0.349 & 0.417 & 0.383 & +0.003 [-0.002, +0.009] \\
+ & ensemble, calibrated, post-processed & 0.349 & 0.418 & 0.384 & +0.004 [-0.004, +0.012] \\
+ & SAM hybrid, round 1 & 0.343 & 0.396 & 0.369 & -0.010 [-0.020, +0.000] \\
+ & SAM hybrid, round 2 & 0.334 & 0.397 & 0.366 & -0.014 [-0.025, -0.003] \\
+ & SAM hybrid, round 3 & 0.321 & 0.396 & 0.359 & -0.021 [-0.033, -0.009] \\
+ & \footnotesize thresholds TC +2.00 / AR +0.25; min. blob 800 / 200 px; max. TC latitude 90$^\circ$ &  &  &  &  \\
+\midrule
+Mask-prompt generator (segmentation loss) + CG-Net (trained from scratch on 358 images) & single seed (mean of seeds) & 0.344 & 0.404 & 0.374 & -- \\
+ & single seed, calibrated (mean of seeds) & 0.342 & 0.405 & 0.374 & -- \\
+ & ensemble & 0.363 & 0.416 & 0.389 & +0.010 [-0.000, +0.019] \\
+ & ensemble, calibrated & 0.365 & 0.417 & 0.391 & +0.011 [+0.002, +0.020] \\
+ & ensemble, calibrated, post-processed & 0.358 & 0.417 & 0.388 & +0.008 [-0.004, +0.019] \\
+ & SAM hybrid, round 1 & 0.351 & 0.389 & 0.370 & -0.010 [-0.023, +0.002] \\
+ & SAM hybrid, round 2 & 0.343 & 0.391 & 0.367 & -0.013 [-0.026, +0.000] \\
+ & SAM hybrid, round 3 & 0.333 & 0.392 & 0.362 & -0.018 [-0.031, -0.004] \\
+ & \footnotesize thresholds TC -0.75 / AR -0.25; min. blob 800 / 200 px; max. TC latitude 90$^\circ$ &  &  &  &  \\
+\midrule
+Mask-prompt generator (end-to-end via SAM) & single seed (mean of seeds) & 0.335 & 0.378 & 0.356 & -- \\
+ & single seed, calibrated (mean of seeds) & 0.331 & 0.383 & 0.357 & -- \\
+ & ensemble & 0.342 & 0.400 & 0.371 & +0.014 [+0.009, +0.019] \\
+ & ensemble, calibrated & 0.338 & 0.400 & 0.369 & +0.012 [+0.007, +0.017] \\
+ & ensemble, calibrated, post-processed & 0.337 & 0.401 & 0.369 & +0.013 [+0.005, +0.020] \\
+ & SAM hybrid, round 1 & 0.330 & 0.404 & 0.367 & +0.010 [+0.002, +0.018] \\
+ & SAM hybrid, round 2 & 0.325 & 0.402 & 0.363 & +0.007 [-0.002, +0.016] \\
+ & SAM hybrid, round 3 & 0.316 & 0.400 & 0.358 & +0.001 [-0.008, +0.011] \\
+ & \footnotesize thresholds TC +1.50 / AR +0.00; min. blob 800 / 1600 px; max. TC latitude 90$^\circ$ &  &  &  &  \\
+\midrule
+Mask-prompt generator (two-stage) & single seed (mean of seeds) & 0.338 & 0.409 & 0.374 & -- \\
+ & single seed, calibrated (mean of seeds) & 0.338 & 0.412 & 0.375 & -- \\
+ & ensemble & 0.349 & 0.415 & 0.382 & +0.009 [+0.003, +0.015] \\
+ & ensemble, calibrated & 0.347 & 0.417 & 0.382 & +0.009 [+0.003, +0.016] \\
+ & ensemble, calibrated, post-processed & 0.343 & 0.418 & 0.380 & +0.008 [+0.000, +0.015] \\
+ & SAM hybrid, round 1 & 0.337 & 0.395 & 0.366 & -0.007 [-0.017, +0.005] \\
+ & SAM hybrid, round 2 & 0.329 & 0.398 & 0.364 & -0.009 [-0.020, +0.002] \\
+ & SAM hybrid, round 3 & 0.319 & 0.398 & 0.358 & -0.014 [-0.026, -0.002] \\
+ & \footnotesize thresholds TC +1.75 / AR +1.25; min. blob 800 / 200 px; max. TC latitude 90$^\circ$ &  &  &  &  \\
+\midrule
+Mask-prompt generator (segmentation loss, label smoothing) & single seed (mean of seeds) & 0.338 & 0.412 & 0.375 & -- \\
+ & single seed, calibrated (mean of seeds) & 0.338 & 0.412 & 0.375 & -- \\
+ & ensemble & 0.349 & 0.418 & 0.383 & +0.013 [+0.009, +0.018] \\
+ & ensemble, calibrated & 0.348 & 0.417 & 0.383 & +0.013 [+0.008, +0.017] \\
+ & ensemble, calibrated, post-processed & 0.351 & 0.418 & 0.384 & +0.015 [+0.009, +0.020] \\
+ & SAM hybrid, round 1 & 0.341 & 0.398 & 0.370 & -0.000 [-0.008, +0.008] \\
+ & SAM hybrid, round 2 & 0.332 & 0.398 & 0.365 & -0.005 [-0.014, +0.004] \\
+ & SAM hybrid, round 3 & 0.320 & 0.397 & 0.359 & -0.011 [-0.021, -0.001] \\
+ & \footnotesize thresholds TC +0.75 / AR +0.25; min. blob 400 / 1600 px; max. TC latitude 90$^\circ$ &  &  &  &  \\
+\midrule
+Mask-prompt generator + raw CG-Net fields & single seed (mean of seeds) & 0.340 & 0.409 & 0.375 & -- \\
+ & single seed, calibrated (mean of seeds) & 0.339 & 0.411 & 0.375 & -- \\
+ & ensemble & 0.347 & 0.416 & 0.382 & +0.011 [+0.007, +0.016] \\
+ & ensemble, calibrated & 0.344 & 0.416 & 0.380 & +0.010 [+0.004, +0.015] \\
+ & ensemble, calibrated, post-processed & 0.347 & 0.418 & 0.382 & +0.012 [+0.004, +0.020] \\
+ & SAM hybrid, round 1 & 0.340 & 0.397 & 0.369 & -0.001 [-0.011, +0.009] \\
+ & SAM hybrid, round 2 & 0.333 & 0.398 & 0.365 & -0.005 [-0.016, +0.006] \\
+ & SAM hybrid, round 3 & 0.321 & 0.396 & 0.358 & -0.012 [-0.024, +0.001] \\
+ & \footnotesize thresholds TC +1.75 / AR +0.25; min. blob 800 / 1600 px; max. TC latitude 90$^\circ$ &  &  &  &  \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\caption{Evaluation-only improvements of the prompter masks (test set). Ensemble: mean of the logits of the three seeds; calibrated: per-class logit threshold chosen on the validation images; post-processed: minimum blob size per class and maximum TC latitude chosen on the validation images; SAM hybrid round $k$: the post-processed mask as hybrid prompt, then SAM's own output fed back as the prompt. $\Delta$: paired bootstrap against the seed-0 prompter mask.}
+\label{tab:posthoc_infused_mlp1}
+\end{table}

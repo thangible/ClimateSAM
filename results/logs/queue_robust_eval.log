@@ -1,0 +1,21 @@
+23:56 eval robust_decoder_hybrid_s0
+FAILED runs msf_seg_s0 robust_decoder_hybrid_s0
+00:08 done robust_decoder_hybrid_s0
+00:08 eval robust_decoder_hybrid_s1
+FAILED runs msf_seg_s0 robust_decoder_hybrid_s1
+01:03 done robust_decoder_hybrid_s1
+01:03 eval decoder_adapt_mpg_seg_s0_hybrid_oof_s0
+FAILED runs msf_seg_s0 decoder_adapt_mpg_seg_s0_hybrid_oof_s0
+01:47 done decoder_adapt_mpg_seg_s0_hybrid_oof_s0
+01:47 eval decoder_adapt_mpg_seg_s0_bbox_oof_s0
+FAILED runs msf_seg_s0 decoder_adapt_mpg_seg_s0_bbox_oof_s0
+02:03 done decoder_adapt_mpg_seg_s0_bbox_oof_s0
+02:03 eval robust_decoder_box_s0
+FAILED runs msf_seg_s0 robust_decoder_box_s0
+02:20 done robust_decoder_box_s0
+02:20 eval robust_decoder_box_s1
+02:43 done robust_decoder_box_s1
+02:43 eval robust_decoder_hybrid_gtonly_s0
+03:02 done robust_decoder_hybrid_gtonly_s0
+03:02 eval robust_decoder_hybrid_gtonly_s0_last
+03:23 done robust_decoder_hybrid_gtonly_s0_last

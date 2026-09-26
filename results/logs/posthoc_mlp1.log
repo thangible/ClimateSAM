@@ -1,0 +1,54 @@
+mpg_seg {'single seed': (0.344, 0.413, 0.379), 'single seed, calibrated': (0.343, 0.412, 0.378), 'ensemble': (0.353, 0.418, 0.385), 'ensemble, calibrated': (0.349, 0.417, 0.383), 'ensemble, calibrated, post-processed': (0.349, 0.418, 0.384), 'SAM hybrid, round 1': (0.343, 0.396, 0.369), 'SAM hybrid, round 2': (0.334, 0.397, 0.366), 'SAM hybrid, round 3': (0.321, 0.396, 0.359)} {'TC': 2.0, 'AR': 0.25} {'TC': {'min_area': 800, 'max_lat': 90}, 'AR': {'min_area': 200, 'max_lat': 90}}
+Traceback (most recent call last):
+  File "/home/worker1/thang/ClimateSAM/prompter_bench/posthoc.py", line 204, in <module>
+    main()
+    ~~~~^^
+  File "/home/worker1/thang/ClimateSAM/prompter_bench/posthoc.py", line 163, in main
+    val = [logits_for(r, args.encoder, 'val', climatesam, device) for r in runs]
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/worker1/thang/ClimateSAM/.venv/lib/python3.13/site-packages/torch/utils/_contextlib.py", line 120, in decorate_context
+    return func(*args, **kwargs)
+  File "/home/worker1/thang/ClimateSAM/prompter_bench/posthoc.py", line 49, in logits_for
+    o = model(batch)
+  File "/home/worker1/thang/ClimateSAM/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/worker1/thang/ClimateSAM/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/worker1/thang/ClimateSAM/prompter_bench/prompters.py", line 45, in forward
+    logits, aux = self.net([batch['vit'][l] for l in range(self.num_layers)])
+                  ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/worker1/thang/ClimateSAM/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/worker1/thang/ClimateSAM/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/worker1/thang/ClimateSAM/model/prompt_generator.py", line 127, in forward
+    upsampled_group = [self.block_feature_upsamplers[block_idx](f) for f in reduced_group]
+                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "/home/worker1/thang/ClimateSAM/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/worker1/thang/ClimateSAM/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/worker1/thang/ClimateSAM/.venv/lib/python3.13/site-packages/torch/nn/modules/container.py", line 244, in forward
+    input = module(input)
+  File "/home/worker1/thang/ClimateSAM/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/home/worker1/thang/ClimateSAM/.venv/lib/python3.13/site-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+  File "/home/worker1/thang/ClimateSAM/.venv/lib/python3.13/site-packages/torch/nn/modules/upsampling.py", line 172, in forward
+    return F.interpolate(
+           ~~~~~~~~~~~~~^
+        input,
+        ^^^^^^
+    ...<4 lines>...
+        recompute_scale_factor=self.recompute_scale_factor,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/worker1/thang/ClimateSAM/.venv/lib/python3.13/site-packages/torch/nn/functional.py", line 4730, in interpolate
+    return torch._C._nn.upsample_nearest2d(input, output_size, scale_factors)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.00 GiB. GPU 0 has a total capacity of 79.25 GiB of which 713.00 MiB is free. Process 1238189 has 11.58 GiB memory in use. Process 1238190 has 33.44 GiB memory in use. Process 1239950 has 7.88 GiB memory in use. Including non-PyTorch memory, this process has 7.62 GiB memory in use. Process 1242874 has 13.59 GiB memory in use. Process 1243734 has 4.42 GiB memory in use. Of the allocated memory 7.03 GiB is allocated by PyTorch, and 93.41 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)

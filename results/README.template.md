@@ -17,7 +17,7 @@ data. Tables below are generated from the raw outputs (`prompter_bench/make_repo
    about ±0.02 mean FG IoU of its prompter's own mask (gains up to +0.012 / +0.019 only for the prompter with the
    weakest mask, the end-to-end generator; points always lose 0.03–0.08), and the best SAM output overall equals the
    best prompter mask (primary checkpoint 0.376 vs. 0.379; second checkpoint 0.373 vs. 0.371, within noise). Paired
-   bootstrap intervals: `tables/bootstrap_*`, `figures/sam_minus_prompter_*`. → `04_sam_feature_prompters/`
+   bootstrap intervals: `tables/bootstrap_*`, `figures/sam_minus_prompter.png`. → `04_sam_feature_prompters/`
 3. **Why:** the Phase-1 decoder was trained with perfect prompts and *reproduces* its prompts. Oracle experiments
    show every false box becomes a false object, every missed object stays missed and ±10–20 % box errors cost
    0.1–0.3 IoU (`01_oracle_prompts/`). The prompters' remaining errors are exactly those: for ARs almost all lost IoU
@@ -32,8 +32,9 @@ data. Tables below are generated from the raw outputs (`prompter_bench/make_repo
    multi-scale fusion generator (CI [+0.003, +0.019]) with ~120× fewer FLOPs (5.7 vs. 702 GFLOPs per image,
    0.9 vs. 36 ms). SAM prompted by it reaches
    TC 0.342 / AR 0.398 (hybrid prompts). A 1.5 k-parameter linear probe on the last ViT block already reaches
-   TC 0.301 / AR 0.385 — the adapted encoder's features carry most of the signal. The same ranking holds on the
-   second frozen checkpoint.
+   TC 0.301 / AR 0.385 — the adapted encoder's features carry most of the signal. On the second frozen checkpoint
+   the mask-prompt generator ties multi-scale fusion (mean FG IoU 0.370 vs. 0.370, one MSF seed); both stay ahead
+   of CG-Net on AR and of the linear probe.
 6. **Prompt format matters, and in a checkpoint-dependent way.** Dense mask prompts must be logits for some
    checkpoints, and TCs vanish from mask-only prompts on others; a box plus a dense mask for TC and a dense mask for
    AR ("hybrid") is the robust choice (oracle: TC 0.872 / AR 0.920 vs. boxes 0.723 / 0.625).
@@ -74,7 +75,7 @@ Encoders: `infused_mlp1` = primary (Infused Token, MLP 1.0, the model of Table 4
 | 25 % of the objects not prompted | 0.548 | 0.483 |
 | + 1 random false box per class | 0.574 | 0.578 |
 
-![](figures/oracle_degradation_infused_mlp1.png)
+![](figures/oracle_prompt_errors.png)
 
 ## 2. Corrected Table 4.13 (`02_table_4_13_recheck/`)
 
@@ -111,14 +112,14 @@ Inference cost (`04_sam_feature_prompters/speed.csv`):
 
 {{table:speed}}
 
-![](figures/sam_minus_prompter_infused_mlp1.png)
-![](figures/methods_infused_mlp1.png)
-![](figures/training_curves_infused_mlp1.png)
-![](figures/error_decomposition_infused_mlp1.png)
+![](figures/sam_minus_prompter.png)
+![](figures/prompters_mask_vs_sam.png)
+![](figures/training_curves.png)
+![](figures/error_decomposition.png)
 
 Examples (map projection; filled = ground truth, lines = prediction, rectangles = box prompts):
 
-![](figures/examples_infused_mlp1_img17.png)
+![](figures/maps_test_image_17.png)
 
 Architecture of the mask-prompt generator and of the benchmark:
 

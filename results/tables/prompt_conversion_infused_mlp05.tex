@@ -1,6 +1,7 @@
 \begin{table}[htbp]
 \centering
 \small
+\begin{adjustbox}{max width=\linewidth}
 \begin{tabular}{lcccccccccc}
 \toprule
 Prompter & Prompter mask (no SAM) & SAM + box & SAM + box (+10\%) & SAM + points & SAM + box + points & SAM + mask logits & SAM + box + mask & SAM + hybrid & mean(prompter, SAM hybrid) & SAM + learned static prompts \\
@@ -18,6 +19,7 @@ Mask-prompt generator (two-stage) & 0.33 / 0.41 & 0.33 / 0.39 & 0.31 / 0.37 & 0.
 Mask-prompt generator (segmentation loss, label smoothing) & 0.33 / 0.41 & 0.34 / 0.40 & 0.32 / 0.39 & 0.31 / 0.34 & 0.33 / 0.39 & 0.07 / 0.40 & 0.34 / 0.41 & 0.34 / 0.40 & 0.34 / 0.40 & -- \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
 \caption{TC IoU / AR IoU for every way of turning the prompter output into SAM prompts (Infused Token, MLP ratio 0.5).}
 \label{tab:prompt_conversion_infused_mlp05}
 \end{table}

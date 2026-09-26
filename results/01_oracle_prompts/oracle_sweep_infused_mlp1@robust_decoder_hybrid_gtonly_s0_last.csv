@@ -1,0 +1,33 @@
+encoder,decoder,study,prompt,TC IoU,AR IoU,BG IoU,Mean IoU,Mean FG IoU
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,mask_format,"union {0,1}",0.0,0.293,0.9539,0.4156,0.1465
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,mask_format,"per-object {0,1}",0.0,0.3429,0.9566,0.4332,0.1714
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,mask_format,union logits +-2,0.0,0.9046,0.9884,0.631,0.4523
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,mask_format,per-object logits +-2,0.0,0.8795,0.9863,0.6219,0.4397
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,mask_format,union logits +-5,0.0,0.9051,0.9885,0.6312,0.4526
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,mask_format,per-object logits +-5,0.0049,0.8926,0.9874,0.6283,0.4488
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,mask_format,union logits +-10,0.0,0.9219,0.9895,0.6371,0.461
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,mask_format,per-object logits +-10,0.0056,0.9171,0.989,0.6372,0.4613
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,mask_format,union logits +-20,0.0121,0.9193,0.9894,0.6403,0.4657
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,mask_format,per-object logits +-20,0.0253,0.9198,0.9893,0.6448,0.4726
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,mask_format,box,0.7119,0.3224,0.9574,0.6639,0.5171
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,mask_format,box + per-object logits +-10,0.8817,0.9043,0.9935,0.9265,0.893
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,mask_format,box + union logits +-10,0.8811,0.8804,0.9921,0.9179,0.8808
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,degradation,box enlarge -0.3,0.2279,0.08,0.9425,0.4168,0.1539
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,degradation,box enlarge -0.2,0.4293,0.1574,0.9477,0.5115,0.2933
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,degradation,box enlarge -0.1,0.6237,0.2454,0.9534,0.6075,0.4346
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,degradation,box enlarge +0.0,0.7119,0.3224,0.9574,0.6639,0.5171
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,degradation,box enlarge +0.1,0.6834,0.3347,0.9562,0.6581,0.5091
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,degradation,box enlarge +0.2,0.6166,0.3188,0.9527,0.6294,0.4677
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,degradation,box enlarge +0.3,0.5458,0.2955,0.9487,0.5967,0.4207
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,degradation,box enlarge +0.5,0.439,0.2484,0.9403,0.5425,0.3437
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,degradation,mask morph -9px,0.0,0.7381,0.979,0.5724,0.369
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,degradation,mask morph -5px,0.0,0.8449,0.9851,0.61,0.4224
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,degradation,mask morph -3px,0.0,0.8973,0.9881,0.6285,0.4486
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,degradation,mask morph +0px,0.0,0.9219,0.9895,0.6371,0.461
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,degradation,mask morph +3px,0.0,0.9257,0.9896,0.6384,0.4629
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,degradation,mask morph +5px,0.0,0.9056,0.9881,0.6312,0.4528
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,degradation,mask morph +9px,0.0,0.8328,0.9823,0.605,0.4164
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,degradation,box + 1 false boxes,0.6351,0.3182,0.9556,0.6363,0.4767
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,degradation,box + 3 false boxes,0.5517,0.3054,0.9517,0.6029,0.4286
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,degradation,box drop 25% objects,0.5238,0.2433,0.9523,0.5731,0.3836
+infused_mlp1,robust_decoder_hybrid_gtonly_s0_last,degradation,box drop 50% objects,0.3638,0.168,0.9478,0.4932,0.2659

@@ -14,7 +14,7 @@ while true; do
     done
     for d in results/runs/$enc/*/; do
       n=$(basename $d)
-      case $n in decoder_adapt_*|*fold*|learned_prompt_*) continue;; esac
+      case $n in decoder_adapt_*|*fold*|learned_prompt_*|robust_decoder_*|det_head_*) continue;; esac
       [ -f $d/summary.json ] || continue
       grep -q per_image_counts results/eval/$enc/$n.json 2>/dev/null && continue
       free=$(nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits | head -1)

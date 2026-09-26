@@ -8,16 +8,17 @@ from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
 from common import RESULTS
 
 FIGS = os.path.join(RESULTS, 'figures')
-FROZEN, TRAIN, DATA, PROMPT, OUT = '#d9e8f5', '#fde2c8', '#eeeeee', '#e3f1dc', '#f4d9e8'
+import style as S
+FROZEN, TRAIN, DATA, PROMPT, OUT = '#efefec', '#fbe0dc', '#ffffff', '#e4e1f4', '#f7f6f2'
 
 
 def box(ax, x, y, w, h, text, color, fs=8, bold=False):
-    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle='round,pad=0.02,rounding_size=0.08', fc=color, ec='#333333', lw=0.8))
+    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle='round,pad=0.02,rounding_size=0.08', fc=color, ec=S.INK2, lw=0.7))
     ax.text(x + w / 2, y + h / 2, text, ha='center', va='center', fontsize=fs, weight='bold' if bold else 'normal', wrap=True)
     return (x, y, w, h)
 
 
-def arrow(ax, a, b, text='', color='#333333', style='-|>', ls='-', fs=7, rad=0.0):
+def arrow(ax, a, b, text='', color=S.INK2, style='-|>', ls='-', fs=7, rad=0.0):
     ax.add_patch(FancyArrowPatch(a, b, arrowstyle=style, mutation_scale=10, color=color, lw=1.0, ls=ls,
                                  connectionstyle=f'arc3,rad={rad}'))
     if text:
@@ -99,7 +100,7 @@ def mask_prompt_generator():
     box(ax, 11.5, 4.1, 2.3, 0.9, 'AR: logit map as\ndense mask prompt', PROMPT, fs=7)
     box(ax, 11.3, 2.2, 1.95, 1.2, 'TC: one box per blob\n(connected components,\n<= 16) + TC logit map\nas dense mask prompt', PROMPT, fs=7)
     arrow(ax, (11.0, 3.8), (11.5, 4.5))
-    arrow(ax, (11.0, 3.3), (11.5, 2.8))
+    arrow(ax, (11.0, 3.3), (11.3, 2.8))
     box(ax, 11.5, 0.5, 2.3, 1.0, 'frozen prompt encoder\n+ HQ decoder -> SAM masks', FROZEN, fs=7)
     arrow(ax, (12.3, 2.2), (12.3, 1.5))
     arrow(ax, (13.5, 4.1), (13.5, 1.5))
@@ -113,29 +114,31 @@ def mask_prompt_generator():
 
 
 def training_modes():
-    """Where the loss is applied in the three training modes."""
-    fig, axes = plt.subplots(1, 3, figsize=(15, 3.6))
-    titles = ['(a) segmentation loss', '(b) end-to-end through SAM', '(c) two-stage: (a), then (b) at lr/10']
-    for ax, title, sam_loss in zip(axes, titles, (False, True, True)):
-        ax.set_xlim(0, 5)
-        ax.set_ylim(0, 3.5)
-        ax.axis('off')
-        ax.set_title(title, fontsize=10)
-        box(ax, 0.1, 1.2, 1.1, 0.9, 'frozen\nfeatures', FROZEN, fs=7)
-        box(ax, 1.5, 1.2, 1.1, 0.9, 'prompter', TRAIN, fs=8)
-        box(ax, 3.0, 1.2, 1.0, 0.9, 'TC/AR\nlogits', OUT, fs=7)
-        arrow(ax, (1.2, 1.65), (1.5, 1.65))
-        arrow(ax, (2.6, 1.65), (3.0, 1.65))
-        box(ax, 3.0, 2.6, 1.0, 0.6, 'loss', '#ffffff', fs=7)
-        arrow(ax, (3.5, 2.1), (3.5, 2.6))
-        if sam_loss:
-            box(ax, 3.0, 0.1, 1.9, 0.7, 'frozen SAM decoder', FROZEN, fs=7)
-            arrow(ax, (3.5, 1.2), (3.5, 0.8))
-            box(ax, 4.2, 1.2, 0.75, 0.9, 'loss', '#ffffff', fs=7)
-            arrow(ax, (4.6, 0.8), (4.6, 1.2))
-            arrow(ax, (4.6, 1.2), (2.0, 1.2), color='#c0392b', ls='--', rad=0.35)
-            ax.text(3.3, 0.95, 'gradient', fontsize=6, color='#c0392b')
-    save(fig, 'diagram_training_modes')
+    """Where the loss is applied in the three training modes (each mode also saved as its own panel)."""
+    def mode(sam_loss):
+        def draw(ax):
+            ax.set_xlim(0, 5)
+            ax.set_ylim(0, 3.5)
+            ax.axis('off')
+            box(ax, 0.1, 1.2, 1.1, 0.9, 'frozen\nfeatures', FROZEN, fs=7)
+            box(ax, 1.5, 1.2, 1.1, 0.9, 'prompter', TRAIN, fs=8)
+            box(ax, 3.0, 1.2, 1.0, 0.9, 'TC/AR\nlogits', OUT, fs=7)
+            arrow(ax, (1.2, 1.65), (1.5, 1.65))
+            arrow(ax, (2.6, 1.65), (3.0, 1.65))
+            box(ax, 3.0, 2.6, 1.0, 0.6, 'loss', DATA, fs=7)
+            arrow(ax, (3.5, 2.1), (3.5, 2.6))
+            if sam_loss:
+                box(ax, 3.0, 0.1, 1.9, 0.7, 'frozen SAM decoder', FROZEN, fs=7)
+                arrow(ax, (3.5, 1.2), (3.5, 0.8))
+                box(ax, 4.2, 1.2, 0.75, 0.9, 'loss', DATA, fs=7)
+                arrow(ax, (4.6, 0.8), (4.6, 1.2))
+                arrow(ax, (3.0, 0.45), (2.05, 1.18), color=S.EMPH, rad=-0.25)
+                ax.text(2.05, 0.45, 'gradient', fontsize=6.5, color=S.EMPH)
+        return draw
+    S.figure(FIGS, 'diagram_training_modes', [('seg', 'segmentation loss', mode(False)),
+                                              ('e2e', 'end-to-end through SAM', mode(True)),
+                                              ('twostage', 'two-stage: segmentation loss, then end-to-end at lr/10', mode(True))],
+             size=(5.0, 3.4))
 
 
 if __name__ == '__main__':

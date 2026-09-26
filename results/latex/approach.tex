@@ -1,0 +1,179 @@
+% ---------------------------------------------------------------------------------------------------------------
+% Method additions for Chapter 3 (automatic prompting). Generated alongside results/REPORT.md.
+% Requires: amsmath, graphicx, booktabs, adjustbox. \ResultsDir must point to the results/ directory.
+% References to existing thesis objects (Table 4.4, Figure 3.9, Eq. 3.4, ...) are written as fixed numbers;
+% replace them by \ref{...} with your labels.
+% ---------------------------------------------------------------------------------------------------------------
+
+\section{Evaluation Protocol for Automatic Prompting}
+\label{sec:prompting_protocol}
+
+All automatic-prompting experiments (Section~4.3) share one protocol, so that every row of every table is directly
+comparable. The protocol fixes the frozen model, the data split, the training recipe of the learned prompters, the
+conversion of a prompter output into SAM prompts and the evaluation metrics.
+
+\paragraph{Frozen model.}
+Phase~2 uses one frozen Phase-1 model, the Infused-Token ViT-B checkpoint with MLP ratio~1.0 (Table~4.12:
+TC~0.724 / AR~0.632 IoU with ground-truth boxes). The Infused-Token checkpoint with MLP ratio~0.5 serves as a
+robustness check. Input adapter, encoder and decoder are not changed, except in the decoder-adaptation experiments
+(Section~\ref{sec:decoder_adaptation_method}).
+
+\paragraph{Data split.}
+The 398 ClimateNet training images are split once into 358 training and 40 validation images (fixed random
+permutation). The validation images are used only to select the checkpoint of each learned prompter and to tune
+post-processing parameters; the 61 test images are used once per final model. (The original Phase-2 scripts selected
+the best epoch on the test set, which biases their numbers upwards.)
+
+\paragraph{Feature cache.}
+Because the encoder is frozen and no augmentation is used (Section~2.2.2), the encoder is run once per image and its
+outputs are cached: the neck embedding $E\in\mathbb{R}^{256\times64\times64}$, the outputs of all twelve ViT blocks
+$F_1,\dots,F_{12}\in\mathbb{R}^{768\times64\times64}$ and the four CG-Net input fields. This is numerically identical
+to running the encoder in every training step and reduces a 60-epoch training of a small prompter from hours to minutes.
+
+\paragraph{Training of learned prompters.}
+Every learned prompter outputs two logit maps $\ell_{\text{TC}},\ell_{\text{AR}}$ (independent sigmoids) and is
+trained with the loss selected in Section~4.1 (Table~4.4), summed over both classes,
+\begin{equation}
+\mathcal{L}_{\text{seg}}=\sum_{c\in\{\text{TC},\text{AR}\}}\Big[1-\frac{TP_c+1}{TP_c+\alpha_c FP_c+\beta_c FN_c+1}
+\;-\;\frac{1}{|\Omega|}\sum_{i\in\Omega}\alpha_{t,c}\,(1-p_{t,i})^{\gamma_c}\log p_{t,i}\Big],
+\label{eq:seg_loss}
+\end{equation}
+with soft counts $TP_c=\sum_i p_i y_i$, $FP_c=\sum_i p_i(1-y_i)$, $FN_c=\sum_i(1-p_i)y_i$ per image;
+TC: $\alpha=0.3$, $\beta=0.7$, focal $\alpha=0.95$, $\gamma=5$; AR: $\alpha=\beta=0.5$, focal $\alpha=0.85$,
+$\gamma=5$. Logits are upsampled bilinearly to $768\times1152$ before the loss. The multi-scale fusion models add their
+deep-supervision terms (Eq.~3.4). All models use AdamW (learning rate $10^{-3}$, weight decay $10^{-4}$), cosine decay
+to $10^{-5}$, 60 epochs, an effective batch size of~8 and bf16 autocast; the checkpoint with the best validation mean
+foreground IoU (evaluated every second epoch) is kept. Every configuration is trained with three seeds.
+
+\paragraph{From a prompter output to SAM prompts.}
+A binary mask $m_c=\mathbb{1}[\ell_c>0]$ is split into 8-connected components of at least 20~pixels, as in
+\texttt{PromptMaker}. Seven conversions are compared (Table~\ref{tab:conversions}). Boxes and points are mapped from the
+$1152\times768$ grid to SAM's $1024\times1024$ frame (the image is stretched, not padded), and the masks of all prompts
+of a class are merged by a pixel-wise maximum of the logits, as in \texttt{ClimateSAM.\allowbreak assemble\_\allowbreak raw\_\allowbreak masks}.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{adjustbox}{max width=\linewidth}
+\begin{tabular}{ll}
+\toprule
+Conversion & Prompt(s) per connected component \\
+\midrule
+box & tight bounding box \\
+box (+10\%) & box enlarged by 10\% of its width and height \\
+points & 5 positive points in the eroded component + its centroid, 5 negative points in a ring around it \\
+box + points & both of the above \\
+mask logits & one dense prompt per class: $\ell_c$ resized to $256\times256$, clamped to $[-20,20]$ (hard masks: $\pm10$) \\
+box + mask & every box together with the dense prompt of its class \\
+hybrid & TC: box + mask logits; AR: mask logits only \\
+\bottomrule
+\end{tabular}
+\end{adjustbox}
+\caption{Conversions of a prompter output into SAM prompts. The hybrid conversion follows from the prompt analysis in
+Section~4.3.1: dense prompts carry the shape of an AR, but a TC covers only a few cells of the prompt encoder's
+$64\times64$ grid and needs a box.}
+\label{tab:conversions}
+\end{table}
+
+\paragraph{Metrics.}
+As in the other thesis tables, IoU is computed per class on counts summed over all $N=61$ test images,
+\begin{equation}
+\text{IoU}_c=\frac{\sum_n TP_{c,n}}{\sum_n\left(TP_{c,n}+FP_{c,n}+FN_{c,n}\right)},\qquad
+\text{Mean FG IoU}=\tfrac12\left(\text{IoU}_{\text{TC}}+\text{IoU}_{\text{AR}}\right),
+\end{equation}
+where a pixel predicted as both classes counts as AR. Three further analyses are used:
+\begin{itemize}
+  \item \textbf{Object level.} A ground-truth object (8-connected, $\ge 20$~px) is \emph{found} if any predicted pixel
+  overlaps it; a predicted object is \emph{correct} if it overlaps any ground-truth object. Recall = found / ground-truth
+  objects, precision = correct / predicted objects.
+  \item \textbf{Error decomposition.} The IoU of a prediction is recomputed after removing one error type at a time:
+  deleting predicted objects that touch no ground truth (\emph{no false objects}), adding the missed ground-truth objects
+  (\emph{add missed objects}), both (\emph{perfect detection}), or replacing every detected ground-truth object by its
+  exact shape while false objects are kept (\emph{perfect shape}). The gain of each variant measures the IoU lost to
+  that error type.
+  \item \textbf{Paired bootstrap.} Two outputs $A$ and $B$ are compared by resampling the test images with replacement
+  ($2000$ times), recomputing both dataset-level IoUs on each resample, and reporting the 2.5 and 97.5 percentiles of
+  $\text{IoU}_B-\text{IoU}_A$ as a 95\% confidence interval. For learned prompters the per-image counts of the three
+  seeds are pooled, so the interval reflects the sampling of test images, which dominates the variance (seed
+  standard deviations are 0.001--0.01).
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{\ResultsDir/figures/diagram_benchmark_pipeline.pdf}
+\caption{Benchmark pipeline for automatic prompting. Every prompter produces TC and AR logit maps (the \emph{prompter
+mask}), which are evaluated directly and after conversion into prompts for the frozen prompt encoder and HQ decoder.
+Grey: frozen Phase-1 components; red: trained in Phase~2; violet: prompt conversion (no weights).}
+\label{fig:benchmark_pipeline}
+\end{figure}
+
+\section{Mask-Prompt Generator}
+\label{sec:mpg}
+
+The multi-scale fusion generator (Figure~3.9) upsamples all twelve ViT block outputs to $1024\times1024$ with
+nearest-neighbour interpolation before it predicts. The mask-prompt generator (MPG) proposed here starts from three
+observations:
+(1)~the encoder describes the image on a $64\times64$ grid, so upsampling its features before the prediction adds
+computation but no information;
+(2)~the only output resolution SAM needs is its dense-prompt resolution, $256\times256$;
+(3)~ARs are long, thin structures, so the prediction needs a large receptive field.
+
+MPG projects the neck embedding $E$ and the concatenated block outputs $[F_6;F_{12}]$ to 128 channels each by
+$1\times1$ convolutions, adds them, and applies three ConvNeXt blocks at $64\times64$ with dilations 1, 2 and~4
+(depth-wise $3\times3$ convolution, LayerNorm, $1\times1$ expansion by 4, GELU, $1\times1$ projection, residual
+connection). Two transposed convolutions upsample to $256\times256$, and a $3\times3$ convolution predicts the two logit
+maps (Figure~\ref{fig:mpg}). The bias of the last layer is initialised to the logit of a 5\% foreground prior,
+$b=-\log\frac{1-\pi}{\pi}$ with $\pi=0.05$, so that the initial prompts are nearly empty instead of random. The model
+has 0.67\,M parameters and needs 5.7~GFLOPs per image, compared with 1.41\,M parameters and 702~GFLOPs for the
+multi-scale fusion generator.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{\ResultsDir/figures/diagram_mask_prompt_generator.pdf}
+\caption{Mask-prompt generator and the hybrid conversion of its logit maps into SAM prompts.}
+\label{fig:mpg}
+\end{figure}
+
+\paragraph{Training through SAM.}
+The hybrid conversion is differentiable with respect to the logit maps: the AR map enters the prompt encoder's
+mask-downscaling convolutions directly, and the TC map does so together with (non-differentiable) boxes around its
+connected components. MPG can therefore also be trained with a loss on SAM's output,
+\begin{equation}
+\mathcal{L}=\lambda\,\mathcal{L}_{\text{seg}}(\ell,y)+\mathcal{L}_{\text{seg}}\big(\text{SAM}(\text{hybrid}(\ell)),y\big),
+\end{equation}
+either from scratch (\emph{end-to-end}, $\lambda=0.5$) or starting from the model trained with
+$\mathcal{L}_{\text{seg}}$ alone for 30 further epochs at learning rate $10^{-4}$ (\emph{two-stage}, $\lambda=1$). The
+frozen decoder acts as a fixed differentiable function, so the gradient reaches the prompter
+(Figure~\ref{fig:training_modes}).
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{\ResultsDir/figures/diagram_training_modes.pdf}
+\caption{The three training modes of the mask-prompt generator: segmentation loss only, end-to-end through the frozen
+SAM decoder, and two-stage.}
+\label{fig:training_modes}
+\end{figure}
+
+\section{Adapting the Decoder to Generated Prompts}
+\label{sec:decoder_adaptation_method}
+
+The Phase-1 decoder was trained only with ground-truth prompts. Two ways of exposing it to realistic prompts are tested.
+In both, the trainable parts of the HQ decoder (\texttt{hf\_\allowbreak mlp\_\allowbreak ar/tc}, \texttt{compress\_\allowbreak vit\_\allowbreak feat},
+\texttt{embedding\_\allowbreak encoder}, \texttt{embedding\_\allowbreak maskfeature}; 1.21\,M parameters) are fine-tuned with the loss of
+Eq.~\eqref{eq:seg_loss} on the union of the prompted masks of a class against the complete ground truth of that class,
+while encoder and prompt encoder stay frozen.
+
+\paragraph{Adaptation to a prompter.} The decoder is trained on the prompts of a fixed prompter (30 epochs, learning
+rate $3\cdot10^{-4}$). A prompter is much better on the images it was trained on than on new ones, so in-sample prompts
+are unrealistically clean. The \emph{out-of-fold} variant avoids this: five copies of MPG are trained, each without one
+fifth of the training images, and every training image receives its prompts from the copy that did not see it.
+
+\paragraph{Prompt-robust decoder.} The decoder is trained on corrupted ground-truth prompts mixed with out-of-fold MPG
+prompts (probability 0.5 each; 25 epochs, learning rate $3\cdot10^{-4}$). The corruptions mimic the errors of real
+prompters. Every object is left without a prompt with probability 0.15; every box side is moved by $U(-0.15,0.3)$
+times the box size; $\text{Binomial}(3,0.25)$ false boxes of realistic size are added per class; dense prompts are
+eroded or dilated with an elliptical kernel of up to $5\times5$~px and, with probability 0.3, receive a false blob (a
+real object moved to a random position). The target of a box is the \emph{complete} ground-truth object(s) it
+touches, and an empty mask for a box that touches no object. Unlike in Phase~1, the decoder is thus trained to output
+nothing for a false prompt and to extend or shrink a prompt towards the object. Two prompt modes are trained (box,
+hybrid), and a control variant is trained on corrupted ground-truth prompts only.

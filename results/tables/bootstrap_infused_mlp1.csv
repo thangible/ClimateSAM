@@ -3,6 +3,10 @@ CG-Net (official weights): SAM + box vs. prompter mask,"-0.009 [-0.017, -0.002]"
 CG-Net (official weights): SAM + hybrid vs. prompter mask,"+0.000 [-0.003, +0.003]","+0.006 [+0.005, +0.007]","+0.003 [+0.002, +0.005]",1.00
 CG-Net (fine-tuned): SAM + box vs. prompter mask,"-0.008 [-0.017, +0.001]","-0.013 [-0.018, -0.006]","-0.010 [-0.016, -0.004]",0.00
 CG-Net (fine-tuned): SAM + hybrid vs. prompter mask,"-0.001 [-0.004, +0.003]","+0.003 [+0.002, +0.004]","+0.001 [-0.001, +0.003]",0.89
+"CG-Net (re-trained on 358 images, official init.): SAM + box vs. prompter mask","-0.005 [-0.014, +0.004]","-0.013 [-0.019, -0.007]","-0.009 [-0.014, -0.004]",0.00
+"CG-Net (re-trained on 358 images, official init.): SAM + hybrid vs. prompter mask","-0.002 [-0.005, +0.000]","+0.001 [-0.000, +0.001]","-0.001 [-0.002, +0.000]",0.09
+CG-Net (trained from scratch on 358 images): SAM + box vs. prompter mask,"+0.000 [-0.008, +0.007]","-0.015 [-0.021, -0.009]","-0.007 [-0.012, -0.002]",0.00
+CG-Net (trained from scratch on 358 images): SAM + hybrid vs. prompter mask,"-0.004 [-0.006, -0.001]","+0.001 [+0.000, +0.002]","-0.001 [-0.002, -0.000]",0.02
 "Logistic regression, ViT block 1: SAM + box vs. prompter mask","+0.005 [-0.003, +0.012]","+0.001 [-0.003, +0.006]","+0.003 [-0.002, +0.007]",0.90
 "Logistic regression, ViT block 1: SAM + hybrid vs. prompter mask","+0.017 [+0.008, +0.026]","-0.003 [-0.014, +0.007]","+0.007 [-0.000, +0.013]",0.97
 "Logistic regression, ViT block 1: mean(prompter, SAM hybrid) vs. prompter mask","+0.017 [+0.009, +0.025]","-0.003 [-0.013, +0.007]","+0.007 [+0.001, +0.013]",0.98
@@ -27,9 +31,18 @@ Mask-prompt generator (two-stage): SAM + hybrid vs. prompter mask,"-0.001 [-0.00
 "Mask-prompt generator (segmentation loss, label smoothing): SAM + box vs. prompter mask","+0.001 [-0.006, +0.009]","-0.024 [-0.029, -0.018]","-0.011 [-0.016, -0.006]",0.00
 "Mask-prompt generator (segmentation loss, label smoothing): SAM + hybrid vs. prompter mask","-0.003 [-0.009, +0.002]","-0.011 [-0.019, -0.002]","-0.007 [-0.013, -0.001]",0.01
 "Mask-prompt generator (segmentation loss, label smoothing): mean(prompter, SAM hybrid) vs. prompter mask","-0.001 [-0.005, +0.004]","-0.009 [-0.017, -0.001]","-0.005 [-0.010, -0.000]",0.02
+Mask-prompt generator + raw CG-Net fields: SAM + box vs. prompter mask,"+0.000 [-0.008, +0.008]","-0.023 [-0.028, -0.017]","-0.011 [-0.016, -0.007]",0.00
+Mask-prompt generator + raw CG-Net fields: SAM + hybrid vs. prompter mask,"-0.003 [-0.007, +0.001]","-0.010 [-0.020, -0.001]","-0.007 [-0.012, -0.002]",0.00
+"Mask-prompt generator + raw CG-Net fields: mean(prompter, SAM hybrid) vs. prompter mask","-0.001 [-0.004, +0.002]","-0.009 [-0.017, -0.000]","-0.005 [-0.009, -0.000]",0.01
+Box head on SAM features (YOLO-style): SAM + box vs. prompter mask,"+0.011 [+0.005, +0.017]","+0.153 [+0.141, +0.165]","+0.082 [+0.075, +0.089]",1.00
 Mask-prompt generator (segmentation loss) vs. CG-Net (fine-tuned) (prompter masks),"-0.005 [-0.030, +0.020]","+0.031 [+0.020, +0.043]","+0.013 [-0.000, +0.027]",0.97
+Mask-prompt generator (segmentation loss) vs. CG-Net (trained from scratch on 358 images) (prompter masks),"+0.001 [-0.018, +0.023]","+0.018 [+0.009, +0.027]","+0.010 [-0.002, +0.022]",0.95
+"Mask-prompt generator (segmentation loss) vs. CG-Net (re-trained on 358 images, official init.) (prompter masks)","-0.006 [-0.027, +0.015]","+0.013 [+0.003, +0.024]","+0.004 [-0.008, +0.016]",0.72
+CG-Net (trained from scratch on 358 images) vs. CG-Net (fine-tuned) (prompter masks),"-0.007 [-0.029, +0.016]","+0.013 [+0.003, +0.023]","+0.003 [-0.009, +0.016]",0.69
 Mask-prompt generator (segmentation loss) vs. Multi-scale fusion (prompter masks),"+0.011 [-0.003, +0.025]","+0.010 [+0.005, +0.016]","+0.011 [+0.003, +0.019]",0.99
 "Mask-prompt generator (segmentation loss) vs. Logistic regression, ViT block 12 (prompter masks)","+0.044 [+0.025, +0.062]","+0.028 [+0.020, +0.036]","+0.036 [+0.025, +0.046]",1.00
+Mask-prompt generator + raw CG-Net fields vs. Mask-prompt generator (segmentation loss) (prompter masks),"-0.004 [-0.012, +0.002]","-0.004 [-0.007, -0.001]","-0.004 [-0.008, -0.001]",0.01
+Mask-prompt generator + raw CG-Net fields vs. CG-Net (trained from scratch on 358 images) (prompter masks),"-0.003 [-0.023, +0.018]","+0.014 [+0.004, +0.024]","+0.006 [-0.006, +0.019]",0.82
 Multi-scale fusion + token gate vs. Multi-scale fusion (prompter masks),"-0.009 [-0.015, -0.003]","-0.004 [-0.005, -0.002]","-0.006 [-0.009, -0.003]",0.00
 "Logistic regression, ViT block 12 vs. Logistic regression, ViT block 1 (prompter masks)","+0.105 [+0.078, +0.133]","+0.066 [+0.053, +0.080]","+0.086 [+0.070, +0.101]",1.00
 "Mask-prompt generator (segmentation loss, label smoothing) vs. Mask-prompt generator (segmentation loss) (prompter masks)","-0.006 [-0.012, +0.000]","-0.001 [-0.004, +0.001]","-0.004 [-0.007, -0.000]",0.01

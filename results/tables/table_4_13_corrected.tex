@@ -1,6 +1,7 @@
 \begin{table}[htbp]
 \centering
 \small
+\begin{adjustbox}{max width=\linewidth}
 \begin{tabular}{lccccccc}
 \toprule
 Prompt type & Pos. & Neg. & Enlarge & IoU AR & IoU TC & IoU AR (orig. script) & IoU TC (orig. script) \\
@@ -28,6 +29,7 @@ bbox & 0 & 0 & 0.5 & 0.2372 & 0.1822 & 0.2042 & 0.1837 \\
 point+bbox+mask & 10 & 5 & 0.0 & 0.3471 & 0.1357 & 0.3390 & 0.1222 \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
 \caption{SAM with CG-Net as prompter, re-run on the 61 test images (Infused Token MLP 1.0, Phase-1 checkpoint of Table 4.12). ``orig. script'': image passed through ClimateSAM.set\_infer\_img, which skips the learned input adapter (test\_prompt\_effect.py); other columns: input adapter applied as in training. Ordered by TC IoU.}
 \label{tab:cgnet_prompter_corrected}
 \end{table}

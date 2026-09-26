@@ -1,0 +1,140 @@
+wandb: WARNING Using a boolean value for 'reinit' is deprecated. Use 'return_previous' or 'finish_previous' instead.
+wandb: Tracking run with wandb version 0.21.1
+wandb: W&B syncing is set to `offline` in this directory. Run `wandb online` or set WANDB_MODE=online to enable cloud syncing.
+wandb: Run data is saved locally in /home/worker1/thang/ClimateSAM/wandb/offline-run-20260926_024032-93xlc0jw
+/home/worker1/thang/ClimateSAM/prompter_bench/train.py:199: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:835.)
+  sums[k] = sums.get(k, 0.0) + float(v) * len(mb) / len(chunk)
+[msf_sp_token_seg_s1] epoch 1 39.2s loss 4.2760
+[msf_sp_token_seg_s1] epoch 2 33.4s loss 3.3288 | val_own_Mean FG IoU 0.3260
+[msf_sp_token_seg_s1] epoch 3 33.4s loss 3.2717
+[msf_sp_token_seg_s1] epoch 4 34.8s loss 3.1384 | val_own_Mean FG IoU 0.3462
+[msf_sp_token_seg_s1] epoch 5 42.2s loss 3.1349
+[msf_sp_token_seg_s1] epoch 6 33.8s loss 3.2009 | val_own_Mean FG IoU 0.3580
+[msf_sp_token_seg_s1] epoch 7 33.4s loss 3.0908
+[msf_sp_token_seg_s1] epoch 8 33.4s loss 3.0494 | val_own_Mean FG IoU 0.3623
+[msf_sp_token_seg_s1] epoch 9 38.7s loss 3.0618
+[msf_sp_token_seg_s1] epoch 10 52.1s loss 2.9522 | val_own_Mean FG IoU 0.3617
+[msf_sp_token_seg_s1] epoch 11 33.3s loss 2.9401
+[msf_sp_token_seg_s1] epoch 12 33.3s loss 2.9175 | val_own_Mean FG IoU 0.3731
+[msf_sp_token_seg_s1] epoch 13 36.3s loss 2.9124
+[msf_sp_token_seg_s1] epoch 14 42.1s loss 2.8816 | val_own_Mean FG IoU 0.3625
+[msf_sp_token_seg_s1] epoch 15 35.3s loss 2.9143
+[msf_sp_token_seg_s1] epoch 16 35.3s loss 2.8557 | val_own_Mean FG IoU 0.3713
+[msf_sp_token_seg_s1] epoch 17 36.3s loss 2.8203
+[msf_sp_token_seg_s1] epoch 18 44.7s loss 2.8386 | val_own_Mean FG IoU 0.3642
+[msf_sp_token_seg_s1] epoch 19 37.8s loss 2.8189
+[msf_sp_token_seg_s1] epoch 20 33.4s loss 2.8414 | val_own_Mean FG IoU 0.3580
+[msf_sp_token_seg_s1] epoch 21 33.7s loss 2.8499
+[msf_sp_token_seg_s1] epoch 22 42.4s loss 2.7758 | val_own_Mean FG IoU 0.3675
+[msf_sp_token_seg_s1] epoch 23 34.0s loss 2.8503
+[msf_sp_token_seg_s1] epoch 24 33.3s loss 2.7729 | val_own_Mean FG IoU 0.3690
+[msf_sp_token_seg_s1] epoch 25 33.4s loss 2.7360
+[msf_sp_token_seg_s1] epoch 26 40.3s loss 2.7247 | val_own_Mean FG IoU 0.3736
+[msf_sp_token_seg_s1] epoch 27 34.9s loss 2.7339
+[msf_sp_token_seg_s1] epoch 28 34.1s loss 2.6999 | val_own_Mean FG IoU 0.3748
+[msf_sp_token_seg_s1] epoch 29 33.4s loss 2.6799
+[msf_sp_token_seg_s1] epoch 30 36.7s loss 2.6914 | val_own_Mean FG IoU 0.3660
+[msf_sp_token_seg_s1] epoch 31 35.3s loss 2.6860
+[msf_sp_token_seg_s1] epoch 32 33.3s loss 2.6696 | val_own_Mean FG IoU 0.3714
+[msf_sp_token_seg_s1] epoch 33 33.3s loss 2.7181
+[msf_sp_token_seg_s1] epoch 34 33.3s loss 2.6886 | val_own_Mean FG IoU 0.3743
+[msf_sp_token_seg_s1] epoch 35 42.6s loss 2.6568
+[msf_sp_token_seg_s1] epoch 36 33.6s loss 2.6400 | val_own_Mean FG IoU 0.3712
+[msf_sp_token_seg_s1] epoch 37 33.4s loss 2.6179
+[msf_sp_token_seg_s1] epoch 38 33.4s loss 2.6063 | val_own_Mean FG IoU 0.3644
+[msf_sp_token_seg_s1] epoch 39 43.3s loss 2.6025
+[msf_sp_token_seg_s1] epoch 40 47.4s loss 2.5751 | val_own_Mean FG IoU 0.3693
+[msf_sp_token_seg_s1] epoch 41 33.3s loss 2.5632
+[msf_sp_token_seg_s1] epoch 42 33.3s loss 2.5584 | val_own_Mean FG IoU 0.3738
+[msf_sp_token_seg_s1] epoch 43 38.6s loss 2.5453
+[msf_sp_token_seg_s1] epoch 44 39.1s loss 2.5415 | val_own_Mean FG IoU 0.3724
+[msf_sp_token_seg_s1] epoch 45 33.3s loss 2.5343
+[msf_sp_token_seg_s1] epoch 46 33.3s loss 2.5350 | val_own_Mean FG IoU 0.3718
+[msf_sp_token_seg_s1] epoch 47 35.0s loss 2.5329
+[msf_sp_token_seg_s1] epoch 48 44.8s loss 2.5199 | val_own_Mean FG IoU 0.3716
+[msf_sp_token_seg_s1] epoch 49 37.5s loss 2.5180
+[msf_sp_token_seg_s1] epoch 50 33.4s loss 2.5109 | val_own_Mean FG IoU 0.3718
+[msf_sp_token_seg_s1] epoch 51 33.8s loss 2.5069
+[msf_sp_token_seg_s1] epoch 52 42.4s loss 2.5044 | val_own_Mean FG IoU 0.3732
+[msf_sp_token_seg_s1] epoch 53 34.7s loss 2.5018
+[msf_sp_token_seg_s1] epoch 54 33.3s loss 2.5046 | val_own_Mean FG IoU 0.3736
+[msf_sp_token_seg_s1] epoch 55 33.4s loss 2.4993
+[msf_sp_token_seg_s1] epoch 56 40.4s loss 2.4985 | val_own_Mean FG IoU 0.3722
+[msf_sp_token_seg_s1] epoch 57 34.5s loss 2.4967
+[msf_sp_token_seg_s1] epoch 58 33.4s loss 2.4976 | val_own_Mean FG IoU 0.3725
+[msf_sp_token_seg_s1] epoch 59 33.4s loss 2.4934
+[msf_sp_token_seg_s1] epoch 60 36.8s loss 2.4914 | val_own_Mean FG IoU 0.3724
+wandb:                                                                                
+wandb: 
+wandb: Run history:
+wandb:               epoch ▁▁▁▁▁▂▂▂▂▂▃▃▃▃▃▄▄▄▄▅▅▅▅▅▅▆▆▆▆▆▆▇▇▇▇▇▇███
+wandb:        epoch_time_s ▃▁▁▂▁▁█▁▁▂▂▅▃▁▄▁▄▂▁▂▁▁▄▁▁▅▆▁▁▃▁▂▅▃▁▄▂▄▁▂
+wandb:                  lr ██████████▇▇▇▇▇▆▆▆▆▆▅▅▅▅▄▄▄▃▃▃▂▂▂▂▂▁▁▁▁▁
+wandb:      train_deep_sup ██▆▆▇▆▅▅▄▅▄▄▄▃▄▃▃▃▃▃▂▃▃▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:        train_gen_AR █▄▃▃▃▃▃▂▂▂▂▂▂▂▂▂▂▂▂▂▁▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:        train_gen_TC ██▇▆▆▅▅▅▄▅▄▄▄▄▃▃▃▃▃▃▃▃▂▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁
+wandb:         train_total ▇▇█▇▇▅▅▅▅▅▄▄▄▄▅▄▃▃▃▃▃▃▃▃▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁
+wandb:      val_own_AR IoU ▁▂▃▄▆▆▅▇▆▇▇▇▇▇█▇▆█▅▇██████████
+wandb:      val_own_BG IoU ▁▂▄▃▄▆▃▆▄▆▇▅▆▇▆▇█▆▃▆▆▆▆▆▆▆▆▆▆▆
+wandb: val_own_Mean FG IoU ▁▄▆▆▆█▆█▆▆▇▇██▇██▇▇▇██████████
+wandb:    val_own_Mean IoU ▁▄▅▆▆█▆▇▆▆▇▇██▇▇█▇▆▇█▇▇▇▇██▇▇▇
+wandb:      val_own_TC IoU ▁▄▆▇▆█▇▇▆▄▆▇▇▇▅▇█▆▇▆▇▇▇▇▇▇▇▇▇▇
+wandb: 
+wandb: Run summary:
+wandb:                arch msf_sp_token
+wandb:          best_epoch 28
+wandb:             encoder infused_mlp1
+wandb:               epoch 60
+wandb:        epoch_time_s 36.79887
+wandb:                  lr 1e-05
+wandb:                mode seg
+wandb:                name msf_sp_token_seg_s1
+wandb:                seed 1
+wandb:      train_deep_sup 1.60481
+wandb:        train_gen_AR 0.47263
+wandb:        train_gen_TC 0.41393
+wandb:      train_time_min 37.55669
+wandb:         train_total 2.49137
+wandb:    trainable_params 392198
+wandb:      val_own_AR IoU 0.40098
+wandb:      val_own_BG IoU 0.94316
+wandb: val_own_Mean FG IoU 0.37239
+wandb:    val_own_Mean IoU 0.56265
+wandb:      val_own_TC IoU 0.34381
+wandb: 
+wandb: You can sync this run to the cloud by running:
+wandb: wandb sync /home/worker1/thang/ClimateSAM/wandb/offline-run-20260926_024032-93xlc0jw
+wandb: Find logs at: ./wandb/offline-run-20260926_024032-93xlc0jw/logs
+{
+  "name": "msf_sp_token_seg_s1",
+  "arch": "msf_sp_token",
+  "mode": "seg",
+  "seed": 1,
+  "encoder": "infused_mlp1",
+  "trainable_params": 392198,
+  "best_epoch": 28,
+  "train_time_min": 37.5566870768865,
+  "args": {
+    "encoder": "infused_mlp1",
+    "arch": "msf_sp_token",
+    "mode": "seg",
+    "seed": 1,
+    "epochs": 60,
+    "lr": 0.001,
+    "bs": 8,
+    "micro_bs": 2,
+    "aux_weight": 1.0,
+    "init": null,
+    "val_every": 2,
+    "name": "msf_sp_token_seg_s1",
+    "smooth": false,
+    "exclude_fold": null,
+    "wandb": true
+  },
+  "val_own_TC IoU": 0.35051038213226315,
+  "val_own_AR IoU": 0.3990096415864015,
+  "val_own_BG IoU": 0.9455882058899997,
+  "val_own_Mean IoU": 0.5650360765362215,
+  "val_own_Mean FG IoU": 0.37476001185933233
+}

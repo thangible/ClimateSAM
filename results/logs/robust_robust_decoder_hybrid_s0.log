@@ -1,0 +1,76 @@
+wandb: WARNING Using a boolean value for 'reinit' is deprecated. Use 'return_previous' or 'finish_previous' instead.
+wandb: Tracking run with wandb version 0.21.1
+wandb: W&B syncing is set to `offline` in this directory. Run `wandb online` or set WANDB_MODE=online to enable cloud syncing.
+wandb: Run data is saved locally in /home/worker1/thang/ClimateSAM/wandb/offline-run-20260925_225532-j9pylwgr
+[robust_decoder_hybrid_s0] epoch 0 (Phase-1 decoder) val FG 0.3872
+[robust_decoder_hybrid_s0] epoch 1 loss 0.4120 val FG 0.3899 (TC 0.374 AR 0.406)
+[robust_decoder_hybrid_s0] epoch 2 loss 0.3585 val FG 0.3889 (TC 0.375 AR 0.403)
+[robust_decoder_hybrid_s0] epoch 3 loss 0.3718 val FG 0.3885 (TC 0.373 AR 0.404)
+[robust_decoder_hybrid_s0] epoch 4 loss 0.3579 val FG 0.3874 (TC 0.373 AR 0.402)
+[robust_decoder_hybrid_s0] epoch 5 loss 0.3737 val FG 0.3735 (TC 0.374 AR 0.373)
+[robust_decoder_hybrid_s0] epoch 6 loss 0.3385 val FG 0.3890 (TC 0.374 AR 0.404)
+[robust_decoder_hybrid_s0] epoch 7 loss 0.3602 val FG 0.3846 (TC 0.372 AR 0.398)
+[robust_decoder_hybrid_s0] epoch 8 loss 0.3570 val FG 0.3892 (TC 0.373 AR 0.405)
+[robust_decoder_hybrid_s0] epoch 9 loss 0.3729 val FG 0.3893 (TC 0.371 AR 0.408)
+[robust_decoder_hybrid_s0] epoch 10 loss 0.3510 val FG 0.3896 (TC 0.373 AR 0.406)
+[robust_decoder_hybrid_s0] epoch 11 loss 0.3559 val FG 0.3891 (TC 0.373 AR 0.405)
+[robust_decoder_hybrid_s0] epoch 12 loss 0.3673 val FG 0.3883 (TC 0.373 AR 0.403)
+[robust_decoder_hybrid_s0] epoch 13 loss 0.3559 val FG 0.3865 (TC 0.374 AR 0.399)
+[robust_decoder_hybrid_s0] epoch 14 loss 0.3605 val FG 0.3886 (TC 0.372 AR 0.405)
+[robust_decoder_hybrid_s0] epoch 15 loss 0.3444 val FG 0.3874 (TC 0.369 AR 0.405)
+[robust_decoder_hybrid_s0] epoch 16 loss 0.3544 val FG 0.3877 (TC 0.373 AR 0.402)
+[robust_decoder_hybrid_s0] epoch 17 loss 0.3563 val FG 0.3876 (TC 0.372 AR 0.403)
+[robust_decoder_hybrid_s0] epoch 18 loss 0.3531 val FG 0.3883 (TC 0.372 AR 0.404)
+[robust_decoder_hybrid_s0] epoch 19 loss 0.3606 val FG 0.3893 (TC 0.372 AR 0.407)
+[robust_decoder_hybrid_s0] epoch 20 loss 0.3377 val FG 0.3896 (TC 0.372 AR 0.407)
+[robust_decoder_hybrid_s0] epoch 21 loss 0.3631 val FG 0.3883 (TC 0.373 AR 0.404)
+[robust_decoder_hybrid_s0] epoch 22 loss 0.3469 val FG 0.3888 (TC 0.373 AR 0.405)
+[robust_decoder_hybrid_s0] epoch 23 loss 0.3500 val FG 0.3895 (TC 0.373 AR 0.406)
+[robust_decoder_hybrid_s0] epoch 24 loss 0.3550 val FG 0.3893 (TC 0.373 AR 0.406)
+[robust_decoder_hybrid_s0] epoch 25 loss 0.3603 val FG 0.3893 (TC 0.373 AR 0.406)
+wandb:                                                                                
+wandb: 
+wandb: Run history:
+wandb:           epoch ▁▁▂▂▂▂▃▃▃▄▄▄▅▅▅▅▆▆▆▇▇▇▇██
+wandb:              lr ████▇▇▇▆▆▆▅▅▄▄▃▃▃▂▂▂▁▁▁▁▁
+wandb:      train_loss █▃▄▃▄▁▃▃▄▂▃▄▃▃▂▃▃▂▃▁▃▂▂▃▃
+wandb:      val_AR IoU █▇▇▇▁▇▆▇██▇▇▆██▇▇▇██▇▇███
+wandb:      val_BG IoU ▃▅▄▄█▃▅▄▁▂▃▃▅▃▂▄▄▃▃▂▄▃▃▃▃
+wandb: val_Mean FG IoU ██▇▇▁█▆████▇▇▇▇▇▇▇██▇████
+wandb:    val_Mean IoU ███▇▁█▆█▇██▇▇▇▇▇▇▇██▇████
+wandb:      val_TC IoU ▇█▅▅▇▇▄▆▃▆▅▆▇▄▁▅▄▅▄▅▅▅▅▅▅
+wandb: 
+wandb: Run summary:
+wandb:       best_epoch 1
+wandb:            epoch 25
+wandb:               lr 0.0
+wandb:             mode hybrid
+wandb:             name robust_decoder_hybri...
+wandb:     real_prompts True
+wandb:             seed 0
+wandb:       train_loss 0.36028
+wandb:   train_time_min 14.05157
+wandb: trainable_params 1210656
+wandb:       val_AR IoU 0.40579
+wandb:       val_BG IoU 0.94905
+wandb:  val_Mean FG IoU 0.38932
+wandb:     val_Mean IoU 0.57589
+wandb:       val_TC IoU 0.37285
+wandb: 
+wandb: You can sync this run to the cloud by running:
+wandb: wandb sync /home/worker1/thang/ClimateSAM/wandb/offline-run-20260925_225532-j9pylwgr
+wandb: Find logs at: ./wandb/offline-run-20260925_225532-j9pylwgr/logs
+{
+  "name": "robust_decoder_hybrid_s0",
+  "mode": "hybrid",
+  "seed": 0,
+  "real_prompts": true,
+  "trainable_params": 1210656,
+  "best_epoch": 1,
+  "train_time_min": 14.051568806171417,
+  "val_TC IoU": 0.37386794984011645,
+  "val_AR IoU": 0.40594520183939947,
+  "val_BG IoU": 0.9490659808936754,
+  "val_Mean IoU": 0.5762930441910638,
+  "val_Mean FG IoU": 0.38990657583975796
+}

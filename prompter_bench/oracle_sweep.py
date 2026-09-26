@@ -16,7 +16,7 @@ import torch
 from tqdm import tqdm
 
 from common import (RESULTS, CLASSES, SegMetrics, FeatureCache, load_climatesam, sam_decode, union_logits, upsample,
-                    score_to_prompt, binary_to_score, to_sam_frame, seed_everything, MIN_OBJECT_PX)
+                    score_to_prompt, binary_to_score, to_sam_frame, seed_everything, load_decoder, MIN_OBJECT_PX)
 from build_cache import ENCODERS
 from model.prompt.prompt_maker import make_bbox_prompts
 
@@ -90,12 +90,15 @@ def degradation_prompts(obj_list, cls_mask, rng, device):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--encoder', default='infused_mlp1')
+    ap.add_argument('--decoder', default=None, help='decoder-training run whose decoder replaces the Phase-1 one')
     args = ap.parse_args()
     device = torch.device('cuda')
     seed_everything(0)
     rng = np.random.default_rng(0)
     ckpt, mlp = ENCODERS[args.encoder]
     sam = load_climatesam(ckpt, mlp, device)
+    if args.decoder:
+        load_decoder(sam, args.encoder, args.decoder)
     data = FeatureCache(args.encoder, 'test').load_to(device, [0])
 
     # every prompt variant, so an image where a variant produced no prompt still counts (as an empty prediction)
@@ -124,9 +127,9 @@ def main():
 
     out = os.path.join(RESULTS, '01_oracle_prompts')
     os.makedirs(out, exist_ok=True)
-    rows = [{'encoder': args.encoder, 'study': s, 'prompt': n, **{k: round(v, 4) for k, v in m.compute().items()}}
+    rows = [{'encoder': args.encoder, 'decoder': args.decoder or 'phase1', 'study': s, 'prompt': n, **{k: round(v, 4) for k, v in m.compute().items()}}
             for (s, n), m in metrics.items()]
-    with open(os.path.join(out, f'oracle_sweep_{args.encoder}.csv'), 'w', newline='') as f:
+    with open(os.path.join(out, f'oracle_sweep_{args.encoder}' + (f'@{args.decoder}' if args.decoder else '') + '.csv'), 'w', newline='') as f:
         w = csv.DictWriter(f, fieldnames=rows[0].keys())
         w.writeheader()
         w.writerows(rows)

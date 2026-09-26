@@ -1,0 +1,76 @@
+wandb: WARNING Using a boolean value for 'reinit' is deprecated. Use 'return_previous' or 'finish_previous' instead.
+wandb: Tracking run with wandb version 0.21.1
+wandb: W&B syncing is set to `offline` in this directory. Run `wandb online` or set WANDB_MODE=online to enable cloud syncing.
+wandb: Run data is saved locally in /home/worker1/thang/ClimateSAM/wandb/offline-run-20260926_011247-x05rjhrs
+[robust_decoder_box_s1] epoch 0 (Phase-1 decoder) val FG 0.3753
+[robust_decoder_box_s1] epoch 1 loss 0.5242 val FG 0.3715 (TC 0.358 AR 0.385)
+[robust_decoder_box_s1] epoch 2 loss 0.4623 val FG 0.3763 (TC 0.362 AR 0.391)
+[robust_decoder_box_s1] epoch 3 loss 0.4509 val FG 0.3723 (TC 0.353 AR 0.392)
+[robust_decoder_box_s1] epoch 4 loss 0.4249 val FG 0.3713 (TC 0.354 AR 0.388)
+[robust_decoder_box_s1] epoch 5 loss 0.4306 val FG 0.3716 (TC 0.349 AR 0.395)
+[robust_decoder_box_s1] epoch 6 loss 0.4318 val FG 0.3758 (TC 0.357 AR 0.395)
+[robust_decoder_box_s1] epoch 7 loss 0.4317 val FG 0.3751 (TC 0.360 AR 0.390)
+[robust_decoder_box_s1] epoch 8 loss 0.4287 val FG 0.3788 (TC 0.361 AR 0.397)
+[robust_decoder_box_s1] epoch 9 loss 0.4215 val FG 0.3781 (TC 0.360 AR 0.396)
+[robust_decoder_box_s1] epoch 10 loss 0.4428 val FG 0.3772 (TC 0.360 AR 0.395)
+[robust_decoder_box_s1] epoch 11 loss 0.4211 val FG 0.3762 (TC 0.360 AR 0.392)
+[robust_decoder_box_s1] epoch 12 loss 0.4063 val FG 0.3766 (TC 0.356 AR 0.397)
+[robust_decoder_box_s1] epoch 13 loss 0.4245 val FG 0.3784 (TC 0.359 AR 0.398)
+[robust_decoder_box_s1] epoch 14 loss 0.4143 val FG 0.3775 (TC 0.358 AR 0.397)
+[robust_decoder_box_s1] epoch 15 loss 0.4259 val FG 0.3776 (TC 0.360 AR 0.395)
+[robust_decoder_box_s1] epoch 16 loss 0.4043 val FG 0.3769 (TC 0.360 AR 0.393)
+[robust_decoder_box_s1] epoch 17 loss 0.4138 val FG 0.3769 (TC 0.360 AR 0.394)
+[robust_decoder_box_s1] epoch 18 loss 0.4156 val FG 0.3782 (TC 0.358 AR 0.398)
+[robust_decoder_box_s1] epoch 19 loss 0.4112 val FG 0.3780 (TC 0.358 AR 0.398)
+[robust_decoder_box_s1] epoch 20 loss 0.4071 val FG 0.3781 (TC 0.360 AR 0.396)
+[robust_decoder_box_s1] epoch 21 loss 0.4131 val FG 0.3787 (TC 0.359 AR 0.398)
+[robust_decoder_box_s1] epoch 22 loss 0.4147 val FG 0.3789 (TC 0.359 AR 0.399)
+[robust_decoder_box_s1] epoch 23 loss 0.3981 val FG 0.3786 (TC 0.360 AR 0.397)
+[robust_decoder_box_s1] epoch 24 loss 0.4176 val FG 0.3784 (TC 0.360 AR 0.397)
+[robust_decoder_box_s1] epoch 25 loss 0.4073 val FG 0.3789 (TC 0.360 AR 0.398)
+wandb:                                                                                
+wandb: 
+wandb: Run history:
+wandb:           epoch ▁▁▂▂▂▂▃▃▃▄▄▄▅▅▅▅▆▆▆▇▇▇▇██
+wandb:              lr ████▇▇▇▆▆▆▅▅▄▄▃▃▃▂▂▂▁▁▁▁▁
+wandb:      train_loss █▅▄▂▃▃▃▃▂▃▂▁▂▂▃▁▂▂▂▁▂▂▁▂▂
+wandb:      val_AR IoU ▁▄▄▂▆▆▃▇▇▆▅▇█▇▆▅▅██▇██▇▇▇
+wandb:      val_BG IoU ▁▅▅▁▅▄█▆▅▇█▇▇▆███▅▆▇▆▆▇▇▇
+wandb: val_Mean FG IoU ▁▆▂▁▁▅▄█▇▆▅▆█▇▇▆▆▇▇▇███▇█
+wandb:    val_Mean IoU ▁▆▃▁▃▅▆█▇▇▇▇█▇█▇▇▇▇██████
+wandb:      val_TC IoU ▆█▃▄▁▅▇▇▇▇▇▅▆▆▇▇▇▆▆▇▇▇▇▇▇
+wandb: 
+wandb: Run summary:
+wandb:       best_epoch 22
+wandb:            epoch 25
+wandb:               lr 0.0
+wandb:             mode box
+wandb:             name robust_decoder_box_s...
+wandb:     real_prompts True
+wandb:             seed 1
+wandb:       train_loss 0.40727
+wandb:   train_time_min 19.36184
+wandb: trainable_params 1210656
+wandb:       val_AR IoU 0.39782
+wandb:       val_BG IoU 0.94765
+wandb:  val_Mean FG IoU 0.37887
+wandb:     val_Mean IoU 0.56846
+wandb:       val_TC IoU 0.35993
+wandb: 
+wandb: You can sync this run to the cloud by running:
+wandb: wandb sync /home/worker1/thang/ClimateSAM/wandb/offline-run-20260926_011247-x05rjhrs
+wandb: Find logs at: ./wandb/offline-run-20260926_011247-x05rjhrs/logs
+{
+  "name": "robust_decoder_box_s1",
+  "mode": "box",
+  "seed": 1,
+  "real_prompts": true,
+  "trainable_params": 1210656,
+  "best_epoch": 22,
+  "train_time_min": 19.361843037605286,
+  "val_TC IoU": 0.3589769974489249,
+  "val_AR IoU": 0.39881861207383157,
+  "val_BG IoU": 0.9466968377453162,
+  "val_Mean IoU": 0.5681641490893575,
+  "val_Mean FG IoU": 0.37889780476137824
+}

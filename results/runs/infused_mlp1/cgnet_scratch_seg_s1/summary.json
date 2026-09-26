@@ -1,0 +1,32 @@
+{
+  "name": "cgnet_scratch_seg_s1",
+  "arch": "cgnet_scratch",
+  "mode": "seg",
+  "seed": 1,
+  "encoder": "infused_mlp1",
+  "trainable_params": 494232,
+  "best_epoch": 16,
+  "train_time_min": 25.147015329202016,
+  "args": {
+    "encoder": "infused_mlp1",
+    "arch": "cgnet_scratch",
+    "mode": "seg",
+    "seed": 1,
+    "epochs": 60,
+    "lr": 0.001,
+    "bs": 8,
+    "micro_bs": 4,
+    "aux_weight": 1.0,
+    "init": null,
+    "val_every": 2,
+    "name": "cgnet_scratch_seg_s1",
+    "smooth": false,
+    "exclude_fold": null,
+    "wandb": true
+  },
+  "val_own_TC IoU": 0.3684776302000171,
+  "val_own_AR IoU": 0.4037666139445245,
+  "val_own_BG IoU": 0.9503589408907477,
+  "val_own_Mean IoU": 0.5742010616784298,
+  "val_own_Mean FG IoU": 0.3861221220722708
+}

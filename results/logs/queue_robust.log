@@ -1,0 +1,12 @@
+22:55 start infused_mlp1/robust_decoder_hybrid_s0
+23:09 done infused_mlp1/robust_decoder_hybrid_s0
+23:09 start infused_mlp1/robust_decoder_box_s0
+FAILED infused_mlp1/robust_decoder_box_s0
+23:10 done infused_mlp1/robust_decoder_box_s0
+23:10 start infused_mlp1/robust_decoder_hybrid_gtonly_s0
+23:25 done infused_mlp1/robust_decoder_hybrid_gtonly_s0
+23:25 start infused_mlp1/robust_decoder_hybrid_s1
+23:39 done infused_mlp1/robust_decoder_hybrid_s1
+23:39 start infused_mlp1/robust_decoder_box_s1
+FAILED infused_mlp1/robust_decoder_box_s1
+23:40 done infused_mlp1/robust_decoder_box_s1

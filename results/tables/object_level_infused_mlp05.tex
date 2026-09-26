@@ -1,6 +1,7 @@
 \begin{table}[htbp]
 \centering
 \small
+\begin{adjustbox}{max width=\linewidth}
 \begin{tabular}{lcccccc}
 \toprule
 Prompter & TC recall & TC precision & AR recall & AR precision & TC obj./img & AR obj./img \\
@@ -18,6 +19,7 @@ Mask-prompt generator (two-stage) & 0.655$\pm$0.012 & 0.526$\pm$0.006 & 0.960$\p
 Mask-prompt generator (segmentation loss, label smoothing) & 0.669$\pm$0.013 & 0.537$\pm$0.027 & 0.941$\pm$0.004 & 0.545$\pm$0.027 & 3.7 & 14.3 \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
 \caption{Object-level detection of the prompter masks: a ground-truth object is found if any predicted pixel overlaps it; a predicted object is correct if it overlaps any ground-truth object. Objects are 8-connected components of at least 20 pixels; with this counting the test set has 2.9 TC and 6.8 AR objects per image.}
 \label{tab:object_level_infused_mlp05}
 \end{table}

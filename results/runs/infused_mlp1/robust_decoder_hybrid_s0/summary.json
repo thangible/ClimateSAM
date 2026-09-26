@@ -1,0 +1,14 @@
+{
+  "name": "robust_decoder_hybrid_s0",
+  "mode": "hybrid",
+  "seed": 0,
+  "real_prompts": true,
+  "trainable_params": 1210656,
+  "best_epoch": 1,
+  "train_time_min": 14.051568806171417,
+  "val_TC IoU": 0.37386794984011645,
+  "val_AR IoU": 0.40594520183939947,
+  "val_BG IoU": 0.9490659808936754,
+  "val_Mean IoU": 0.5762930441910638,
+  "val_Mean FG IoU": 0.38990657583975796
+}

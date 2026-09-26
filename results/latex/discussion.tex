@@ -1,0 +1,104 @@
+% ---------------------------------------------------------------------------------------------------------------
+% Discussion of the automatic-prompting results (Section 4.3). Requires: amsmath.
+% ---------------------------------------------------------------------------------------------------------------
+
+\section{Discussion of Automatic Prompting}
+\label{sec:discussion_prompting}
+
+\subsection{Why SAM Cannot Improve on Its Prompter}
+
+The central finding of Section~\ref{sec:auto_prompt_results} is that SAM with automatic prompts is bounded by its
+prompter. This follows from what the Phase-1 decoder was trained to do. It learned
+$p(\text{mask}\mid\text{image},\text{prompt})$ from prompts that were always correct: every box contained exactly one
+object, and the extent of the box was the extent of the object. Under this training distribution the optimal decoder
+\emph{trusts} its prompt: it segments whatever lies inside a box and never has a reason to output nothing or to extend
+a mask beyond its prompt. The prompt analysis confirms this behaviour directly (Figure~\ref{fig:oracle_prompt_errors}).
+The errors of a prompter are of exactly these kinds, namely false objects, missed objects and wrong AR extents
+(Figures~\ref{fig:object_level} and~\ref{fig:error_decomposition}), so they pass through SAM unchanged. What SAM can add
+is boundary quality inside a correct prompt; but for ARs the dominant error is the extent of the whole river, not its
+boundary pixels, and for TCs the objects are small enough that detection dominates.
+
+The decoder-adaptation experiments show that this is not only a question of the training distribution. Even a decoder
+trained on realistic, out-of-fold prompts learns to reject some false prompts but cannot add information that the
+prompt does not contain. Prompter and decoder read the same frozen image embedding; whatever the decoder could infer
+about the extent of an AR from that embedding, a prompter trained directly on the labels infers as well.
+
+A further reason lies in the labels. ClimateNet's labels are the consensus of several experts, and the mean performance
+of a single expert against this consensus is AR~0.341 / TC~0.257 IoU (Table~2.1). All good prompters of this study
+(TC 0.33--0.35, AR 0.38--0.41) already exceed the average single expert. The remaining errors, such as the extent of a
+river, where it starts and ends, or weak cyclones, are precisely where experts disagree, so part of the gap to the
+oracle is irreducible label ambiguity rather than a deficiency of the model.
+
+\subsection{Why a Small Generator Beats the Larger Ones}
+
+The encoder describes the image on a $64\times64$ grid of $16\times16$-pixel patches. The ground truth has a resolution
+of $768\times1152$, but its information content at object boundaries is limited by the ambiguity between experts. MSF
+upsamples the features to $1024\times1024$ by nearest-neighbour interpolation and runs most of its 702~GFLOPs there,
+which cannot create information and makes the model slow to train. MPG spends its capacity where the information is, at
+$64\times64$, with a receptive field of about 15 patches from the dilated convolutions on top of the encoder's own global
+attention, and uses two learned upsampling steps only to reach the $256\times256$ resolution of SAM's dense prompt. The
+strong linear probe on the last ViT block supports this view: the adapted encoder has already done most of the work,
+and the prompter mainly aggregates context and removes noise.
+
+\subsection{Lessons for Prompt Design}
+
+\begin{enumerate}
+  \item If sparse prompts are used, they should be tight boxes derived from a segmentation. Points, loose boxes and
+  boxes regressed by a detector are harmful.
+  \item Dense prompts are more robust to prompt errors and carry the shape of an AR, but they must be passed as logits
+  in the value range the decoder was trained with, and small TCs need an accompanying box on checkpoints whose decoder
+  ignores weak dense evidence.
+  \item One dense prompt per class is sufficient. This makes SAM decoding cheap: one decoder call per class and image
+  instead of one per object.
+\end{enumerate}
+
+\subsection{Implications for a Prompt-free ClimateSAM}
+
+For a prompt-free system, the prompter's own mask is the natural output (MPG: TC~0.344 / AR~0.413, mean IoU 0.567
+including background). SAM with hybrid prompts gives masks of statistically similar quality ($-0.008$ mean FG IoU) with
+smoother boundaries, at the cost of two decoder calls per image. The contribution of the foundation model is thus its
+\emph{encoder}: the adapted features allow a 0.67\,M-parameter head to match a dedicated segmentation network trained
+under the same protocol on the raw fields (mean FG IoU 0.379 versus 0.369--0.375, better for ARs by 0.013--0.018), and
+a linear probe to come within about 0.03 of it. In terms of cost, however, CG-Net needs 23~GFLOPs per image, the frozen
+encoder plus MPG about 980~GFLOPs. For a purely automatic system, a well-trained small network is therefore the cheaper
+choice at nearly the same quality, and the two are complementary: their ensemble is the best automatic mask of this
+study (0.389). The promptable decoder remains valuable for interactive use,
+where a human annotator provides the boxes (Table~4.12: TC~0.72 / AR~0.63--0.64 with ground-truth boxes), but not as a
+refinement stage after an automatic prompter.
+
+\subsection{Limitations}
+
+\begin{itemize}
+  \item \emph{Small test set.} With 61 test images, differences below about 0.01 IoU lie within the bootstrap
+  intervals and should not be interpreted. Checkpoints are selected on only 40 validation images drawn from the same
+  years as the training images.
+  \item \emph{Seeds.} Three seeds per configuration on the primary checkpoint; on the second checkpoint the MSF models
+  were trained with one seed. The seed variance (standard deviation 0.001--0.01) is small compared with the variance
+  from sampling test images.
+  \item \emph{Two frozen checkpoints.} Both are Infused-Token ViT-B models; LoRA-adapted and ViT-L encoders were not
+  tested in Phase~2.
+  \item \emph{External prompter.} The fine-tuned CG-Net was trained on all 398 training images, including the
+  validation images of this protocol; this affects only experiments that use its outputs on training images.
+  \item \emph{Object metrics.} An object counts as found if one pixel overlaps; stricter matching (IoU $\ge 0.5$) would
+  lower all recalls and precisions but not change the comparison.
+  \item \emph{Earlier Table~4.13.} The re-run shows that its SAM rows do not reproduce with the current code and
+  checkpoints; their origin could not be identified.
+\end{itemize}
+
+\subsection{Future Work}
+
+\begin{enumerate}
+  \item \emph{Train Phase~1 with realistic prompts.} Mixing ground-truth prompts with corrupted ones, including false
+  boxes whose target is empty, and with prompts of an out-of-fold prompter already during Phase~1 attacks the root cause
+  identified above. The prompt analysis of Section~\ref{sec:prompt_analysis} provides the test: a better decoder
+  flattens the curves of Figure~\ref{fig:oracle_prompt_errors}.
+  \item \emph{Query-based prompt-free decoding.} Replacing static prompts by image-dependent object queries
+  (DETR/Mask2Former style) with a matching-based loss turns SAM into an instance segmenter and addresses the TC detection
+  errors directly.
+  \item \emph{Joint fine-tuning of encoder adapters and prompter.} Unfreezing the infused-token adapters together with
+  MPG on the segmentation loss lets the encoder adapt to the prompt-free objective.
+  \item \emph{Longitudinal periodicity.} Circular padding in the prompter and test-time averaging over longitudinally
+  rolled inputs would fix objects cut at the date line.
+  \item \emph{Stricter object metrics.} Object recall and precision at IoU $\ge 0.3$ / $0.5$ and event counts per image
+  would make the detection analysis comparable with the ClimateNet literature.
+\end{enumerate}

@@ -1,0 +1,24 @@
+% Standalone build of the Section 4.3 material (for checking; in the thesis, \input the parts instead).
+% Build from results/latex/:  tectonic main.tex   (or: pdflatex main.tex twice)
+\documentclass[11pt,a4paper]{report}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{adjustbox}
+\usepackage[hidelinks]{hyperref}
+\newcommand{\ResultsDir}{..}   % path from this file to results/
+\setcounter{chapter}{2}
+\begin{document}
+\chapter{Method (additions)}
+\setcounter{section}{5}
+\input{approach}
+\chapter{Results}
+\setcounter{section}{2}
+\input{section_4_3}
+\chapter{Discussion}
+\input{discussion}
+\appendix
+\chapter{Automatic Prompting: Additional Material}
+\input{appendix}
+\end{document}

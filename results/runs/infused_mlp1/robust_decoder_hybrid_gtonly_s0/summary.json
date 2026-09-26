@@ -1,0 +1,14 @@
+{
+  "name": "robust_decoder_hybrid_gtonly_s0",
+  "mode": "hybrid",
+  "seed": 0,
+  "real_prompts": false,
+  "trainable_params": 1210656,
+  "best_epoch": 0,
+  "train_time_min": 15.67105640967687,
+  "val_TC IoU": 0.37440419864718044,
+  "val_AR IoU": 0.3999343070505621,
+  "val_BG IoU": 0.9511928865498247,
+  "val_Mean IoU": 0.5751771307491891,
+  "val_Mean FG IoU": 0.38716925284887127
+}

@@ -25,7 +25,20 @@ from common import (RESULTS, CLASSES, EMPTY_LOGIT, LOWRES, FeatureCache, SegMetr
                     seed_everything, upsample, fold_of)
 from build_cache import ENCODERS
 from loss_function import calculate_tversky_loss, calculate_focal_loss
+from model.prompt.cgnet import jaccard_loss
 import prompters
+
+WANDB_PROJECT = 'climatesam-section-4.3'
+
+
+def wandb_init(args, name, encoder, kind):
+    """Offline wandb run (no API key on this machine): upload later with `wandb sync wandb/offline-run-*`."""
+    if not getattr(args, 'wandb', False):
+        return None
+    import wandb
+    os.environ.setdefault('WANDB_MODE', 'offline')
+    return wandb.init(project=WANDB_PROJECT, name=f'{encoder}/{name}', group=kind, config=vars(args), dir=RESULTS.rsplit('/results', 1)[0],
+                      reinit=True, mode='offline')
 
 LOSS = {  # Table 4.4
     'TC': dict(t_alpha=0.3, t_beta=0.7, f_alpha=0.95, f_gamma=5.0),
@@ -42,13 +55,13 @@ USE_SMOOTH = False
 class Batches:
     """Serves cached features. Few layers: everything on the GPU. Many layers: read from the memmap per batch."""
 
-    def __init__(self, cache, layers, device):
+    def __init__(self, cache, layers, device, with_cgnet=False):
         self.cache, self.layers, self.device = cache, layers, device
         self.eager = len(layers) <= 3
         if self.eager:
-            self.data = cache.load_to(device, layers)
+            self.data = cache.load_to(device, layers, with_cgnet=with_cgnet)
         else:
-            self.data = cache.load_to(device, [])
+            self.data = cache.load_to(device, [], with_cgnet=with_cgnet)
 
     def __len__(self):
         return len(self.cache)
@@ -56,6 +69,8 @@ class Batches:
     def get(self, pos):
         pos = np.sort(np.asarray(pos))
         out = {'emb': self.data['emb'][pos].float(), 'gt': self.data['gt'][pos].long()}
+        if 'cgnet' in self.data:
+            out['cgnet'] = self.data['cgnet'][pos]
         if self.eager:
             out['vit'] = {l: self.data['vit'][l][pos].float() for l in self.layers}
         else:
@@ -164,6 +179,11 @@ def train_one_epoch(model, climatesam, data, optimizer, args):
         for mb in micro:  # gradient accumulation: the effective batch is always args.bs
             batch = data.get(mb)
             out = forward(model, climatesam, batch, args.mode)
+            if 'raw' in out:  # CG-Net: 3-class softmax trained with the Jaccard loss (thesis Section 3.2.3)
+                total = jaccard_loss(out['raw'].float(), batch['gt'])
+                (total * len(mb) / len(chunk)).backward()
+                sums['total'] = sums.get('total', 0.0) + float(total) * len(mb) / len(chunk)
+                continue
             gen = seg_loss(out['logits'], batch['gt'])
             losses = {f'gen_{k}': v for k, v in gen.items()}
             if out['aux']:
@@ -190,6 +210,8 @@ def validate(model, climatesam, data, mode, bs=2):
         batch = data.get(np.arange(s, min(s + bs, len(data))))
         out = forward(model, climatesam, batch, 'sam' if mode == 'sam' else 'seg')
         up = F.interpolate(out['logits'].float(), size=batch['gt'].shape[-2:], mode='bilinear', align_corners=False) > 0
+        if 'argmax' in out:  # CG-Net predicts with its 3-class argmax
+            up = torch.stack([out['argmax'] == 1, out['argmax'] == 2], dim=1)
         for b in range(len(batch['gt'])):
             own.update(up[b, 0], up[b, 1], batch['gt'][b])
             if mode == 'sam':
@@ -216,6 +238,7 @@ def main():
     ap.add_argument('--name', default=None)
     ap.add_argument('--smooth', action='store_true', help='Gaussian label smoothing of the targets (Section 3.5)')
     ap.add_argument('--exclude_fold', type=int, default=None, help='leave this fold (of 5) out of the train split')
+    ap.add_argument('--wandb', action='store_true', help='log to wandb (offline mode)')
     args = ap.parse_args()
     global USE_SMOOTH
     USE_SMOOTH = args.smooth
@@ -240,8 +263,10 @@ def main():
     if args.exclude_fold is not None:  # out-of-fold models for the decoder-adaptation experiment
         keep = fold_of(len(train_cache)) != args.exclude_fold
         train_cache.index, train_cache.names = train_cache.index[keep], [n for n, k in zip(train_cache.names, keep) if k]
-    train = Batches(train_cache, layers, device)
-    val = Batches(FeatureCache(args.encoder, 'val'), layers, device)
+    with_cgnet = prompters.needs_fields(args.arch)
+    train = Batches(train_cache, layers, device, with_cgnet)
+    val = Batches(FeatureCache(args.encoder, 'val'), layers, device, with_cgnet)
+    run = wandb_init(args, name, args.encoder, args.arch)
     optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=args.lr, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=args.lr * 0.01)
     select = 'val_sam_Mean FG IoU' if args.mode == 'sam' else 'val_own_Mean FG IoU'
@@ -261,6 +286,8 @@ def main():
                 torch.save({'state_dict': model.state_dict(), 'arch': args.arch, 'mode': args.mode, 'encoder': args.encoder,
                             'epoch': epoch, 'val': best}, os.path.join(out_dir, 'best.pth'))
         rows.append(row)
+        if run:
+            run.log(row, step=epoch)
         keys = sorted({k for r in rows for k in r}, key=lambda k: (k != 'epoch', k))
         with open(log_path, 'w', newline='') as f:
             w = csv.DictWriter(f, fieldnames=keys)
@@ -274,6 +301,9 @@ def main():
                'args': vars(args), **{k: v for k, v in best.items() if k.startswith('val_')}}
     with open(os.path.join(out_dir, 'summary.json'), 'w') as f:
         json.dump(summary, f, indent=2)
+    if run:
+        run.summary.update({k: v for k, v in summary.items() if not isinstance(v, dict)})
+        run.finish()
     print(json.dumps(summary, indent=2))
 
 

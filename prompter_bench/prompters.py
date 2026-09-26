@@ -14,6 +14,8 @@ import torch.nn.functional as F
 from common import ROOT, VIT_DIM, NUM_LAYERS
 from model.prompt_generator import PromptGenerator as MultiScaleFusion
 from model.prompt_generator_token import PromptGenerator as TokenGatedMultiScaleFusion
+from model.prompt_generator_token_cgblock import PromptGenerator as TokenGatedMultiScaleFusionCG
+from model.prompt_generator_sp_token import PromptGenerator as SharedTokenGatedMultiScaleFusion
 from model.mask_prompt_generator import MaskPromptGenerator
 from model.prompt.cgnet_module import CGNetModule
 
@@ -50,11 +52,11 @@ class MSFToken(nn.Module):
     binary heads (these heads produce the prompts). The multiclass head is kept as an auxiliary output.
     """
 
-    def __init__(self, vit_dim, num_layers, refined_tokens, fused_channels=128):
+    def __init__(self, vit_dim, num_layers, refined_tokens, fused_channels=128, net_cls=TokenGatedMultiScaleFusion):
         super().__init__()
         self.num_layers = num_layers
-        self.net = TokenGatedMultiScaleFusion(in_channels=vit_dim, fused_channels=fused_channels, out_channels=2,
-                                              num_features=num_layers, features_per_block=num_layers // 4)
+        self.net = net_cls(in_channels=vit_dim, fused_channels=fused_channels, out_channels=2,
+                           num_features=num_layers, features_per_block=num_layers // 4)
         self.register_buffer('ar_refined', refined_tokens['AR'])
         self.register_buffer('tc_refined', refined_tokens['TC'])
 
@@ -86,7 +88,8 @@ class CGNet(nn.Module):
     def __init__(self, weights, batch_stats=False):
         super().__init__()
         self.net = CGNetModule(classes=3, channels=4)
-        self.net.load_state_dict(torch.load(weights, map_location='cpu'))
+        if weights:
+            self.net.load_state_dict(torch.load(weights, map_location='cpu'))
         self.bns = [m for m in self.net.modules() if isinstance(m, nn.BatchNorm2d)] if batch_stats else []
         for bn in self.bns:
             bn.momentum = 0.0
@@ -94,10 +97,47 @@ class CGNet(nn.Module):
     def forward(self, batch):
         for bn in self.bns:
             bn.train()
-        logp = F.log_softmax(self.net(batch['cgnet']).float(), dim=1)
+        raw = self.net(batch['cgnet'])
+        logp = F.log_softmax(raw.float(), dim=1)
         # log-odds of "class c" vs "not class c"
         odds = torch.stack([logp[:, c] - torch.log1p(-logp[:, c].exp().clamp(max=1 - 1e-6)) for c in (1, 2)], dim=1)
-        return {'logits': odds, 'aux': [], 'argmax': logp.argmax(1)}
+        return {'logits': odds, 'aux': [], 'argmax': logp.argmax(1), 'raw': raw}
+
+
+class MaskPromptFields(nn.Module):
+    """
+    MaskPrompt + the four raw CG-Net fields (TMQ, U850, V850, PSL): average-pooled to 64x64 and added before the
+    ConvNeXt blocks, and resized to 256x256 and added before the head. Both field branches start at zero, so training
+    starts from the plain mask-prompt generator.
+    """
+
+    def __init__(self, vit_dim, layers, channels=128, num_blocks=3, num_fields=4):
+        super().__init__()
+        self.layers = layers
+        self.net = MaskPromptGenerator(vit_dim=vit_dim, num_vit_feats=len(layers), channels=channels, num_blocks=num_blocks)
+        self.field_lo = nn.Conv2d(num_fields, channels, kernel_size=3, padding=1)
+        self.field_hi = nn.Sequential(nn.Conv2d(num_fields, channels // 4, kernel_size=3, padding=1), nn.GELU(),
+                                      nn.Conv2d(channels // 4, channels // 4, kernel_size=3, padding=1))
+        for conv in (self.field_lo, self.field_hi[-1]):
+            nn.init.zeros_(conv.weight)
+            nn.init.zeros_(conv.bias)
+
+    def forward(self, batch):
+        n, f = self.net, batch['cgnet'].float()
+        if f.shape[-2:] != (256, 256):  # full-resolution fields (evaluation) -> the 256x256 training input
+            f = F.interpolate(f, (256, 256), mode='area')
+        vit = torch.cat([batch['vit'][l].permute(0, 3, 1, 2) for l in self.layers], dim=1)
+        x = n.embed_proj(batch['emb']) + n.vit_proj(vit) + self.field_lo(F.avg_pool2d(f, 4))
+        x = n.blocks(x)
+        x = n.upsample(x) + self.field_hi(f)
+        return {'logits': n.head(x), 'aux': []}
+
+
+def needs_fields(arch):
+    """Prompters that read the raw CG-Net fields (the batch must contain 'cgnet')."""
+    if arch.endswith('_fields'):
+        return 'lowres'  # only needs the fields at 256x256
+    return arch.startswith('cgnet')
 
 
 def refined_tokens(climatesam):
@@ -117,9 +157,20 @@ def build(arch, sam_type='vit_b', climatesam=None):
         return MSF(D, L), list(range(L))
     if arch == 'msf_token':
         return MSFToken(D, L, refined_tokens(climatesam)), list(range(L))
+    if arch == 'msf_token_cg':
+        return MSFToken(D, L, refined_tokens(climatesam), net_cls=TokenGatedMultiScaleFusionCG), list(range(L))
+    if arch == 'msf_sp_token':
+        return MSFToken(D, L, refined_tokens(climatesam), net_cls=SharedTokenGatedMultiScaleFusion), list(range(L))
+    if arch == 'cgnet_train':  # CG-Net retrained on the benchmark split from the official ClimateNet weights
+        return CGNet(os.path.join(ROOT, 'pretrained', 'weights_cgnet.pth')), []
+    if arch == 'cgnet_scratch':  # CG-Net trained from scratch on the benchmark split (no leakage of validation images)
+        return CGNet(None), []
     if arch == 'mpg':
         layers = [L // 2 - 1, L - 1]
         return MaskPrompt(D, layers), layers
+    if arch == 'mpg_fields':
+        layers = [L // 2 - 1, L - 1]
+        return MaskPromptFields(D, layers), layers
     if arch == 'cgnet_official':
         return CGNet(os.path.join(ROOT, 'pretrained', 'weights_cgnet.pth'), batch_stats=True), []
     if arch == 'cgnet_finetuned':

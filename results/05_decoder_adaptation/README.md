@@ -38,7 +38,7 @@ extents) so that SAM ends up better than the prompter?
 | `decoder_adapt_mpg_seg_s0_bbox_oof_s0` | mask-prompt generator (seed 0) | boxes | out-of-fold |
 | `decoder_adapt_mpg_seg_s0_hybrid_oof_s0` | mask-prompt generator (seed 0) | hybrid | out-of-fold |
 
-## Results (`../tables/decoder_adaptation_*`, `../figures/decoder_adaptation_*.png`)
+## Results (`../tables/decoder_adaptation_*`, `../figures/decoder_adaptation.png`)
 
 Primary checkpoint, test set (prompter mask → SAM with the Phase-1 decoder → SAM with the adapted decoder):
 

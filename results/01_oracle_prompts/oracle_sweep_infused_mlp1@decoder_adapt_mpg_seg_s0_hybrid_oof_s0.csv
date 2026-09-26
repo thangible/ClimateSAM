@@ -1,0 +1,33 @@
+encoder,decoder,study,prompt,TC IoU,AR IoU,BG IoU,Mean IoU,Mean FG IoU
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,mask_format,"union {0,1}",0.762,0.7332,0.9772,0.8241,0.7476
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,mask_format,"per-object {0,1}",0.7724,0.6613,0.9684,0.8007,0.7169
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,mask_format,union logits +-2,0.5004,0.6252,0.962,0.6959,0.5628
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,mask_format,per-object logits +-2,0.2788,0.0976,0.4526,0.2763,0.1882
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,mask_format,union logits +-5,0.751,0.8997,0.9921,0.8809,0.8253
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,mask_format,per-object logits +-5,0.523,0.1786,0.7279,0.4765,0.3508
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,mask_format,union logits +-10,0.7288,0.8756,0.9909,0.8651,0.8022
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,mask_format,per-object logits +-10,0.6676,0.4692,0.9323,0.6897,0.5684
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,mask_format,union logits +-20,0.8058,0.866,0.9908,0.8876,0.8359
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,mask_format,per-object logits +-20,0.7809,0.8669,0.9898,0.8792,0.8239
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,mask_format,box,0.6999,0.5872,0.9696,0.7523,0.6436
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,mask_format,box + per-object logits +-10,0.8703,0.8567,0.9905,0.9058,0.8635
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,mask_format,box + union logits +-10,0.8723,0.8299,0.989,0.897,0.8511
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,degradation,box enlarge -0.3,0.2348,0.1482,0.9441,0.4424,0.1915
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,degradation,box enlarge -0.2,0.4799,0.294,0.9534,0.5758,0.387
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,degradation,box enlarge -0.1,0.6955,0.4598,0.9637,0.7063,0.5777
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,degradation,box enlarge +0.0,0.6999,0.5872,0.9696,0.7523,0.6436
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,degradation,box enlarge +0.1,0.5618,0.5551,0.9612,0.6927,0.5585
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,degradation,box enlarge +0.2,0.4499,0.4856,0.948,0.6278,0.4677
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,degradation,box enlarge +0.3,0.3605,0.4189,0.9334,0.5709,0.3897
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,degradation,box enlarge +0.5,0.2514,0.3173,0.9021,0.4902,0.2843
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,degradation,mask morph -9px,0.4287,0.7417,0.9816,0.7173,0.5852
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,degradation,mask morph -5px,0.574,0.8181,0.9867,0.793,0.6961
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,degradation,mask morph -3px,0.6625,0.8539,0.9893,0.8352,0.7582
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,degradation,mask morph +0px,0.7288,0.8756,0.9909,0.8651,0.8022
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,degradation,mask morph +3px,0.7875,0.889,0.9919,0.8895,0.8383
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,degradation,mask morph +5px,0.8336,0.8928,0.9922,0.9062,0.8632
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,degradation,mask morph +9px,0.8209,0.8622,0.9895,0.8909,0.8416
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,degradation,box + 1 false boxes,0.5628,0.5516,0.9637,0.6927,0.5572
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,degradation,box + 3 false boxes,0.4134,0.4699,0.9483,0.6106,0.4417
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,degradation,box drop 25% objects,0.5366,0.4478,0.9609,0.6484,0.4922
+infused_mlp1,decoder_adapt_mpg_seg_s0_hybrid_oof_s0,degradation,box drop 50% objects,0.3714,0.3213,0.9537,0.5488,0.3463

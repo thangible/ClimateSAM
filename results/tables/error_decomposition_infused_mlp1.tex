@@ -1,12 +1,15 @@
 \begin{table}[htbp]
 \centering
 \small
+\begin{adjustbox}{max width=\linewidth}
 \begin{tabular}{llccccc}
 \toprule
 Prompter & Class & As is & No false objects & Add missed objects & Perfect detection & Perfect shape \\
 \midrule
 CG-Net (official weights) & TC & 0.327 & 0.453 & 0.405 & 0.562 & 0.571 \\
 CG-Net (fine-tuned) & TC & 0.349 & 0.439 & 0.457 & 0.575 & 0.620 \\
+CG-Net (re-trained on 358 images, official init.) & TC & 0.350$\pm$0.005 & 0.441$\pm$0.018 & 0.460$\pm$0.008 & 0.580$\pm$0.004 & 0.631$\pm$0.012 \\
+CG-Net (trained from scratch on 358 images) & TC & 0.343$\pm$0.007 & 0.410$\pm$0.013 & 0.506$\pm$0.006 & 0.605$\pm$0.008 & 0.628$\pm$0.007 \\
 Logistic regression, ViT block 1 & TC & 0.228$\pm$0.000 & 0.324$\pm$0.008 & 0.304$\pm$0.005 & 0.432$\pm$0.004 & 0.593$\pm$0.015 \\
 Logistic regression, ViT block 12 & TC & 0.306$\pm$0.003 & 0.393$\pm$0.012 & 0.401$\pm$0.007 & 0.514$\pm$0.002 & 0.645$\pm$0.012 \\
 Multi-scale fusion & TC & 0.333$\pm$0.002 & 0.405$\pm$0.011 & 0.461$\pm$0.018 & 0.560$\pm$0.011 & 0.651$\pm$0.005 \\
@@ -15,9 +18,12 @@ Mask-prompt generator (segmentation loss) & TC & 0.345$\pm$0.005 & 0.420$\pm$0.0
 Mask-prompt generator (end-to-end via SAM) & TC & 0.337$\pm$0.008 & 0.410$\pm$0.005 & 0.474$\pm$0.012 & 0.577$\pm$0.010 & 0.637$\pm$0.019 \\
 Mask-prompt generator (two-stage) & TC & 0.340$\pm$0.005 & 0.415$\pm$0.013 & 0.470$\pm$0.003 & 0.573$\pm$0.014 & 0.641$\pm$0.019 \\
 Mask-prompt generator (segmentation loss, label smoothing) & TC & 0.340$\pm$0.010 & 0.407$\pm$0.011 & 0.483$\pm$0.016 & 0.579$\pm$0.015 & 0.645$\pm$0.002 \\
+Mask-prompt generator + raw CG-Net fields & TC & 0.339$\pm$0.001 & 0.422$\pm$0.005 & 0.465$\pm$0.009 & 0.580$\pm$0.007 & 0.627$\pm$0.005 \\
 \midrule
 CG-Net (official weights) & AR & 0.333 & 0.396 & 0.348 & 0.414 & 0.761 \\
 CG-Net (fine-tuned) & AR & 0.382 & 0.437 & 0.421 & 0.482 & 0.787 \\
+CG-Net (re-trained on 358 images, official init.) & AR & 0.399$\pm$0.005 & 0.456$\pm$0.008 & 0.437$\pm$0.007 & 0.499$\pm$0.005 & 0.805$\pm$0.006 \\
+CG-Net (trained from scratch on 358 images) & AR & 0.394$\pm$0.008 & 0.453$\pm$0.023 & 0.427$\pm$0.006 & 0.490$\pm$0.008 & 0.806$\pm$0.022 \\
 Logistic regression, ViT block 1 & AR & 0.319$\pm$0.001 & 0.396$\pm$0.004 & 0.324$\pm$0.003 & 0.402$\pm$0.002 & 0.744$\pm$0.021 \\
 Logistic regression, ViT block 12 & AR & 0.385$\pm$0.001 & 0.463$\pm$0.002 & 0.390$\pm$0.002 & 0.468$\pm$0.002 & 0.785$\pm$0.004 \\
 Multi-scale fusion & AR & 0.403$\pm$0.004 & 0.468$\pm$0.009 & 0.411$\pm$0.005 & 0.478$\pm$0.011 & 0.818$\pm$0.017 \\
@@ -26,8 +32,10 @@ Mask-prompt generator (segmentation loss) & AR & 0.413$\pm$0.001 & 0.479$\pm$0.0
 Mask-prompt generator (end-to-end via SAM) & AR & 0.378$\pm$0.019 & 0.451$\pm$0.018 & 0.383$\pm$0.020 & 0.456$\pm$0.017 & 0.801$\pm$0.053 \\
 Mask-prompt generator (two-stage) & AR & 0.409$\pm$0.002 & 0.485$\pm$0.003 & 0.415$\pm$0.003 & 0.491$\pm$0.002 & 0.789$\pm$0.013 \\
 Mask-prompt generator (segmentation loss, label smoothing) & AR & 0.412$\pm$0.001 & 0.483$\pm$0.006 & 0.421$\pm$0.003 & 0.493$\pm$0.003 & 0.806$\pm$0.008 \\
+Mask-prompt generator + raw CG-Net fields & AR & 0.409$\pm$0.006 & 0.478$\pm$0.003 & 0.419$\pm$0.010 & 0.489$\pm$0.002 & 0.808$\pm$0.025 \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
 \caption{IoU of the prompter mask after removing one error type: deleting predicted objects that touch no ground truth, adding the ground-truth objects that were missed, both, or giving every detected object its exact ground-truth shape.}
 \label{tab:decomposition_infused_mlp1}
 \end{table}

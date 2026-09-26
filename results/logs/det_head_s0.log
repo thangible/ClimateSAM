@@ -1,0 +1,116 @@
+wandb: WARNING Using a boolean value for 'reinit' is deprecated. Use 'return_previous' or 'finish_previous' instead.
+wandb: Tracking run with wandb version 0.21.1
+wandb: W&B syncing is set to `offline` in this directory. Run `wandb online` or set WANDB_MODE=online to enable cloud syncing.
+wandb: Run data is saved locally in /home/worker1/thang/ClimateSAM/wandb/offline-run-20260925_230136-wjhzp4wm
+/home/worker1/thang/ClimateSAM/prompter_bench/train_det_head_bench.py:111: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:835.)
+  total, steps = total + float(loss), steps + 1
+[det_head_s0] epoch 1 loss 1.8239
+[det_head_s0] epoch 2 loss 1.3713 val FG 0.1619
+[det_head_s0] epoch 3 loss 1.2227
+[det_head_s0] epoch 4 loss 1.1346 val FG 0.1525
+[det_head_s0] epoch 5 loss 1.0420
+[det_head_s0] epoch 6 loss 0.9669 val FG 0.1662
+[det_head_s0] epoch 7 loss 0.8981
+[det_head_s0] epoch 8 loss 0.8441 val FG 0.1476
+[det_head_s0] epoch 9 loss 0.7844
+[det_head_s0] epoch 10 loss 0.7495 val FG 0.1807
+[det_head_s0] epoch 11 loss 0.6728
+[det_head_s0] epoch 12 loss 0.6386 val FG 0.1683
+[det_head_s0] epoch 13 loss 0.5783
+[det_head_s0] epoch 14 loss 0.5446 val FG 0.1674
+[det_head_s0] epoch 15 loss 0.5201
+[det_head_s0] epoch 16 loss 0.4800 val FG 0.1826
+[det_head_s0] epoch 17 loss 0.4650
+[det_head_s0] epoch 18 loss 0.4464 val FG 0.1844
+[det_head_s0] epoch 19 loss 0.4228
+[det_head_s0] epoch 20 loss 0.3829 val FG 0.1768
+[det_head_s0] epoch 21 loss 0.3716
+[det_head_s0] epoch 22 loss 0.3519 val FG 0.1647
+[det_head_s0] epoch 23 loss 0.3378
+[det_head_s0] epoch 24 loss 0.3201 val FG 0.1761
+[det_head_s0] epoch 25 loss 0.3079
+[det_head_s0] epoch 26 loss 0.2962 val FG 0.1924
+[det_head_s0] epoch 27 loss 0.2934
+[det_head_s0] epoch 28 loss 0.2830 val FG 0.1778
+[det_head_s0] epoch 29 loss 0.2728
+[det_head_s0] epoch 30 loss 0.2624 val FG 0.1740
+[det_head_s0] epoch 31 loss 0.2560
+[det_head_s0] epoch 32 loss 0.2496 val FG 0.1756
+[det_head_s0] epoch 33 loss 0.2471
+[det_head_s0] epoch 34 loss 0.2305 val FG 0.1786
+[det_head_s0] epoch 35 loss 0.2246
+[det_head_s0] epoch 36 loss 0.2159 val FG 0.1657
+[det_head_s0] epoch 37 loss 0.2167
+[det_head_s0] epoch 38 loss 0.2121 val FG 0.1797
+[det_head_s0] epoch 39 loss 0.2061
+[det_head_s0] epoch 40 loss 0.1990 val FG 0.1771
+[det_head_s0] epoch 41 loss 0.1955
+[det_head_s0] epoch 42 loss 0.1929 val FG 0.1812
+[det_head_s0] epoch 43 loss 0.1891
+[det_head_s0] epoch 44 loss 0.1860 val FG 0.1854
+[det_head_s0] epoch 45 loss 0.1839
+[det_head_s0] epoch 46 loss 0.1802 val FG 0.1858
+[det_head_s0] epoch 47 loss 0.1763
+[det_head_s0] epoch 48 loss 0.1730 val FG 0.1896
+[det_head_s0] epoch 49 loss 0.1713
+[det_head_s0] epoch 50 loss 0.1683 val FG 0.1887
+[det_head_s0] epoch 51 loss 0.1681
+[det_head_s0] epoch 52 loss 0.1664 val FG 0.1886
+[det_head_s0] epoch 53 loss 0.1659
+[det_head_s0] epoch 54 loss 0.1647 val FG 0.1874
+[det_head_s0] epoch 55 loss 0.1635
+[det_head_s0] epoch 56 loss 0.1627 val FG 0.1872
+[det_head_s0] epoch 57 loss 0.1609
+[det_head_s0] epoch 58 loss 0.1625 val FG 0.1865
+[det_head_s0] epoch 59 loss 0.1597
+[det_head_s0] epoch 60 loss 0.1591 val FG 0.1854
+wandb:                                                                                
+wandb: 
+wandb: Run history:
+wandb:           epoch ▁▁▁▁▂▂▂▂▂▂▃▃▃▃▃▄▄▄▄▄▅▅▅▅▅▅▆▆▆▆▆▇▇▇▇▇▇███
+wandb:      train_loss █▆▅▅▅▄▄▃▃▃▃▃▂▂▂▂▂▂▂▂▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁
+wandb:      val_AR IoU ▇▂▃▁▇▃▂█▆▇▂▆▇▅▄▃▃▁▄▂▃▄▂▄▃▂▃▃▂▂
+wandb:      val_BG IoU ██▆▂▄▃▂▅▄▄▁▃▄▃▂▂▂▁▂▂▃▃▂▃▃▃▃▃▃▂
+wandb: val_Mean FG IoU ▃▂▄▁▆▄▄▆▇▆▄▅█▆▅▅▆▄▆▆▆▇▇█▇▇▇▇▇▇
+wandb:    val_Mean IoU ▆▅▅▁▆▄▄▇▇▆▃▅█▆▅▅▅▃▅▅▆▇▆▇▇▇▇▇▆▆
+wandb:      val_TC IoU ▁▂▄▂▄▄▅▄▅▃▄▄▆▅▅▅▆▅▆▆▆▇█▇▇█▇███
+wandb: 
+wandb: Run summary:
+wandb:       best_epoch 26
+wandb:            epoch 60
+wandb:             name det_head_s0
+wandb:             seed 0
+wandb:        threshold 0.7
+wandb:       train_loss 0.15906
+wandb:   train_time_min 100.17379
+wandb: trainable_params 608778
+wandb:       val_AR IoU 0.27573
+wandb:       val_BG IoU 0.86963
+wandb:  val_Mean FG IoU 0.18537
+wandb:     val_Mean IoU 0.41345
+wandb:       val_TC IoU 0.095
+wandb: 
+wandb: You can sync this run to the cloud by running:
+wandb: wandb sync /home/worker1/thang/ClimateSAM/wandb/offline-run-20260925_230136-wjhzp4wm
+wandb: Find logs at: ./wandb/offline-run-20260925_230136-wjhzp4wm/logs
+{
+  "name": "det_head_s0",
+  "seed": 0,
+  "trainable_params": 608778,
+  "best_epoch": 26,
+  "train_time_min": 100.17379454771678,
+  "threshold": 0.7,
+  "val_TC IoU": 0.07773115961128803,
+  "val_AR IoU": 0.30700128388384784,
+  "val_BG IoU": 0.8832623859079859,
+  "val_Mean IoU": 0.4226649431343739,
+  "val_Mean FG IoU": 0.19236622174756793,
+  "test_sam_bbox": {
+    "TC IoU": 0.09506373852853375,
+    "AR IoU": 0.3211133679264806,
+    "BG IoU": 0.8865847913443575,
+    "Mean IoU": 0.434253965933124,
+    "Mean FG IoU": 0.2080885532275072
+  }
+}

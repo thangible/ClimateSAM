@@ -69,6 +69,17 @@ def load_climatesam(ckpt_name, mlp_ratio, device, sam_type='vit_b'):
 # ------------------------------------------------------------
 # SPLIT + FEATURE CACHE
 # ------------------------------------------------------------
+def load_decoder(climatesam, encoder, run):
+    """Replace the adapted mask-decoder parameters by those of a decoder-training run (results/runs/<encoder>/<run>)."""
+    # "<run>_last": the decoder of the last epoch instead of the selected one
+    last = run.endswith('_last') and not os.path.isdir(os.path.join(RESULTS, 'runs', encoder, run))
+    path = os.path.join(RESULTS, 'runs', encoder, run[:-5] if last else run, 'last_decoder.pth' if last else 'best_decoder.pth')
+    state = torch.load(path, map_location='cpu')
+    missing, unexpected = climatesam.mask_decoder.load_state_dict(state, strict=False)
+    assert not unexpected and len(state) > 0, unexpected
+    print(f'loaded {len(state)} decoder tensors from {run}', flush=True)
+
+
 def split_indices():
     """Fixed split of the 398 ClimateNet training samples into train / validation."""
     perm = np.random.RandomState(0).permutation(398)
@@ -148,7 +159,10 @@ class FeatureCache:
             'gt': torch.from_numpy(np.ascontiguousarray(self.gt[idx])).to(device),
             'names': self.names,
         }
-        if with_cgnet:
+        if with_cgnet == 'lowres':  # 256x256 (area), resized on the CPU in chunks: 12x less GPU memory
+            data['cgnet'] = torch.cat([F.interpolate(torch.from_numpy(np.ascontiguousarray(self.cgnet[idx[i:i + 32]])).float(),
+                                                     (LOWRES, LOWRES), mode='area') for i in range(0, len(idx), 32)]).to(device)
+        elif with_cgnet:
             data['cgnet'] = torch.from_numpy(np.ascontiguousarray(self.cgnet[idx])).to(device)
         return data
 

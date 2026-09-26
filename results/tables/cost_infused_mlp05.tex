@@ -1,6 +1,7 @@
 \begin{table}[htbp]
 \centering
 \small
+\begin{adjustbox}{max width=\linewidth}
 \begin{tabular}{lccc}
 \toprule
 Prompter & Trainable parameters & Training time (min) & Selected epoch \\
@@ -15,6 +16,7 @@ Mask-prompt generator (two-stage) & 671,138 & 8.0 & 9 \\
 Mask-prompt generator (segmentation loss, label smoothing) & 671,138 & 3.3 & 33 \\
 \bottomrule
 \end{tabular}
+\end{adjustbox}
 \caption{Size and training cost (single A100, cached encoder features, 60 epochs; two-stage: 30 extra epochs on top of the segmentation-loss model).}
 \label{tab:cost_infused_mlp05}
 \end{table}
