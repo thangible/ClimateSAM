@@ -199,7 +199,24 @@ to $256\times256$ before the head, both branches initialised to zero). It is sli
 (TC~$0.340\pm0.001$ / AR~$0.409\pm0.006$; $-0.004$ mean FG IoU, $[-0.008,-0.001]$). The adapted encoder already sees
 all 16 input channels through the input adapter, so the four fields add no information that the SAM features lack.
 
-%% PENDING: token gate with CG blocks / shared weights (msf_token_cg_seg, msf_sp_token_seg), det head on SAM features
+\paragraph{Further token-gated variants.} Two further multi-scale generators of the thesis were run under the protocol.
+The variant with context-guided (CG) blocks (1.31\,M parameters, 452~GFLOPs) trains slowly (1.5--3.5~hours per seed
+on cached features, two seeds) and is clearly worse than the plain token gate: TC~$0.324\pm0.017$ /
+AR~$0.355\pm0.022$ (mean FG IoU 0.340; $-0.023$, 95\% CI $[-0.032,-0.015]$), with its best validation epochs early
+(epochs 2 and 14 of 60). Its AR mask is fragmented (20.5 AR objects per image), which is also the only case in which
+SAM with hybrid prompts clearly improves on the prompter ($+0.017$, AR $+0.037$) -- the result, 0.356, is still below
+the plain MPG mask. The variant with weights shared across the four block groups (0.39\,M parameters, 612~GFLOPs) is
+slightly better than the token gate ($+0.006$, $[+0.003,+0.009]$; TC~$0.332\pm0.006$ / AR~$0.402\pm0.001$) but stays
+below MPG ($-0.011$, $[-0.020,-0.004]$).
+
+\paragraph{Box head on SAM features.} The thesis also designed a YOLO-style detection head on the image embedding,
+gated by the decoder's HQ tokens (0.61\,M parameters), whose boxes prompt SAM directly. Trained on ground-truth boxes
+(two seeds, objectness threshold 0.7 selected on the validation images), it is the weakest image-dependent prompter:
+SAM with its boxes reaches TC~$0.107\pm0.017$ / AR~$0.303\pm0.025$ (mean FG IoU 0.205). It finds most objects (TC
+recall 0.81--0.93), but SAM's output then contains 9--17 TC objects per image, of which only 17--29\% touch a
+cyclone. As for the CG-Net YOLO
+head, regressed boxes are too loose and too numerous; every false box becomes a false object
+(Section~\ref{sec:prompt_analysis}).
 
 \begin{table}[htbp]
 \centering
@@ -347,7 +364,43 @@ Table~\ref{tab:decoder_adaptation_infused_mlp1}). In no configuration, however, 
 (best: $-0.004$ mean FG IoU with out-of-fold hybrid prompts); on the second checkpoint the best configuration ties the
 prompter ($+0.001$).
 
-%% PENDING: prompt-robust decoder (robust_decoder_*)
+\paragraph{Prompt-robust decoder.} The adaptation above changes only which prompts the decoder sees. The prompt-robust
+decoder (Section~\ref{sec:decoder_adaptation_method}) is additionally trained on deliberately corrupted ground-truth
+prompts whose targets are the complete objects, and empty masks for false boxes. Table~\ref{tab:robust_decoder_infused_mlp1}
+and Figure~\ref{fig:robust_decoder} report each decoder on clean and corrupted ground-truth prompts (as in
+Table~\ref{tab:oracle_prompts}) and with the prompts of MPG and of the fine-tuned CG-Net.
+
+\input{\ResultsDir/tables/robust_decoder_infused_mlp1}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{\ResultsDir/figures/robust_decoder.pdf}
+\caption{Prompt-robust decoders (mean of two seeds) versus the Phase-1 decoder. (a,~b)~Ground-truth prompts with
+controlled errors; (c)~prompts of the mask-prompt generator (mean of three seeds); dashed: the generator's own mask.}
+\label{fig:robust_decoder}
+\end{figure}
+
+\begin{itemize}
+  \item \emph{The decoder does become more robust to box errors.} Trained in box mode, it loses less on enlarged boxes
+  (ground-truth boxes enlarged by 20\%: mean FG IoU $0.474\rightarrow0.559$--$0.564$) and on false boxes
+  ($0.576\rightarrow0.608$--$0.609$), at the price of tight boxes ($0.674\rightarrow0.630$--$0.636$): it no longer takes
+  the box extent literally.
+  \item \emph{This robustness hardly transfers to real prompters.} SAM with MPG boxes improves by only $+0.005$
+  ($[+0.002,+0.008]$, both seeds), with CG-Net boxes by $+0.008$--$0.010$. Trained in hybrid mode, the decoder improves
+  SAM with MPG hybrid prompts by $+0.005$--$0.006$ ($[+0.004,+0.007]$), to 0.375--0.376, which is still below the MPG mask
+  itself ($-0.003$ to $-0.004$, $[-0.006,-0.000]$). This is the same gain as the adaptation to out-of-fold MPG prompts
+  alone.
+  \item \emph{The decoder specialises to its prompt mode.} The hybrid-trained decoder is much worse with box-only prompts
+  (MPG boxes: $-0.035$ to $-0.050$), the box-trained one with hybrid prompts ($-0.006$ to $-0.010$).
+  \item \emph{Synthetic corruption alone does not help.} Without prompter prompts, the validation IoU with MPG prompts
+  falls in every epoch, so checkpoint selection keeps the Phase-1 decoder (epoch~0). The decoder of the last epoch is
+  worse with real prompts ($-0.010$ with MPG hybrid prompts, $-0.076$ with MPG boxes), while on ground-truth prompts of
+  its own mode it is unchanged (box + mask: 0.881 versus 0.877; Table~\ref{tab:robust_decoder_infused_mlp1}). Hand-designed corruptions do not match the
+  errors of a real prompter.
+\end{itemize}
+Training the decoder for robustness therefore works as intended on the synthetic errors but does not lift SAM above
+its prompter: the real prompter errors that remain after training (missed cyclones and the extent of rivers,
+Section~\ref{sec:error_analysis}) cannot be corrected from a prompt that lacks the information.
 
 % ===============================================================================================================
 \subsection{Evaluation-only Improvements}
@@ -362,7 +415,8 @@ fed back as the next prompt for up to three rounds, SAM's native interactive ref
 \input{\ResultsDir/tables/posthoc_infused_mlp1}
 
 \begin{itemize}
-  \item \emph{Seed ensembles} help every non-linear prompter by 0.006--0.011 mean FG IoU (MPG: $0.379\rightarrow0.385$,
+  \item \emph{Seed ensembles} help every non-linear prompter by 0.006--0.011 mean FG IoU, and end-to-end MPG, whose
+  seeds differ most, by 0.015 (MPG: $0.379\rightarrow0.385$,
   95\% CI of the gain over seed~0 $[+0.001,+0.010]$; MSF: $0.368\rightarrow0.376$; CG-Net from scratch:
   $0.369\rightarrow0.380$). For the SAM-feature prompters the gain comes mostly from TCs ($+0.007$ to $+0.011$
   against $+0.004$ to $+0.007$ for ARs), for CG-Net from both classes (TC $+0.009$, AR $+0.014$). The linear probe gains nothing, as

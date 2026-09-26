@@ -35,7 +35,10 @@ def main():
              'cgnet': torch.randn(1, 4, 768, 1152, device=device)}
     rows = []
     for arch, label in (('cgnet_finetuned', 'CG-Net'), ('logreg_l0', 'Logistic regression'), ('msf', 'Multi-scale fusion'),
-                        ('msf_token', 'Multi-scale fusion + token gate'), ('mpg', 'Mask-prompt generator')):
+                        ('msf_token', 'Multi-scale fusion + token gate'),
+                        ('msf_token_cg', 'Multi-scale fusion + token gate, CG blocks'),
+                        ('msf_sp_token', 'Multi-scale fusion + token gate, shared weights'),
+                        ('mpg', 'Mask-prompt generator'), ('mpg_fields', 'Mask-prompt generator + raw fields')):
         model = prompters.build(arch, climatesam=sam)[0].to(device).eval()
         fwd = lambda: model(batch)
         with FlopCounterMode(display=False) as fc:

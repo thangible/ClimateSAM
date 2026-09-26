@@ -25,7 +25,10 @@ data. Tables below are generated from the raw outputs (`prompter_bench/make_repo
    blobs are false (`tables/error_decomposition_*`).
 4. **Fine-tuning the decoder on generated prompts** (incl. out-of-fold prompts, so the decoder sees realistic prompt
    errors) teaches it to drop some false prompts (AR object precision 0.50 → 0.62) and closes most of the gap to the
-   prompter, but still does not exceed it. → `05_decoder_adaptation/`
+   prompter, but still does not exceed it. A **prompt-robust decoder** trained on corrupted prompts (loose / missing /
+   false boxes with empty targets) plus out-of-fold prompts is much more tolerant of synthetic box errors (GT boxes
+   +20 %: 0.474 → 0.56 mean FG IoU) but gains only +0.005 with real prompts and stays below the prompter.
+   → `05_decoder_adaptation/`, `figures/robust_decoder.png`
 5. **The best automatic system is a small prompter on the frozen ClimateSAM features.** The new 0.67 M-parameter
    mask-prompt generator reaches TC 0.344 / AR 0.413 on its own (3 seeds): AR +0.031 over the fine-tuned CG-Net
    (95 % CI [+0.020, +0.043]) at statistically equal TC, and +0.011 mean FG IoU over the thesis' 1.41 M-parameter
@@ -35,13 +38,21 @@ data. Tables below are generated from the raw outputs (`prompter_bench/make_repo
    TC 0.301 / AR 0.385 — the adapted encoder's features carry most of the signal. On the second frozen checkpoint
    the mask-prompt generator ties multi-scale fusion (mean FG IoU 0.370 vs. 0.370, one MSF seed); both stay ahead
    of CG-Net on AR and of the linear probe.
+   **But:** CG-Net re-trained under the same protocol (358 images, validation selection) is much better than the stored
+   fine-tuned checkpoint (0.375 from the official weights, 0.369 from scratch, vs. 0.366). Against it, MPG is better
+   only for ARs (+0.013 to +0.018, significant); the mean FG difference is not significant — and CG-Net needs 23 GFLOPs
+   instead of ~980 for encoder + MPG. An ensemble of MPG and CG-Net gives the best mask of the study (0.389).
+   → `06_posthoc/`
 6. **Prompt format matters, and in a checkpoint-dependent way.** Dense mask prompts must be logits for some
    checkpoints, and TCs vanish from mask-only prompts on others; a box plus a dense mask for TC and a dense mask for
    AR ("hybrid") is the robust choice (oracle: TC 0.872 / AR 0.920 vs. boxes 0.723 / 0.625).
-7. **Also negative:** a YOLO box head on CG-Net (TC ≈ 0.21 / AR ≈ 0.28 via SAM); learned static prompts without any
-   prompter (TC 0.24 / AR 0.33, thousands of fragments); the token gate on multi-scale fusion (−0.006 mean FG IoU);
-   training the generator end-to-end through SAM (−0.011) or two-stage (−0.004); label smoothing for the prompter
-   (−0.004); more ViT blocks as input (exploratory).
+7. **Also negative:** a YOLO box head on CG-Net (TC ≈ 0.21 / AR ≈ 0.28 via SAM) and on the SAM features (TC 0.11 /
+   AR 0.30 via SAM); learned static prompts without any prompter (TC 0.24 / AR 0.33, thousands of fragments); the token
+   gate on multi-scale fusion (−0.006 mean FG IoU), its CG-block variant (−0.023 vs. the token gate; the shared-weight
+   variant is +0.006, still below MPG); training the generator end-to-end through SAM (−0.011) or two-stage (−0.004);
+   label smoothing for the prompter (−0.004); adding the raw CG-Net fields to MPG (−0.004); per-class thresholds and
+   object post-processing tuned on validation (no gain on test); iterative SAM refinement (loses every round); more
+   ViT blocks as input (exploratory). Seed ensembles help a little (+0.006 for MPG).
 
 ## Folder guide
 
@@ -52,12 +63,15 @@ data. Tables below are generated from the raw outputs (`prompter_bench/make_repo
 | `02_table_4_13_recheck/` | corrected Table 4.13 (CG-Net as prompter), incl. the original-script path |
 | `03_cgnet_yolo_boxes/` | CG-Net with a YOLO box head as prompter |
 | `04_sam_feature_prompters/` | main comparison of all prompters (designs, bugs found, results) |
-| `05_decoder_adaptation/` | fine-tuning the decoder on generated prompts (in-sample vs. out-of-fold) |
+| `05_decoder_adaptation/` | fine-tuning the decoder on generated prompts (in-sample vs. out-of-fold) and the prompt-robust decoder |
+| `06_posthoc/` | evaluation-only: seed / cross-family ensembles, threshold calibration, post-processing, iterative SAM refinement |
 | `07_exploratory_runs/` | first mask-prompt-generator runs incl. failed designs, analysis of the old generator |
 | `tables/` | every table as LaTeX (`.tex`), CSV and Markdown |
 | `figures/` | every figure as PNG and PDF (diagrams, bar charts, curves, map examples) |
 | `runs/<encoder>/<run>/` | per run: `log.csv` (every epoch), `summary.json`, `best.pth` |
-| `eval/<encoder>/` | test results per run (`*.json`, incl. per-image counts), example masks (`*_examples.npz`), `all_results.csv` |
+| `eval/<encoder>/` | test results per run (`*.json`, incl. per-image counts), example masks (`*_examples.npz`), `all_results.csv`; `decoder/<decoder run>/`: the same with a replaced decoder |
+| `latex/` | LaTeX chapter: method additions, Section 4.3, Discussion, appendix (`main.tex` builds it standalone) |
+| `REPORT.md` | the full write-up (approach, results, analysis, ideas) |
 | `logs/` | stdout of every job |
 
 Encoders: `infused_mlp1` = primary (Infused Token, MLP 1.0, the model of Table 4.12 / Section 4.3),
@@ -130,9 +144,23 @@ Architecture of the mask-prompt generator and of the benchmark:
 
 {{table:decoder_adaptation_infused_mlp1}}
 
+Prompt-robust decoders (mean FG IoU; ground-truth prompts with controlled errors and real prompters):
+
+{{table:robust_decoder_infused_mlp1}}
+
+![](figures/robust_decoder.png)
+
+Ground-truth prompts with controlled errors, every decoder (TC / AR IoU):
+
+{{table:oracle_prompts}}
+
 Second checkpoint:
 
 {{table:decoder_adaptation_infused_mlp05}}
+
+## 4b. Evaluation-only improvements (`06_posthoc/`)
+
+{{table:posthoc_infused_mlp1}}
 
 ## 5. Robustness: second frozen checkpoint (Infused Token, MLP 0.5)
 
@@ -154,14 +182,13 @@ Same protocol; multi-scale models 1 seed.
 - *Where prompters fail*: AR — extent of rivers already detected (perfect shapes of detected ARs would give ~0.8 IoU);
   TC — missed cyclones and false blobs (perfect detection would give ~0.55–0.6 TC IoU).
 - *Efficiency*: a 0.67 M-parameter head at 64×64 on the frozen features beats the 1.41 M-parameter multi-scale
-  fusion model that runs at 1024×1024 (5.7 vs. 702 GFLOPs, 0.9 vs. 36 ms per image), and beats
-  CG-Net on AR; even a linear probe on the last ViT block is close to CG-Net. The token gate adds nothing: the gate
+  fusion model that runs at 1024×1024 (5.7 vs. 702 GFLOPs, 0.9 vs. 36 ms per image), and beats a CG-Net trained under
+  the same protocol on AR (overall: tie); even a linear probe on the last ViT block is close to CG-Net. The token gate adds nothing: the gate
   inputs are fixed decoder tokens, i.e. a learned per-class channel weighting. The adapted encoder is a strong representation for detection; SAM's decoder adds shape refinement only when
   the prompt is already right.
 - *Recommendation for the pipeline*: use the prompter's own mask as the prompt-free output, or SAM with hybrid prompts
-  when SAM-quality boundaries are wanted — the two are within ~0.01 IoU. To make SAM *improve* on the prompter, the
-  decoder must be trained with realistic (erroneous) prompts from the start of Phase 1, or the detection step must
-  improve; decoder fine-tuning afterwards is not enough.
+  when SAM-quality boundaries are wanted — the two are within ~0.01 IoU. Decoder fine-tuning afterwards, even for
+  robustness to corrupted prompts, is not enough to make SAM improve on the prompter; the detection step must improve.
 
 ## Bugs found in the original code (details in `04_sam_feature_prompters/README.md`)
 
@@ -185,8 +212,14 @@ cd ClimateSAM
 bash prompter_bench/run_queue.sh infused_mlp1 light; bash prompter_bench/run_queue.sh infused_mlp1 heavy   # 04 training
 bash prompter_bench/run_extra.sh infused_mlp1                                # 05 + label smoothing
 bash prompter_bench/run_learned_prompt.sh infused_mlp1                       # learned static prompts
+bash prompter_bench/run_queue3.sh light 0; bash prompter_bench/run_heavy2.sh   # re-trained CG-Net, token-gate variants
+bash prompter_bench/run_fields.sh; bash prompter_bench/run_dethead2.sh        # MPG + raw fields, box head on SAM features
+bash prompter_bench/run_robust.sh; bash prompter_bench/run_robust2.sh; bash prompter_bench/run_robust_eval.sh   # robust decoders
+.venv/bin/python prompter_bench/posthoc.py --methods mpg_seg msf_seg 'mpg_seg+cgnet_scratch_seg'   # 06
 .venv/bin/python prompter_bench/evaluate.py --encoder infused_mlp1           # test evaluation of everything
 .venv/bin/python prompter_bench/speed.py                                     # parameters / FLOPs / latency
-.venv/bin/python prompter_bench/make_report.py                               # tables, figures, this README
+.venv/bin/python prompter_bench/make_report.py                               # tables, this README
+.venv/bin/python prompter_bench/figures.py                                   # figures (+ single panels)
+.venv/bin/python prompter_bench/wandb_log_existing.py                        # wandb (offline): old runs + test tables
 .venv/bin/python prompter_bench/diagrams.py                                  # architecture diagrams
 ```

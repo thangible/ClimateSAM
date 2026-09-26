@@ -587,6 +587,74 @@ def fig_maps(images=(17, 45)):
                subplot_kw={'projection': ccrs.PlateCarree(central_longitude=180)})
 
 
+
+def fig_robust_decoder():
+    """Prompt-robust decoders: corrupted ground-truth prompts and real MPG prompts (mean FG IoU, seeds averaged)."""
+    decs = [('phase1', 'Phase-1 decoder', S.INK2, ['']),
+            ('box', 'robust decoder, trained on box prompts', S.OUTPUT['sam_bbox'], ['@robust_decoder_box_s0', '@robust_decoder_box_s1']),
+            ('hybrid', 'robust decoder, trained on hybrid prompts', S.OUTPUT['sam_hybrid'],
+             ['@robust_decoder_hybrid_s0', '@robust_decoder_hybrid_s1'])]
+    sweeps = {}
+    for key, _, _, tags in decs:
+        fs = [os.path.join(RESULTS, '01_oracle_prompts', f'oracle_sweep_{ENC}{t}.csv') for t in tags]
+        if not all(os.path.exists(f) for f in fs):
+            return
+        sweeps[key] = pd.concat([pd.read_csv(f) for f in fs]).groupby('prompt')['Mean FG IoU'].mean()
+    handles = lambda: [(Line2D([], [], marker='o', color=c), l) for _, l, c, _ in decs]
+
+    def scale(ax):
+        rs = [-0.3, -0.2, -0.1, 0.0, 0.1, 0.2, 0.3, 0.5]
+        for key, _, c, _ in decs:
+            ax.plot(rs, [sweeps[key][f'box enlarge {r:+.1f}'] for r in rs], marker='o', color=c)
+        ax.axvline(0, color=S.AXIS, lw=0.8)
+        ax.set_xlabel('ground-truth box enlarged by (fraction of its size)')
+        ax.set_ylabel('mean FG IoU (test)')
+        ax.set_ylim(0, 1)
+        ygrid(ax)
+        return handles()
+
+    def objects_(ax):
+        cats = [('box enlarge +0.0', 'none'), ('box drop 25% objects', '25% not\nprompted'),
+                ('box + 1 false boxes', '+1 false\nbox'), ('box + 3 false boxes', '+3 false\nboxes'),
+                ('box + union logits +-10', 'box +\nmask')]
+        x = np.arange(len(cats))
+        for j, (key, _, c, _) in enumerate(decs):
+            ax.bar(x + (j - 1) * 0.27, [sweeps[key][p] for p, _ in cats], 0.25, color=c, edgecolor='white', linewidth=0.6)
+        ax.set_xticks(x)
+        ax.set_xticklabels([l for _, l in cats])
+        ax.set_ylabel('mean FG IoU (test)')
+        ax.set_ylim(0, 1)
+        ygrid(ax)
+        return handles()
+
+    def real(ax):
+        def fg(ev_dir, out):
+            v = [r['Mean FG IoU'] for f in sorted(glob.glob(os.path.join(ev_dir, 'mpg_seg_s[0-9].json')))
+                 for r in json.load(open(f))['rows'] if r['output'] == out]
+            return np.mean(v)
+        base = os.path.join(RESULTS, 'eval', ENC)
+        dirs = {'phase1': [base], 'box': [os.path.join(base, 'decoder', f'robust_decoder_box_s{i}') for i in (0, 1)],
+                'hybrid': [os.path.join(base, 'decoder', f'robust_decoder_hybrid_s{i}') for i in (0, 1)]}
+        outs = [('sam_bbox', 'MPG boxes'), ('sam_hybrid', 'MPG hybrid prompts')]
+        x = np.arange(len(outs))
+        for j, (key, _, c, _) in enumerate(decs):  # dots, not bars: the axis does not start at zero
+            ax.plot(x + (j - 1) * 0.2, [np.mean([fg(d, o) for d in dirs[key]]) for o, _ in outs], 'o', ms=7, color=c)
+        own = fg(base, 'own')
+        ax.axhline(own, color=S.OUTPUT['own'], lw=1.2, ls='--')
+        ax.annotate(f'MPG mask {own:.3f}', (x[-1] + 0.45, own), xytext=(0, 3), textcoords='offset points', ha='right',
+                    va='bottom', fontsize=7, color=S.INK2)
+        ax.set_xticks(x)
+        ax.set_xticklabels([l for _, l in outs])
+        ax.set_xlim(-0.5, len(outs) - 0.5)
+        ax.set_ylabel('mean FG IoU (test)')
+        ax.set_ylim(0.30, 0.40)
+        ygrid(ax)
+        return handles()
+    figure(FIG, 'robust_decoder', [('box_size', 'Ground-truth boxes of wrong size', scale),
+                                   ('objects', 'Missed / false objects', objects_),
+                                   ('real_prompts', 'Prompts of the mask-prompt generator', real)], size=(3.3, 2.6))
+
+
 def main():
     for f in glob.glob(os.path.join(FIG, '*.png')) + glob.glob(os.path.join(FIG, '*.pdf')):
         if not os.path.basename(f).startswith('diagram_'):
@@ -600,6 +668,7 @@ def main():
     fig_efficiency()
     fig_second_encoder()
     fig_decoder()
+    fig_robust_decoder()
     fig_yolo()
     fig_exploratory()
     fig_maps()

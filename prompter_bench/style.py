@@ -95,7 +95,9 @@ def figure(out_dir, name, panels, ncols=None, size=PANEL, legend_ncol=None, subp
             h = draw(ax) or []
             if title:
                 ax.set_title(title)
-            if h:
-                ax.legend(*zip(*h), loc='best', ncol=1)
+            if h:  # above the axes, as in the combined figure: never covers data
+                short = sum(len(l) for _, l in h) <= 45
+                f.legend(*zip(*h), loc='lower center', bbox_to_anchor=(0.5, 1.0), ncol=len(h) if short else 1,
+                         frameon=False)
             f.tight_layout()
             save(f, os.path.join(out_dir, 'panels', f'{name}_{key}'))

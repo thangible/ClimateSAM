@@ -8,6 +8,8 @@
 | Logistic regression, ViT block 12 | TC | 0.306 ± 0.003 | 0.393 ± 0.012 | 0.401 ± 0.007 | 0.514 ± 0.002 | 0.645 ± 0.012 |
 | Multi-scale fusion | TC | 0.333 ± 0.002 | 0.405 ± 0.011 | 0.461 ± 0.018 | 0.560 ± 0.011 | 0.651 ± 0.005 |
 | Multi-scale fusion + token gate | TC | 0.325 ± 0.001 | 0.395 ± 0.004 | 0.446 ± 0.009 | 0.542 ± 0.008 | 0.657 ± 0.005 |
+| Multi-scale fusion + token gate, CG blocks | TC | 0.328 ± 0.017 | 0.405 ± 0.004 | 0.436 ± 0.030 | 0.539 ± 0.004 | 0.657 ± 0.035 |
+| Multi-scale fusion + token gate, shared weights | TC | 0.332 ± 0.006 | 0.405 ± 0.015 | 0.450 ± 0.005 | 0.548 ± 0.008 | 0.656 ± 0.012 |
 | Mask-prompt generator (segmentation loss) | TC | 0.345 ± 0.005 | 0.420 ± 0.002 | 0.481 ± 0.015 | 0.585 ± 0.009 | 0.636 ± 0.012 |
 | Mask-prompt generator (end-to-end via SAM) | TC | 0.337 ± 0.008 | 0.410 ± 0.005 | 0.474 ± 0.012 | 0.577 ± 0.010 | 0.637 ± 0.019 |
 | Mask-prompt generator (two-stage) | TC | 0.340 ± 0.005 | 0.415 ± 0.013 | 0.470 ± 0.003 | 0.573 ± 0.014 | 0.641 ± 0.019 |
@@ -21,6 +23,8 @@
 | Logistic regression, ViT block 12 | AR | 0.385 ± 0.001 | 0.463 ± 0.002 | 0.390 ± 0.002 | 0.468 ± 0.002 | 0.785 ± 0.004 |
 | Multi-scale fusion | AR | 0.403 ± 0.004 | 0.468 ± 0.009 | 0.411 ± 0.005 | 0.478 ± 0.011 | 0.818 ± 0.017 |
 | Multi-scale fusion + token gate | AR | 0.399 ± 0.003 | 0.462 ± 0.009 | 0.407 ± 0.001 | 0.471 ± 0.007 | 0.824 ± 0.016 |
+| Multi-scale fusion + token gate, CG blocks | AR | 0.355 ± 0.022 | 0.438 ± 0.023 | 0.356 ± 0.023 | 0.440 ± 0.024 | 0.706 ± 0.035 |
+| Multi-scale fusion + token gate, shared weights | AR | 0.402 ± 0.001 | 0.469 ± 0.004 | 0.411 ± 0.002 | 0.479 ± 0.002 | 0.815 ± 0.009 |
 | Mask-prompt generator (segmentation loss) | AR | 0.413 ± 0.001 | 0.479 ± 0.002 | 0.423 ± 0.001 | 0.490 ± 0.002 | 0.817 ± 0.004 |
 | Mask-prompt generator (end-to-end via SAM) | AR | 0.378 ± 0.019 | 0.451 ± 0.018 | 0.383 ± 0.020 | 0.456 ± 0.017 | 0.801 ± 0.053 |
 | Mask-prompt generator (two-stage) | AR | 0.409 ± 0.002 | 0.485 ± 0.003 | 0.415 ± 0.003 | 0.491 ± 0.002 | 0.789 ± 0.013 |

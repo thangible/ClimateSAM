@@ -19,8 +19,9 @@ is boundary quality inside a correct prompt; but for ARs the dominant error is t
 boundary pixels, and for TCs the objects are small enough that detection dominates.
 
 The decoder-adaptation experiments show that this is not only a question of the training distribution. Even a decoder
-trained on realistic, out-of-fold prompts learns to reject some false prompts but cannot add information that the
-prompt does not contain. Prompter and decoder read the same frozen image embedding; whatever the decoder could infer
+trained on realistic, out-of-fold prompts, or on deliberately corrupted prompts with empty targets for false boxes,
+becomes more tolerant of box errors and rejects some false prompts, but it cannot add information that the prompt does
+not contain. Prompter and decoder read the same frozen image embedding; whatever the decoder could infer
 about the extent of an AR from that embedding, a prompter trained directly on the labels infers as well.
 
 A further reason lies in the labels. ClimateNet's labels are the consensus of several experts, and the mean performance
@@ -78,7 +79,9 @@ refinement stage after an automatic prompter.
   \item \emph{Two frozen checkpoints.} Both are Infused-Token ViT-B models; LoRA-adapted and ViT-L encoders were not
   tested in Phase~2.
   \item \emph{External prompter.} The fine-tuned CG-Net was trained on all 398 training images, including the
-  validation images of this protocol; this affects only experiments that use its outputs on training images.
+  validation images of this protocol; this affects only experiments that use its outputs on training images. The CG-Net
+  re-trained from the official ClimateNet weights inherits this for its checkpoint selection (not for its test numbers);
+  the CG-Net trained from scratch is unaffected.
   \item \emph{Object metrics.} An object counts as found if one pixel overlaps; stricter matching (IoU $\ge 0.5$) would
   lower all recalls and precisions but not change the comparison.
   \item \emph{Earlier Table~4.13.} The re-run shows that its SAM rows do not reproduce with the current code and
@@ -88,10 +91,13 @@ refinement stage after an automatic prompter.
 \subsection{Future Work}
 
 \begin{enumerate}
-  \item \emph{Train Phase~1 with realistic prompts.} Mixing ground-truth prompts with corrupted ones, including false
-  boxes whose target is empty, and with prompts of an out-of-fold prompter already during Phase~1 attacks the root cause
-  identified above. The prompt analysis of Section~\ref{sec:prompt_analysis} provides the test: a better decoder
-  flattens the curves of Figure~\ref{fig:oracle_prompt_errors}.
+  \item \emph{Ensembles and fusion of prompter families.} The ensemble of MPG and CG-Net is the best automatic mask;
+  a larger same-family ensemble is the missing control, and a fusion that keeps the diversity of the two input types
+  (unlike MPG with raw fields) may keep the gain at lower cost.
+  \item \emph{Realistic prompts already in Phase~1.} The prompt-robust decoder was trained only in Phase~2 with a frozen
+  prompt encoder. Training Phase~1 with corrupted and prompter prompts is the stronger version; given
+  Section~\ref{sec:decoder_adaptation_results} its benefit for automatic prompting is likely small, but it would give a
+  more forgiving interactive tool.
   \item \emph{Query-based prompt-free decoding.} Replacing static prompts by image-dependent object queries
   (DETR/Mask2Former style) with a matching-based loss turns SAM into an instance segmenter and addresses the TC detection
   errors directly.

@@ -35,17 +35,18 @@ level, error decomposition, per-image counts for the bootstrap. B3 additionally:
 - Anything not finished at hour 14 is dropped from the report (logged as "not completed").
 - Seeds are cut to 2 before any experiment is dropped.
 
-## Status (updated during the run)
+## Status — finished (2026-09-26, 08:30)
 
-| # | Status |
-|---|---|
-| A1 | msf_token_cg is slow (≈210–240 s/epoch, ≈4 h per seed): cut to seed 0 (+ seed 1 only if time remains) |
-| A2 | queued after A1 seed 0, 3 seeds |
-| B1 | re-trained CG-Net (official init) and CG-Net from scratch, both with the Jaccard loss; scratch 3 seeds, official init 2 seeds |
-| B2 | SAM-feature box head, 3 seeds (validation mean FG IoU of SAM with its boxes ≈ 0.18) |
-| B3 | hybrid s0/s1 done; box mode needed ≈23 GB and ran out of memory next to other jobs → capped at 12 training boxes per class and image, re-queued; GT-only control re-run to also keep the last-epoch decoder (its selected epoch was 0) |
-| C1–C3 | done for all finished prompters (`results/06_posthoc/`); seed ensemble +0.006–0.008, calibration / post-processing / SAM refinement do not help |
-| new | **MPG + raw CG-Net fields** (`mpg_fields`): added because the fairly trained CG-Net nearly ties MPG — tests whether the raw fields add information to the SAM features; 3 seeds |
-| new | cross-family ensemble MPG + CG-Net (scratch), evaluation only |
-| D | new runs log to wandb offline; the 65 earlier runs were logged afterwards (`prompter_bench/wandb_log_existing.py runs`); test tables go into one run `test_results` at the end |
-| E | `results/latex/` compiles (tectonic); sections for pending experiments are marked `%% PENDING` |
+| # | Status | Result |
+|---|---|---|
+| A1 | done, 2 seeds (≈1.5–3.5 h per seed) | CG-block token gate 0.340 mean FG IoU, −0.023 vs. token gate |
+| A2 | done, 3 seeds | shared-weight token gate 0.367, +0.006 vs. token gate, −0.011 vs. MPG |
+| B1 | done: official init 2 seeds, scratch 3 seeds | 0.375 / 0.369 (stored checkpoint 0.366); MPG better only for AR (+0.013 / +0.018) |
+| B2 | done, 2 seeds (third dropped: far below all others) | SAM + its boxes 0.205 |
+| B3 | done: box / hybrid × 2 seeds + GT-only control (re-run to keep the last epoch) | robust to synthetic box errors, +0.005 with real prompts, still below the prompter |
+| C1–C3 | done for all prompters | seed ensemble +0.006–0.011; calibration / post-processing / SAM refinement: no gain |
+| new | MPG + raw fields, 3 seeds | 0.375, −0.004 vs. MPG |
+| new | MPG + CG-Net ensemble | 0.389, best mask of the study |
+| D | 92 offline wandb runs (new runs + 65 earlier runs + `test_results` tables) | upload: `wandb login && wandb sync wandb/offline-run-*` |
+| E | `results/latex/` complete, compiles (32 pages standalone) | |
+| F | REPORT.md, README, folder READMEs, tables, figures updated | |

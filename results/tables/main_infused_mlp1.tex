@@ -42,6 +42,14 @@ Multi-scale fusion + token gate & Prompter mask (no SAM) & 0.324$\pm$0.001 & 0.3
  & SAM + box & 0.336$\pm$0.002 & 0.382$\pm$0.003 & 0.940$\pm$0.002 & 0.553$\pm$0.001 & 0.359$\pm$0.002 \\
  & SAM + hybrid & 0.329$\pm$0.004 & 0.387$\pm$0.006 & 0.949$\pm$0.001 & 0.555$\pm$0.003 & 0.358$\pm$0.005 \\
 \midrule
+Multi-scale fusion + token gate, CG blocks & Prompter mask (no SAM) & 0.324$\pm$0.017 & 0.355$\pm$0.022 & 0.913$\pm$0.014 & 0.531$\pm$0.006 & 0.340$\pm$0.003 \\
+ & SAM + box & 0.289$\pm$0.010 & 0.335$\pm$0.021 & 0.913$\pm$0.012 & 0.512$\pm$0.008 & 0.312$\pm$0.006 \\
+ & SAM + hybrid & 0.322$\pm$0.017 & 0.391$\pm$0.001 & 0.934$\pm$0.002 & 0.549$\pm$0.005 & 0.356$\pm$0.009 \\
+\midrule
+Multi-scale fusion + token gate, shared weights & Prompter mask (no SAM) & 0.332$\pm$0.006 & 0.402$\pm$0.001 & 0.943$\pm$0.002 & 0.559$\pm$0.002 & 0.367$\pm$0.003 \\
+ & SAM + box & 0.338$\pm$0.006 & 0.385$\pm$0.002 & 0.940$\pm$0.002 & 0.554$\pm$0.003 & 0.362$\pm$0.003 \\
+ & SAM + hybrid & 0.333$\pm$0.004 & 0.391$\pm$0.005 & 0.949$\pm$0.001 & 0.558$\pm$0.002 & 0.362$\pm$0.003 \\
+\midrule
 Mask-prompt generator (segmentation loss) & Prompter mask (no SAM) & 0.344$\pm$0.003 & 0.413$\pm$0.001 & 0.944$\pm$0.000 & 0.567$\pm$0.002 & 0.379$\pm$0.002 \\
  & SAM + box & 0.343$\pm$0.006 & 0.391$\pm$0.001 & 0.940$\pm$0.001 & 0.558$\pm$0.002 & 0.367$\pm$0.003 \\
  & SAM + hybrid & 0.342$\pm$0.004 & 0.398$\pm$0.002 & 0.949$\pm$0.000 & 0.563$\pm$0.002 & 0.370$\pm$0.002 \\
@@ -62,8 +70,8 @@ Mask-prompt generator + raw CG-Net fields & Prompter mask (no SAM) & 0.340$\pm$0
  & SAM + box & 0.340$\pm$0.001 & 0.387$\pm$0.008 & 0.938$\pm$0.004 & 0.555$\pm$0.004 & 0.363$\pm$0.004 \\
  & SAM + hybrid & 0.337$\pm$0.003 & 0.399$\pm$0.006 & 0.949$\pm$0.001 & 0.561$\pm$0.002 & 0.368$\pm$0.003 \\
 \midrule
-Box head on SAM features (YOLO-style) & Prompter mask (no SAM) & 0.084 & 0.168 & 0.718 & 0.323 & 0.126 \\
- & SAM + box & 0.095 & 0.321 & 0.887 & 0.434 & 0.208 \\
+Box head on SAM features (YOLO-style) & Prompter mask (no SAM) & 0.094$\pm$0.014 & 0.156$\pm$0.016 & 0.693$\pm$0.035 & 0.315$\pm$0.012 & 0.125$\pm$0.001 \\
+ & SAM + box & 0.107$\pm$0.017 & 0.303$\pm$0.025 & 0.884$\pm$0.004 & 0.431$\pm$0.004 & 0.205$\pm$0.004 \\
 \midrule
 Learned static prompts (4 tokens / class) & SAM + learned static prompts & 0.237$\pm$0.001 & 0.324$\pm$0.008 & 0.926$\pm$0.005 & 0.495$\pm$0.004 & 0.280$\pm$0.004 \\
 \midrule

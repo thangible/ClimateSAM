@@ -7,8 +7,14 @@
 Decoder & GT box & GT box +20\% & GT box + 1 false & GT box + mask & MPG: box & MPG: hybrid & CG-Net: box & CG-Net: hybrid \\
 \midrule
 Phase-1 decoder & 0.674 & 0.474 & 0.576 & 0.877 & 0.367 & 0.370 & 0.355 & 0.367 \\
+adapted to MPG hybrid prompts (OOF) & 0.644 & 0.468 & 0.557 & 0.851 & 0.359 & 0.375 & 0.342 & 0.365 \\
+adapted to MPG boxes (OOF) & 0.634 & 0.551 & 0.609 & 0.803 & 0.372 & 0.364 & 0.366 & 0.367 \\
+prompt-robust, box & 0.630 & 0.559 & 0.609 & 0.838 & 0.371 & 0.360 & 0.363 & 0.368 \\
+prompt-robust, box (seed 1) & 0.636 & 0.564 & 0.608 & 0.847 & 0.372 & 0.364 & 0.365 & 0.369 \\
 prompt-robust, hybrid & 0.592 & 0.511 & 0.524 & 0.856 & 0.332 & 0.375 & 0.320 & 0.367 \\
 prompt-robust, hybrid (seed 1) & 0.548 & 0.527 & 0.503 & 0.867 & 0.317 & 0.376 & 0.309 & 0.369 \\
+prompt-robust, hybrid, corrupted GT only (selected: epoch 0) & 0.674 & 0.474 & 0.576 & 0.877 & 0.367 & 0.370 & 0.355 & 0.367 \\
+prompt-robust, hybrid, corrupted GT only (last epoch) & 0.517 & 0.468 & 0.477 & 0.881 & 0.291 & 0.360 & 0.287 & 0.367 \\
 \bottomrule
 \end{tabular}
 \end{adjustbox}

@@ -59,3 +59,40 @@ boxes 0.353, out-of-fold hybrid 0.377 — the same pattern.
 - Out-of-fold vs. in-sample prompts makes no difference on the primary checkpoint and hurts box prompts on the
   second one — the limiting factor is not the prompt distribution, but that the decoder cannot recover missed
   objects or infer the extent of an AR better than the prompter already did.
+
+## Prompt-robust decoder (`prompter_bench/train_robust_decoder.py`, `run_robust*.sh`, `run_robust_eval.sh`)
+
+**Idea.** Attack the cause directly: the Phase-1 decoder trusts its prompts because it only ever saw correct ones.
+Train the same decoder parts (1.21 M parameters) on *corrupted* ground-truth prompts mixed 1:1 with out-of-fold MPG
+prompts, where the target of a box is the complete ground-truth object(s) it touches and an **empty mask for a false
+box**. Corruptions: object left unprompted p = 0.15; box sides moved by U(−0.15, 0.3) × box size; Binomial(3, 0.25)
+false boxes per class; dense prompts eroded / dilated (kernel ≤ 5×5 px) plus a false blob with p = 0.3 (a real object
+moved elsewhere). At most 12 training boxes per class and image (memory). 25 epochs, lr 3e-4, selection on validation
+with MPG prompts; modes *box* and *hybrid*, 2 seeds each; control: corrupted GT prompts only.
+
+**Evaluation.** Every decoder goes through the oracle study (`../01_oracle_prompts/oracle_sweep_infused_mlp1@<decoder>.csv`)
+and the benchmark with real prompters (`../eval/infused_mlp1/decoder/<decoder>/`).
+Table: `../tables/robust_decoder_infused_mlp1.*`; figure: `../figures/robust_decoder.png`.
+
+| Decoder (mean FG IoU, test) | GT box | GT box +20 % | GT box + 1 false | GT box + mask | MPG: box | MPG: hybrid | CG-Net: box | CG-Net: hybrid |
+|---|---|---|---|---|---|---|---|---|
+| Phase-1 decoder | 0.674 | 0.474 | 0.576 | 0.877 | 0.367 | 0.370 | 0.355 | 0.367 |
+| robust, box (seeds 0 / 1) | 0.630 / 0.636 | 0.559 / 0.564 | 0.609 / 0.608 | 0.838 / 0.847 | 0.371 / 0.372 | 0.360 / 0.364 | 0.363 / 0.365 | 0.368 / 0.369 |
+| robust, hybrid (seeds 0 / 1) | 0.592 / 0.548 | 0.511 / 0.527 | 0.524 / 0.503 | 0.856 / 0.867 | 0.332 / 0.317 | 0.375 / 0.376 | 0.320 / 0.309 | 0.367 / 0.369 |
+| corrupted GT only, last epoch | 0.517 | 0.468 | 0.477 | 0.881 | 0.291 | 0.360 | 0.287 | 0.367 |
+
+(MPG's own mask: 0.379; the fine-tuned CG-Net's: 0.366.)
+
+**Findings.**
+- Robust to synthetic box errors: enlarged boxes 0.474 → 0.56, false boxes 0.576 → 0.61; tight boxes 0.674 → 0.63.
+- Little transfer to real prompters: MPG boxes +0.005 [+0.002, +0.008], MPG hybrid +0.005–0.006 [+0.004, +0.007]
+  (0.375–0.376, still −0.003 … −0.004 below MPG's mask) — the same gain as the plain out-of-fold adaptation.
+- Each decoder specialises to its prompt mode (hybrid-trained with boxes: −0.035 … −0.050).
+- Corrupted GT prompts alone: validation IoU with MPG prompts falls every epoch, so selection keeps epoch 0 (= Phase-1
+  decoder); the last-epoch decoder is worse with real prompts (MPG hybrid −0.010, boxes −0.076). Hand-designed
+  corruptions do not reproduce the errors of a real prompter.
+- Conclusion: making the decoder robust does not lift SAM above its prompter; the remaining errors (missed cyclones,
+  AR extent) are not in the prompt.
+
+Note: the first run of the GT-only control (`runs/infused_mlp1/robust_decoder_hybrid_gtonly_s0_v1`) saved only the
+selected (epoch-0) decoder; it was re-run to keep the last-epoch decoder as well.

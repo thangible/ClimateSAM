@@ -18,20 +18,25 @@ regression prompter, CI confidence interval, OOF out-of-fold.
 Phase 1 of the thesis adapted SAM to the 16-channel ClimateNet data with a learnable input adapter and infused-token
 encoder adapters; with ground-truth box prompts the adapted model reaches TC IoU 0.72 and AR IoU 0.63. Phase 2 must
 replace the ground-truth prompts by prompts produced automatically. We compare every prompter developed in the thesis
-(CG-Net, CG-Net with a YOLO box head, logistic regression, multi-scale fusion with and without a token gate) and a new,
+(CG-Net, re-trained under the same protocol, CG-Net with a YOLO box head, logistic regression, multi-scale fusion with
+and without the token gate and its CG-block and shared-weight variants, a box head on the SAM features) and a new,
 lightweight mask-prompt generator under one controlled protocol: one frozen Phase-1 model, a held-out validation split,
 the loss selected in Section 4.1, three seeds, seven ways of converting a prompter output into SAM prompts, paired
 bootstrap confidence intervals, object-level metrics and an error decomposition. We further test training the prompter
-through SAM, fine-tuning SAM's decoder on generated prompts, and learned static prompts.
+through SAM, fine-tuning SAM's decoder on generated prompts, a decoder trained to be robust to corrupted prompts,
+learned static prompts, and evaluation-time ensembling, calibration, post-processing and iterative refinement.
 
 Three results stand out. (i) The SAM rows of the original Table 4.13 do not reproduce; SAM prompted by CG-Net is not
 better than CG-Net alone (TC 0.341 / AR 0.369 vs. 0.349 / 0.382). (ii) Across all prompters, prompt types and both
 frozen checkpoints tested, SAM's output stays within about ±0.02 mean FG IoU of the prompter's own mask and never
 exceeds the best prompter mask; the decoder reproduces its prompts, including their errors. (iii) A 0.67 M-parameter
-mask-prompt generator operating on the frozen encoder features at 64×64 is the best prompter
-(TC 0.344 / AR 0.413; AR +0.031 over the fine-tuned CG-Net, 95 % CI [+0.020, +0.043]) at 122× fewer FLOPs than the
-multi-scale fusion generator. The error analysis shows that the remaining errors are the extent of ARs that were
-detected and the detection of TCs — precisely the information a prompt would have to contain.
+mask-prompt generator operating on the frozen encoder features at 64×64 is the best single prompter
+(TC 0.344 / AR 0.413) at 122× fewer FLOPs than the multi-scale fusion generator. Against a CG-Net re-trained under the
+same protocol (0.375 mean FG IoU instead of 0.366 for the stored checkpoint) its advantage is limited to the ARs
+(+0.013 to +0.018, significant); the overall difference is not significant. An ensemble of both families gives the best
+mask of the study (0.389). A decoder trained on corrupted prompts becomes robust to synthetic box errors but gains only
++0.005 with real prompts and stays below the prompter. The error analysis shows that the remaining errors are the extent
+of ARs that were detected and the detection of TCs — precisely the information a prompt would have to contain.
 
 ---
 
@@ -90,12 +95,16 @@ channels, TC and AR. The network code is the thesis code in `model/`.
 
 | Prompter | Input | Architecture | Parameters | GFLOPs / image | Latency |
 |---|---|---|---|---|---|
-| CG-Net (official / fine-tuned) | TMQ, U850, V850, PSL | ClimateNet CG-Net, 3-class softmax | 494 k | 22.9 | 8.9 ms |
+| CG-Net (official / fine-tuned / re-trained) | TMQ, U850, V850, PSL | ClimateNet CG-Net, 3-class softmax; re-trained on the 358 training images with its Jaccard loss (official init. or scratch) | 494 k | 22.9 | 8.9 ms |
 | LogReg, block 1 | $F_1$ | 1×1 convolution 768 → 2 (thesis `LogisticRegressionPrompter`) | 1.5 k | 0.01 | 0.05 ms |
 | LogReg, block 12 | $F_{12}$ | same, last block | 1.5 k | 0.01 | 0.05 ms |
 | MSF | $F_1\ldots F_{12}$ | Figure 3.9: four groups of three blocks, nearest upsampling up to 1024², deep supervision | 1.41 M | 702 | 36 ms |
 | MSF + token gate | $F_1\ldots F_{12}$ | MSF whose fused features are gated per channel by the decoder's refined TC / AR HQ tokens, two binary heads | 1.42 M | 703 | 38 ms |
+| MSF + token gate, CG blocks | $F_1\ldots F_{12}$ | token-gated MSF with context-guided blocks (`prompt_generator_token_cgblock.py`) | 1.31 M | 452 | 63 ms |
+| MSF + token gate, shared weights | $F_1\ldots F_{12}$ | token-gated MSF with one reduction / fusion shared by the four block groups (`prompt_generator_sp_token.py`) | 0.39 M | 612 | 35 ms |
+| Box head on SAM features | $E$ + HQ tokens | YOLO-style grid detector gated by the HQ tokens (`TokenGatedDetectionHead`), boxes prompt SAM | 0.61 M | — | — |
 | **MPG (new)** | $E$, $F_6$, $F_{12}$ | Figure 2 | **0.67 M** | **5.7** | **0.9 ms** |
+| MPG + raw fields | $E$, $F_6$, $F_{12}$, CG-Net fields | MPG + the four fields added at 64² and 256² (zero-initialised branches) | 0.69 M | 7.1 | 1.1 ms |
 | Learned static prompts | — | 4 (or 16) learnable sparse prompt tokens per class, no image-dependent prompter | 2 k (8 k) | — | — |
 
 *(FLOPs counted with `torch.utils.flop_counter`, latency = median of 20 forward passes, batch 1, A100; the frozen
@@ -280,7 +289,8 @@ monotonically), but its central claim does not: **SAM prompted by CG-Net is neve
 
 ### 3.3 Comparison of all prompters (RQ3, RQ4)
 
-**Table 1 — Prompters under one protocol (primary checkpoint, test set; mean ± std over 3 seeds; CG-Net: fixed
+**Table 1 — Prompters under one protocol (primary checkpoint, test set; mean ± std over 3 seeds, 2 for the CG-Net
+re-trained from the official weights, the CG-block variant and the box head; official / fine-tuned CG-Net: fixed
 checkpoints).** Best prompter mask in bold.
 
 | Prompter | Output | TC IoU | AR IoU | Mean FG IoU |
@@ -289,6 +299,10 @@ checkpoints).** Best prompter mask in bold.
 | | SAM + box / hybrid | 0.318 / 0.327 | 0.342 / 0.339 | 0.330 / 0.333 |
 | CG-Net (fine-tuned) | prompter mask | 0.349 | 0.382 | 0.366 |
 | | SAM + box / hybrid | 0.341 / 0.349 | 0.369 / 0.384 | 0.355 / 0.367 |
+| CG-Net (re-trained, official init.) | prompter mask | 0.350 ± 0.005 | 0.399 ± 0.005 | 0.375 ± 0.005 |
+| | SAM + box / hybrid | 0.345 / 0.348 | 0.387 / 0.400 | 0.366 / 0.374 |
+| CG-Net (trained from scratch) | prompter mask | 0.343 ± 0.007 | 0.394 ± 0.008 | 0.369 ± 0.006 |
+| | SAM + box / hybrid | 0.343 / 0.339 | 0.380 / 0.395 | 0.362 / 0.367 |
 | LogReg, block 1 | prompter mask | 0.195 ± 0.001 | 0.319 ± 0.001 | 0.257 ± 0.001 |
 | | SAM + box / hybrid | 0.200 / 0.213 | 0.321 / 0.316 | 0.260 / 0.264 |
 | LogReg, block 12 | prompter mask | 0.301 ± 0.004 | 0.385 ± 0.001 | 0.343 ± 0.002 |
@@ -297,6 +311,10 @@ checkpoints).** Best prompter mask in bold.
 | | SAM + box / hybrid | 0.339 / 0.330 | 0.385 / 0.388 | 0.362 / 0.359 |
 | MSF + token gate | prompter mask | 0.324 ± 0.001 | 0.399 ± 0.003 | 0.362 ± 0.001 |
 | | SAM + box / hybrid | 0.336 / 0.329 | 0.382 / 0.387 | 0.359 / 0.358 |
+| MSF + token gate, CG blocks | prompter mask | 0.324 ± 0.017 | 0.355 ± 0.022 | 0.340 ± 0.003 |
+| | SAM + box / hybrid | 0.289 / 0.322 | 0.335 / 0.391 | 0.312 / 0.356 |
+| MSF + token gate, shared weights | prompter mask | 0.332 ± 0.006 | 0.402 ± 0.001 | 0.367 ± 0.003 |
+| | SAM + box / hybrid | 0.338 / 0.333 | 0.385 / 0.391 | 0.362 / 0.362 |
 | **MPG** | prompter mask | **0.344 ± 0.003** | **0.413 ± 0.001** | **0.379 ± 0.002** |
 | | SAM + box / hybrid | 0.343 / 0.342 | 0.391 / 0.398 | 0.367 / 0.370 |
 | MPG, label smoothing | prompter mask | 0.338 ± 0.009 | 0.412 ± 0.001 | 0.375 ± 0.005 |
@@ -304,6 +322,10 @@ checkpoints).** Best prompter mask in bold.
 | | SAM + box / hybrid | 0.336 / 0.334 | 0.385 / 0.402 | 0.360 / 0.368 |
 | MPG, two-stage | prompter mask | 0.338 ± 0.005 | 0.409 ± 0.002 | 0.374 ± 0.001 |
 | | SAM + box / hybrid | 0.334 / 0.337 | 0.386 / 0.411 | 0.360 / 0.374 |
+| MPG + raw CG-Net fields | prompter mask | 0.340 ± 0.001 | 0.409 ± 0.006 | 0.375 ± 0.004 |
+| | SAM + box / hybrid | 0.340 / 0.337 | 0.387 / 0.399 | 0.363 / 0.368 |
+| Box head on SAM features | filled boxes | 0.094 ± 0.014 | 0.156 ± 0.016 | 0.125 ± 0.001 |
+| | SAM + box | 0.107 ± 0.017 | 0.303 ± 0.025 | 0.205 ± 0.004 |
 | Learned static prompts (4 / class) | SAM | 0.237 ± 0.001 | 0.324 ± 0.008 | 0.280 ± 0.004 |
 | Learned static prompts (16 / class) | SAM | 0.248 | 0.329 | 0.288 |
 
@@ -324,14 +346,40 @@ does not help the prompter (−0.004, CI [−0.007, −0.000]). Remarkably, a li
 the first block — the thesis configuration — reaches only 0.195 / 0.319: the adapted encoder's late features are
 linearly separable with respect to TC and AR, the early ones are not.
 
+**CG-Net trained under the same protocol.** The fine-tuned CG-Net checkpoint was trained outside this protocol (on all
+398 training images, including our validation images). Re-trained on the 358 training images with its original Jaccard
+loss and validation-based selection, CG-Net is clearly better than the stored checkpoint: 0.375 mean FG IoU from the
+official ClimateNet weights (2 seeds), 0.369 from scratch (3 seeds), against 0.366. Against these fair baselines MPG's
+advantage shrinks to the ARs (AR +0.013 [+0.003, +0.024] and +0.018 [+0.009, +0.027]); TC is equal and the mean FG
+difference (+0.004 and +0.010) is not significant. **A well-trained CG-Net on four raw fields is thus nearly as good a
+prompter as a head on the adapted SAM encoder** — at 23 GFLOPs instead of ~980 (encoder + MPG). SAM does not improve
+these masks either (hybrid −0.001, box −0.007 to −0.009).
+
+**Further thesis prompters.** The token-gated MSF with context-guided blocks is clearly worse than the plain token gate
+(0.340, −0.023 [−0.032, −0.015], mainly AR −0.046) and trains slowly (1.5–3.5 h per seed on cached features; selected
+epochs 2 and 14). Its fragmented AR mask (20.5 AR objects per image) is the only case where SAM with hybrid prompts
+clearly improves on the prompter (+0.017, AR +0.037) — still below MPG. The shared-weight variant is slightly better than
+the token gate (0.367, +0.006 [+0.003, +0.009]) and below MPG (−0.011 [−0.020, −0.004]). The YOLO-style box head on the
+SAM features is the weakest image-dependent prompter: SAM with its boxes reaches TC 0.107 / AR 0.303; it finds most TCs
+(recall 0.81–0.93) but SAM's output then contains 9–17 TC objects per image, of which only 17–29 % touch a cyclone.
+
+**MPG + raw fields.** Adding the four CG-Net fields to MPG (at 64² before the ConvNeXt blocks and at 256² before the
+head, zero-initialised) makes it slightly *worse* (0.375, −0.004 [−0.008, −0.001]): the encoder already sees all 16
+input channels through the input adapter, so the raw fields add no information the SAM features lack.
+
 **Table 2 — Selected paired-bootstrap comparisons** (full list: `tables/bootstrap_infused_mlp1.tex`).
 
 | Comparison (B − A) | Δ TC [95 % CI] | Δ AR [95 % CI] | Δ mean FG [95 % CI] |
 |---|---|---|---|
 | MPG vs. CG-Net (fine-tuned), masks | −0.005 [−0.030, +0.020] | **+0.031 [+0.020, +0.043]** | +0.013 [−0.000, +0.027] |
 | MPG vs. MSF, masks | +0.011 [−0.003, +0.025] | +0.010 [+0.005, +0.016] | **+0.011 [+0.003, +0.019]** |
+| MPG vs. CG-Net (re-trained, official init.), masks | −0.006 [−0.027, +0.015] | **+0.013 [+0.003, +0.024]** | +0.004 [−0.008, +0.016] |
+| MPG vs. CG-Net (from scratch), masks | +0.001 [−0.018, +0.023] | **+0.018 [+0.009, +0.027]** | +0.010 [−0.002, +0.022] |
 | MPG vs. LogReg block 12, masks | +0.044 [+0.025, +0.062] | +0.028 [+0.020, +0.036] | +0.036 [+0.025, +0.046] |
+| MPG + raw fields vs. MPG, masks | −0.004 [−0.012, +0.002] | −0.004 [−0.007, −0.001] | −0.004 [−0.008, −0.001] |
 | MSF + token gate vs. MSF, masks | −0.009 [−0.015, −0.003] | −0.004 [−0.005, −0.002] | −0.006 [−0.009, −0.003] |
+| token gate + CG blocks vs. token gate, masks | −0.000 [−0.013, +0.014] | −0.046 [−0.060, −0.032] | −0.023 [−0.032, −0.015] |
+| token gate, shared weights vs. token gate, masks | +0.008 [+0.002, +0.013] | +0.003 [+0.000, +0.006] | +0.006 [+0.003, +0.009] |
 | MPG: SAM + box vs. its mask | −0.002 [−0.009, +0.006] | −0.022 [−0.028, −0.016] | −0.012 [−0.017, −0.007] |
 | MPG: SAM + hybrid vs. its mask | −0.002 [−0.007, +0.003] | −0.015 [−0.024, −0.006] | −0.008 [−0.014, −0.003] |
 | CG-Net (ft): SAM + box vs. its mask | −0.008 [−0.017, +0.001] | −0.013 [−0.018, −0.006] | −0.010 [−0.016, −0.004] |
@@ -450,6 +498,43 @@ checkpoint the best configuration ties it (+0.001), and out-of-fold boxes even h
 factor is therefore not the distribution of training prompts but that the decoder cannot recover missed objects or
 infer the extent of an AR better than the prompter already did.
 
+**Prompt-robust decoder.** To attack the cause identified in Section 3.1 directly, the same decoder parts were trained
+on *corrupted* ground-truth prompts mixed 1:1 with out-of-fold MPG prompts (25 epochs, lr 3·10⁻⁴, 2 seeds per mode):
+every object is left unprompted with p = 0.15, box sides move by U(−0.15, 0.3) of the box size, Binomial(3, 0.25) false
+boxes are added per class, dense prompts are eroded / dilated (kernel ≤ 5×5 px) and get a false blob with p = 0.3. The
+target of a box is the *complete* ground-truth object(s) it touches — and an empty mask for a box touching nothing — so
+the decoder is taught to say "nothing here" and to extend or shrink a prompt (`prompter_bench/train_robust_decoder.py`).
+
+![Figure 14b](figures/robust_decoder.png)
+*Figure 14b — Prompt-robust decoders (mean of two seeds) vs. the Phase-1 decoder: (a, b) ground-truth prompts with
+controlled errors, (c) prompts of MPG; dashed: MPG's own mask.*
+
+| Decoder (mean FG IoU, test) | GT box | GT box +20 % | GT box + 1 false | GT box + mask | MPG: box | MPG: hybrid | CG-Net: box | CG-Net: hybrid |
+|---|---|---|---|---|---|---|---|---|
+| Phase-1 decoder | 0.674 | 0.474 | 0.576 | 0.877 | 0.367 | 0.370 | 0.355 | 0.367 |
+| robust, box (seeds 0 / 1) | 0.630 / 0.636 | 0.559 / 0.564 | 0.609 / 0.608 | 0.838 / 0.847 | 0.371 / 0.372 | 0.360 / 0.364 | 0.363 / 0.365 | 0.368 / 0.369 |
+| robust, hybrid (seeds 0 / 1) | 0.592 / 0.548 | 0.511 / 0.527 | 0.524 / 0.503 | 0.856 / 0.867 | 0.332 / 0.317 | 0.375 / 0.376 | 0.320 / 0.309 | 0.367 / 0.369 |
+| corrupted GT only, last epoch | 0.517 | 0.468 | 0.477 | 0.881 | 0.291 | 0.360 | 0.287 | 0.367 |
+
+(`tables/robust_decoder_infused_mlp1.tex`; the oracle study of every decoder: `01_oracle_prompts/oracle_sweep_infused_mlp1@<decoder>.csv`.)
+
+- **Robust to synthetic box errors — yes.** In box mode the decoder loses much less on enlarged boxes (+20 %:
+  0.474 → 0.56) and on false boxes (0.576 → 0.61), at the price of tight boxes (0.674 → 0.63): it no longer takes the
+  box extent literally.
+- **Transfer to real prompters — hardly.** SAM with MPG boxes gains +0.005 [+0.002, +0.008], with CG-Net boxes
+  +0.008–0.010. In hybrid mode SAM with MPG hybrid prompts gains +0.005–0.006 [+0.004, +0.007] to 0.375–0.376 — still
+  below MPG's own mask (−0.003 to −0.004 [−0.006, −0.000]) and the same gain as the plain out-of-fold adaptation above.
+- **Specialisation.** Each decoder is worse with the other prompt mode (hybrid-trained with MPG boxes −0.035 to −0.050;
+  box-trained with hybrid prompts −0.006 to −0.010).
+- **Synthetic corruption alone does not help.** Without MPG prompts in training, the validation IoU with MPG prompts
+  falls every epoch (0.387 → 0.37), so selection keeps the Phase-1 decoder; the last-epoch decoder is worse with real
+  prompts (MPG hybrid −0.010, MPG boxes −0.076) and unchanged on ground-truth prompts of its own mode (box + mask 0.881).
+  Hand-designed corruptions do not reproduce the errors of a real prompter.
+
+The robust decoder therefore does what it was trained for on synthetic errors, but SAM still does not exceed its
+prompter: the errors that remain after a good prompter — missed cyclones and the extent of rivers — cannot be corrected
+from a prompt that does not contain the information.
+
 ### 3.7 Prompt-free SAM without a prompter: learned static prompts
 
 The most minimal prompt-free variant learns K sparse prompt tokens per class (initialised from SAM's positive-point
@@ -494,6 +579,36 @@ Gulf-of-Mexico cyclone; they differ in the extents of the rivers and in small fa
 (e, g) fills each box with a river-shaped mask — including the false AR over the central North Pacific that the
 prompters hallucinated — and cuts rivers at the box borders; the hybrid prompt (f) follows the prompter's shape closely.
 The learned static prompts (h) mark every moist band. (A second example: `figures/maps_test_image_45.png`.)
+
+### 3.11 Evaluation-only improvements: ensembles, calibration, post-processing, iterative refinement
+
+All free parameters tuned on the 40 validation images (`prompter_bench/posthoc.py`, `06_posthoc/`,
+`tables/posthoc_infused_mlp1.tex`); Δ = paired bootstrap against the seed-0 prompter mask.
+
+| Prompter | single seed | 3-seed ensemble | + calibrated thresholds | + post-processing | SAM hybrid round 1 / 2 / 3 |
+|---|---|---|---|---|---|
+| MPG | 0.379 | **0.385** (Δ +0.006 [+0.001, +0.010]) | 0.383 | 0.384 | 0.369 / 0.366 / 0.359 |
+| MSF | 0.368 | 0.376 | 0.375 | 0.375 | 0.361 / 0.359 / 0.355 |
+| MSF + token gate | 0.362 | 0.368 | 0.367 | 0.362 | 0.354 / 0.351 / 0.345 |
+| LogReg, block 12 | 0.343 | 0.344 | 0.344 | 0.341 | 0.330 / 0.326 / 0.322 |
+| CG-Net (from scratch) | 0.369 | 0.380 | 0.382 | 0.381 | 0.368 / 0.364 / 0.359 |
+| MPG + raw fields | 0.375 | 0.382 | 0.380 | 0.382 | 0.369 / 0.365 / 0.358 |
+| **MPG + CG-Net (3 + 3 models)** | — | **0.389** (TC 0.363 / AR 0.416) | 0.391 | 0.388 | 0.370 / 0.367 / 0.362 |
+
+(mean FG IoU, test)
+
+- **Seed ensembles** add 0.006–0.011 for every non-linear prompter (+0.015 for end-to-end MPG, whose seeds differ most;
+  mainly TC for the SAM-feature prompters, both classes for CG-Net); the linear probe's seeds converge to the same
+  classifier and gain nothing.
+- **Threshold calibration and post-processing** (minimum blob size, TC latitude limit) chosen on 40 validation images do
+  not transfer to the test set (−0.005 … +0.002): the selected TC thresholds scatter between logit −1.0 and +2.75, i.e.
+  they fit validation noise.
+- **Iterative SAM refinement** (SAM's output fed back as the next prompt) loses in every round — the oracle finding
+  (Section 3.1) applied repeatedly.
+- **Ensembling across prompter families** (3 MPG + 3 CG-Net) gives the best mask of the study, 0.389. Relative to the
+  MPG ensemble the gain is in the TCs (+0.010 [−0.005, +0.024]); relative to the CG-Net ensemble it is significant
+  (+0.010 [+0.004, +0.016]). SAM-feature and raw-field prompters make partly different TC errors. (Six models vs. three;
+  the gain over the MPG ensemble, +0.004 [−0.005, +0.012], is not significant.)
 
 ---
 
@@ -546,9 +661,12 @@ decoder ignores weak dense evidence. (3) One dense prompt per class is sufficien
 For the prompt-free system, the prompter's own mask is the natural output (MPG: TC 0.344 / AR 0.413, mean IoU 0.567
 including background). SAM with hybrid prompts gives masks of statistically similar quality (−0.008 mean FG IoU) with
 smoother, SAM-style boundaries and adds 2 decoder calls per image. The contribution of the foundation model is thus
-the *encoder*: its adapted features let a 0.67 M-parameter head (or even a linear probe) match or beat a dedicated
-segmentation network; the promptable decoder is valuable for interactive use (Table 4.12: TC 0.72 / AR 0.63–0.64 with
-ground-truth boxes, which a human annotator could provide) but not as a refinement stage after an automatic prompter.
+the *encoder*: its adapted features let a 0.67 M-parameter head match a dedicated segmentation network trained under
+the same protocol (0.379 vs. 0.369–0.375; better for ARs by 0.013–0.018) and a linear probe come within ~0.03 of it.
+In cost, however, CG-Net needs 23 GFLOPs per image, encoder + MPG ~980: for a purely automatic system a well-trained
+small network is the cheaper choice at nearly the same quality, and the two are complementary (their ensemble: 0.389).
+The promptable decoder is valuable for interactive use (Table 4.12: TC 0.72 / AR 0.63–0.64 with ground-truth boxes,
+which a human annotator could provide) but not as a refinement stage after an automatic prompter.
 
 ### 4.5 Limitations and threats to validity
 
@@ -559,10 +677,12 @@ ground-truth boxes, which a human annotator could provide) but not as a refineme
   were run with one seed. Seed variance (std 0.001–0.01) is small compared with image-sampling variance.
 - **Two frozen checkpoints only.** Both are Infused-Token ViT-B models; LoRA-adapted or ViT-L encoders were not tested
   in Phase 2.
-- **Fixed thresholds.** All masks use logit 0 (probability 0.5); per-class thresholds tuned on validation could shift
-  individual numbers by ~0.01 but would apply to all prompters alike.
+- **Fixed thresholds.** All masks use logit 0 (probability 0.5). Per-class thresholds tuned on the validation images were
+  tested (Section 3.11) and changed the test IoU by −0.005 … +0.002.
 - **External prompter trained on all images.** The fine-tuned CG-Net saw all 398 training images (including our
-  validation images); this matters only for experiments that use its outputs on training images (Section 3.6).
+  validation images); this matters only for experiments that use its outputs on training images (Section 3.6). The
+  CG-Net re-trained from the official ClimateNet weights inherits this (its validation selection is optimistic, its test
+  numbers are not); the CG-Net trained from scratch is fully clean.
 - **Object metrics.** "Found" / "correct" require only an overlap of one pixel; stricter matching criteria (IoU ≥ 0.5)
   would lower all recalls and precisions but not change the comparison.
 - **Table 4.13.** We can show that the published SAM rows do not reproduce with the current code and checkpoints; we
@@ -577,11 +697,15 @@ ground-truth boxes, which a human annotator could provide) but not as a refineme
   10–20 % box error costs 0.1–0.3 IoU.
 - **RQ2.** The SAM rows of Table 4.13 do not reproduce; SAM prompted by CG-Net is slightly worse than CG-Net for every
   prompt type. The ranking of prompt types is confirmed.
-- **RQ3.** The new mask-prompt generator (0.67 M parameters, 5.7 GFLOPs) is the best prompter: TC 0.344 / AR 0.413, AR
-  +0.031 over the fine-tuned CG-Net and +0.011 mean FG IoU over the 1.41 M-parameter multi-scale fusion generator, at
-  122× fewer FLOPs. The token gate, label smoothing and end-to-end training do not help.
+- **RQ3.** The new mask-prompt generator (0.67 M parameters, 5.7 GFLOPs) is the best single prompter: TC 0.344 /
+  AR 0.413, +0.011 mean FG IoU over the 1.41 M-parameter multi-scale fusion generator at 122× fewer FLOPs, and AR
+  +0.031 over the stored fine-tuned CG-Net. Against CG-Net re-trained under the same protocol (0.369–0.375) it is better
+  only for ARs (+0.013 to +0.018); the overall difference is not significant. The token gate (and its CG-block
+  variant), label smoothing, end-to-end training and adding the raw fields do not help; a box head on SAM features is
+  far worse. Seed ensembles add ~0.006; an ensemble of MPG and CG-Net gives the best mask (0.389).
 - **RQ4.** SAM prompted by any automatic prompter is at best as good as that prompter. Neither training the prompter
-  through SAM nor fine-tuning the decoder on realistic, out-of-fold prompts changes this.
+  through SAM, nor fine-tuning the decoder on realistic out-of-fold prompts, nor training it to be robust to corrupted
+  prompts (robust to synthetic box errors, +0.005 with real prompts), nor iterative refinement changes this.
 - **RQ5.** ARs are found (> 90 %) but their extent is wrong; TCs are missed (one third) and falsely detected (about
   half of the predicted blobs). These are errors that a prompt-conditioned decoder cannot repair.
 
@@ -589,35 +713,30 @@ ground-truth boxes, which a human annotator could provide) but not as a refineme
 
 ## 6. Ideas for further experiments
 
-Ranked by expected benefit relative to effort; all fit into the existing `prompter_bench/` code.
+**Done in the final runs** (Sections 3.3, 3.6, 3.11): the decoder-side version of idea 1 (a prompt-robust decoder
+trained on corrupted and out-of-fold prompts — robust to synthetic errors, +0.005 with real prompts), threshold
+calibration and seed ensembling (ensemble +0.006, calibration no gain), object post-processing (no gain) and iterative
+SAM refinement (loses every round). Still open, ranked by expected benefit relative to effort:
 
-1. **Train Phase 1 with realistic prompts (highest expected impact, ~1 day).** Mix ground-truth prompts with corrupted
-   ones during Phase-1 training — jittered and enlarged boxes, dropped objects, *false boxes whose target is an empty
-   mask*, and prompts produced by an (out-of-fold) prompter. This is the only intervention that attacks the root cause
-   of Section 4.1: a decoder that has learned to say "nothing here" and to extend or shrink a prompt. Test it with the
-   oracle degradation study (Figure 6) — a better decoder should flatten those curves — and then with MPG prompts.
-2. **Threshold calibration and seed ensembling (cheap, ~1 hour, evaluation only).** Tune the TC and AR logit
-   thresholds on the validation images and average the logits of the three MPG seeds. Both are standard, cannot hurt
-   the protocol, and typically add 0.005–0.02 IoU; they also reduce the fragmentation seen in Table 3.
-3. **Object-level post-processing (cheap).** Remove predicted blobs below a size / probability threshold (tuned on
-   validation) and use the known latitude priors (TCs between 5° and 30°, Section 2.2.2) as a soft prior; the error
-   decomposition shows false objects cost 0.06–0.08 IoU for both classes.
-4. **Iterative SAM refinement (cheap, evaluation only).** Feed SAM's own low-resolution output back as the dense prompt
-   for one or two further rounds (SAM's native interactive loop). Given Section 3.3 it will likely not exceed the
-   prompter, but it is a standard ablation reviewers ask for.
-5. **Query-based prompt-free decoding (~2–3 days).** Replace the static prompts by *image-dependent* object queries
+1. **Ensemble / fuse the two prompter families (cheap).** The MPG + CG-Net ensemble is the best mask (0.389). A single
+   model with both inputs did *not* help (MPG + raw fields, −0.004), so the gain comes from model diversity, not from
+   the fields; a larger same-family ensemble (6 MPG seeds) is the missing control.
+2. **Train Phase 1 with realistic prompts (~1 day).** The robust decoder was trained only in Phase 2 (decoder parts,
+   frozen prompt encoder). Mixing corrupted and prompter prompts into Phase-1 training (encoder adapters and prompt
+   encoder trainable) is the stronger version. Given Section 3.6 the expected gain for automatic prompting is small; the
+   benefit would be a more forgiving interactive tool.
+3. **Query-based prompt-free decoding (~2–3 days).** Replace static prompts by *image-dependent* object queries
    (DETR / Mask2Former style): a small transformer on the image embedding predicts N query tokens with an objectness
-   score, and each query is decoded by the SAM decoder. This turns SAM into an instance segmenter and addresses the TC
-   detection errors with a matching-based (Hungarian) loss instead of a pixel loss.
-6. **Joint fine-tuning of encoder adapters and prompter (~1 day).** Unfreeze the infused-token adapters (and input
-   adapter) together with MPG, trained on the segmentation loss. The linear-probe result shows how much the encoder
-   already contributes; letting it adapt to the prompt-free objective may add more than any prompter change.
-7. **Longitude wrap-around and test-time augmentation (~0.5 day).** ClimateNet is periodic in longitude; circular
+   score, each decoded by the SAM decoder, trained with a matching (Hungarian) loss. This targets the TC detection
+   errors directly.
+4. **Joint fine-tuning of encoder adapters and prompter (~1 day).** Unfreeze the infused-token adapters (and input
+   adapter) together with MPG, trained on the segmentation loss; the linear-probe result shows how much the encoder
+   already contributes.
+5. **Longitude wrap-around and test-time augmentation (~0.5 day).** ClimateNet is periodic in longitude; circular
    padding in the prompter and averaging predictions over longitudinally rolled inputs (requires re-encoding) would fix
    ARs and TCs cut at the date line.
-8. **Stricter object metrics.** Report object recall / precision at IoU ≥ 0.3 / 0.5 (matched objects) and the event
-   counts per image, as done in ClimateNet papers; this makes the detection story in Section 3.4 comparable with the
-   literature.
+6. **Stricter object metrics.** Object recall / precision at IoU ≥ 0.3 / 0.5 (matched objects) and event counts per
+   image, as in ClimateNet papers.
 
 ---
 
@@ -662,6 +781,7 @@ deficiency with a palette validator.
 | 12 | `training_curves` | `_val`, `_loss` |
 | 13 | `efficiency` | — |
 | 14 | `decoder_adaptation` | `_test`, `_val` |
+| 14b | `robust_decoder` | `_box_size`, `_objects`, `_real_prompts` |
 | 15 | `cgnet_yolo` | `_tc`, `_ar` |
 | 16 | `second_checkpoint` | — |
 | 17 | `maps_test_image_17` (and `_45`) | `_gt`, `_cgnet`, `_msf`, `_mpg`, `_mpg_sam_box`, `_mpg_sam_hybrid`, `_cgnet_sam_box`, `_static` |
@@ -685,6 +805,11 @@ bash prompter_bench/run_extra.sh infused_mlp1                                  #
 bash prompter_bench/run_learned_prompt.sh infused_mlp1                         # learned static prompts
 .venv/bin/python prompter_bench/yolo_eval.py                                   # Section 3.8
 .venv/bin/python prompter_bench/evaluate.py --encoder infused_mlp1             # test evaluation
+bash prompter_bench/run_queue3.sh light 0; bash prompter_bench/run_heavy2.sh    # re-trained CG-Net, CG-block / shared token gate
+bash prompter_bench/run_fields.sh; bash prompter_bench/run_dethead2.sh         # MPG + raw fields, box head on SAM features
+bash prompter_bench/run_robust.sh; bash prompter_bench/run_robust2.sh          # prompt-robust decoders
+bash prompter_bench/run_robust_eval.sh                                         # oracle study + prompters with each decoder
+.venv/bin/python prompter_bench/posthoc.py --methods mpg_seg msf_seg 'mpg_seg+cgnet_scratch_seg'   # Section 3.11
 .venv/bin/python prompter_bench/speed.py                                       # FLOPs / latency
 .venv/bin/python prompter_bench/make_report.py                                 # tables, README
 .venv/bin/python prompter_bench/figures.py; .venv/bin/python prompter_bench/diagrams.py   # figures
@@ -693,3 +818,8 @@ bash prompter_bench/run_learned_prompt.sh infused_mlp1                         #
 Raw data: per-epoch logs `results/runs/<checkpoint>/<run>/log.csv`, checkpoints `best.pth`, test results with
 per-image counts `results/eval/<checkpoint>/<run>.json`, all tables `results/tables/`.
 Hardware: one NVIDIA A100 80 GB.
+
+**wandb.** Runs are logged offline (no API key on the training machine) to the project `climatesam-section-4.3`: every
+run trained with `--wandb` has its own run; the earlier runs were logged afterwards from their `log.csv`
+(`prompter_bench/wandb_log_existing.py runs`, tag `logged-after-training`), and one run `test_results` holds every test
+table (`wandb_log_existing.py tables`). Upload with `wandb login` and then `wandb sync wandb/offline-run-*`.

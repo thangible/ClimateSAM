@@ -20,6 +20,12 @@
 | Multi-scale fusion + token gate: SAM + box vs. prompter mask | +0.011 [+0.000, +0.022] | -0.017 [-0.022, -0.011] | -0.003 [-0.009, +0.004] | 0.22 |
 | Multi-scale fusion + token gate: SAM + hybrid vs. prompter mask | +0.005 [-0.000, +0.010] | -0.012 [-0.021, -0.003] | -0.004 [-0.009, +0.002] | 0.09 |
 | Multi-scale fusion + token gate: mean(prompter, SAM hybrid) vs. prompter mask | +0.005 [+0.002, +0.009] | -0.010 [-0.018, -0.002] | -0.002 [-0.007, +0.002] | 0.14 |
+| Multi-scale fusion + token gate, CG blocks: SAM + box vs. prompter mask | -0.036 [-0.058, -0.013] | -0.019 [-0.024, -0.015] | -0.027 [-0.040, -0.016] | 0.00 |
+| Multi-scale fusion + token gate, CG blocks: SAM + hybrid vs. prompter mask | -0.003 [-0.008, +0.003] | +0.037 [+0.031, +0.044] | +0.017 [+0.013, +0.022] | 1.00 |
+| Multi-scale fusion + token gate, CG blocks: mean(prompter, SAM hybrid) vs. prompter mask | -0.001 [-0.006, +0.004] | +0.037 [+0.031, +0.043] | +0.018 [+0.014, +0.022] | 1.00 |
+| Multi-scale fusion + token gate, shared weights: SAM + box vs. prompter mask | +0.006 [-0.004, +0.016] | -0.017 [-0.022, -0.012] | -0.005 [-0.012, +0.001] | 0.04 |
+| Multi-scale fusion + token gate, shared weights: SAM + hybrid vs. prompter mask | +0.001 [-0.006, +0.007] | -0.011 [-0.021, -0.002] | -0.005 [-0.011, +0.000] | 0.03 |
+| Multi-scale fusion + token gate, shared weights: mean(prompter, SAM hybrid) vs. prompter mask | +0.002 [-0.003, +0.007] | -0.009 [-0.018, -0.000] | -0.003 [-0.009, +0.001] | 0.09 |
 | Mask-prompt generator (segmentation loss): SAM + box vs. prompter mask | -0.002 [-0.009, +0.006] | -0.022 [-0.028, -0.016] | -0.012 [-0.017, -0.007] | 0.00 |
 | Mask-prompt generator (segmentation loss): SAM + hybrid vs. prompter mask | -0.002 [-0.007, +0.003] | -0.015 [-0.024, -0.006] | -0.008 [-0.014, -0.003] | 0.00 |
 | Mask-prompt generator (segmentation loss): mean(prompter, SAM hybrid) vs. prompter mask | -0.000 [-0.005, +0.005] | -0.013 [-0.021, -0.004] | -0.006 [-0.011, -0.001] | 0.01 |
@@ -35,13 +41,16 @@
 | Mask-prompt generator + raw CG-Net fields: SAM + box vs. prompter mask | +0.000 [-0.008, +0.008] | -0.023 [-0.028, -0.017] | -0.011 [-0.016, -0.007] | 0.00 |
 | Mask-prompt generator + raw CG-Net fields: SAM + hybrid vs. prompter mask | -0.003 [-0.007, +0.001] | -0.010 [-0.020, -0.001] | -0.007 [-0.012, -0.002] | 0.00 |
 | Mask-prompt generator + raw CG-Net fields: mean(prompter, SAM hybrid) vs. prompter mask | -0.001 [-0.004, +0.002] | -0.009 [-0.017, -0.000] | -0.005 [-0.009, -0.000] | 0.01 |
-| Box head on SAM features (YOLO-style): SAM + box vs. prompter mask | +0.011 [+0.005, +0.017] | +0.153 [+0.141, +0.165] | +0.082 [+0.075, +0.089] | 1.00 |
+| Box head on SAM features (YOLO-style): SAM + box vs. prompter mask | +0.012 [+0.007, +0.017] | +0.147 [+0.135, +0.158] | +0.079 [+0.072, +0.086] | 1.00 |
 | Mask-prompt generator (segmentation loss) vs. CG-Net (fine-tuned) (prompter masks) | -0.005 [-0.030, +0.020] | +0.031 [+0.020, +0.043] | +0.013 [-0.000, +0.027] | 0.97 |
 | Mask-prompt generator (segmentation loss) vs. CG-Net (trained from scratch on 358 images) (prompter masks) | +0.001 [-0.018, +0.023] | +0.018 [+0.009, +0.027] | +0.010 [-0.002, +0.022] | 0.95 |
 | Mask-prompt generator (segmentation loss) vs. CG-Net (re-trained on 358 images, official init.) (prompter masks) | -0.006 [-0.027, +0.015] | +0.013 [+0.003, +0.024] | +0.004 [-0.008, +0.016] | 0.72 |
 | CG-Net (trained from scratch on 358 images) vs. CG-Net (fine-tuned) (prompter masks) | -0.007 [-0.029, +0.016] | +0.013 [+0.003, +0.023] | +0.003 [-0.009, +0.016] | 0.69 |
 | Mask-prompt generator (segmentation loss) vs. Multi-scale fusion (prompter masks) | +0.011 [-0.003, +0.025] | +0.010 [+0.005, +0.016] | +0.011 [+0.003, +0.019] | 0.99 |
 | Mask-prompt generator (segmentation loss) vs. Logistic regression, ViT block 12 (prompter masks) | +0.044 [+0.025, +0.062] | +0.028 [+0.020, +0.036] | +0.036 [+0.025, +0.046] | 1.00 |
+| Multi-scale fusion + token gate, CG blocks vs. Multi-scale fusion + token gate (prompter masks) | -0.000 [-0.013, +0.014] | -0.046 [-0.060, -0.032] | -0.023 [-0.032, -0.015] | 0.00 |
+| Multi-scale fusion + token gate, shared weights vs. Multi-scale fusion + token gate (prompter masks) | +0.008 [+0.002, +0.013] | +0.003 [+0.000, +0.006] | +0.006 [+0.003, +0.009] | 1.00 |
+| Mask-prompt generator (segmentation loss) vs. Multi-scale fusion + token gate, shared weights (prompter masks) | +0.012 [-0.001, +0.026] | +0.011 [+0.005, +0.016] | +0.011 [+0.004, +0.020] | 1.00 |
 | Mask-prompt generator + raw CG-Net fields vs. Mask-prompt generator (segmentation loss) (prompter masks) | -0.004 [-0.012, +0.002] | -0.004 [-0.007, -0.001] | -0.004 [-0.008, -0.001] | 0.01 |
 | Mask-prompt generator + raw CG-Net fields vs. CG-Net (trained from scratch on 358 images) (prompter masks) | -0.003 [-0.023, +0.018] | +0.014 [+0.004, +0.024] | +0.006 [-0.006, +0.019] | 0.82 |
 | Multi-scale fusion + token gate vs. Multi-scale fusion (prompter masks) | -0.009 [-0.015, -0.003] | -0.004 [-0.005, -0.002] | -0.006 [-0.009, -0.003] | 0.00 |

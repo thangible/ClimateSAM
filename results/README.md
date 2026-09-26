@@ -26,7 +26,10 @@ data. Tables below are generated from the raw outputs (`prompter_bench/make_repo
    blobs are false (`tables/error_decomposition_*`).
 4. **Fine-tuning the decoder on generated prompts** (incl. out-of-fold prompts, so the decoder sees realistic prompt
    errors) teaches it to drop some false prompts (AR object precision 0.50 → 0.62) and closes most of the gap to the
-   prompter, but still does not exceed it. → `05_decoder_adaptation/`
+   prompter, but still does not exceed it. A **prompt-robust decoder** trained on corrupted prompts (loose / missing /
+   false boxes with empty targets) plus out-of-fold prompts is much more tolerant of synthetic box errors (GT boxes
+   +20 %: 0.474 → 0.56 mean FG IoU) but gains only +0.005 with real prompts and stays below the prompter.
+   → `05_decoder_adaptation/`, `figures/robust_decoder.png`
 5. **The best automatic system is a small prompter on the frozen ClimateSAM features.** The new 0.67 M-parameter
    mask-prompt generator reaches TC 0.344 / AR 0.413 on its own (3 seeds): AR +0.031 over the fine-tuned CG-Net
    (95 % CI [+0.020, +0.043]) at statistically equal TC, and +0.011 mean FG IoU over the thesis' 1.41 M-parameter
@@ -36,13 +39,21 @@ data. Tables below are generated from the raw outputs (`prompter_bench/make_repo
    TC 0.301 / AR 0.385 — the adapted encoder's features carry most of the signal. On the second frozen checkpoint
    the mask-prompt generator ties multi-scale fusion (mean FG IoU 0.370 vs. 0.370, one MSF seed); both stay ahead
    of CG-Net on AR and of the linear probe.
+   **But:** CG-Net re-trained under the same protocol (358 images, validation selection) is much better than the stored
+   fine-tuned checkpoint (0.375 from the official weights, 0.369 from scratch, vs. 0.366). Against it, MPG is better
+   only for ARs (+0.013 to +0.018, significant); the mean FG difference is not significant — and CG-Net needs 23 GFLOPs
+   instead of ~980 for encoder + MPG. An ensemble of MPG and CG-Net gives the best mask of the study (0.389).
+   → `06_posthoc/`
 6. **Prompt format matters, and in a checkpoint-dependent way.** Dense mask prompts must be logits for some
    checkpoints, and TCs vanish from mask-only prompts on others; a box plus a dense mask for TC and a dense mask for
    AR ("hybrid") is the robust choice (oracle: TC 0.872 / AR 0.920 vs. boxes 0.723 / 0.625).
-7. **Also negative:** a YOLO box head on CG-Net (TC ≈ 0.21 / AR ≈ 0.28 via SAM); learned static prompts without any
-   prompter (TC 0.24 / AR 0.33, thousands of fragments); the token gate on multi-scale fusion (−0.006 mean FG IoU);
-   training the generator end-to-end through SAM (−0.011) or two-stage (−0.004); label smoothing for the prompter
-   (−0.004); more ViT blocks as input (exploratory).
+7. **Also negative:** a YOLO box head on CG-Net (TC ≈ 0.21 / AR ≈ 0.28 via SAM) and on the SAM features (TC 0.11 /
+   AR 0.30 via SAM); learned static prompts without any prompter (TC 0.24 / AR 0.33, thousands of fragments); the token
+   gate on multi-scale fusion (−0.006 mean FG IoU), its CG-block variant (−0.023 vs. the token gate; the shared-weight
+   variant is +0.006, still below MPG); training the generator end-to-end through SAM (−0.011) or two-stage (−0.004);
+   label smoothing for the prompter (−0.004); adding the raw CG-Net fields to MPG (−0.004); per-class thresholds and
+   object post-processing tuned on validation (no gain on test); iterative SAM refinement (loses every round); more
+   ViT blocks as input (exploratory). Seed ensembles help a little (+0.006 for MPG).
 
 ## Folder guide
 
@@ -53,12 +64,15 @@ data. Tables below are generated from the raw outputs (`prompter_bench/make_repo
 | `02_table_4_13_recheck/` | corrected Table 4.13 (CG-Net as prompter), incl. the original-script path |
 | `03_cgnet_yolo_boxes/` | CG-Net with a YOLO box head as prompter |
 | `04_sam_feature_prompters/` | main comparison of all prompters (designs, bugs found, results) |
-| `05_decoder_adaptation/` | fine-tuning the decoder on generated prompts (in-sample vs. out-of-fold) |
+| `05_decoder_adaptation/` | fine-tuning the decoder on generated prompts (in-sample vs. out-of-fold) and the prompt-robust decoder |
+| `06_posthoc/` | evaluation-only: seed / cross-family ensembles, threshold calibration, post-processing, iterative SAM refinement |
 | `07_exploratory_runs/` | first mask-prompt-generator runs incl. failed designs, analysis of the old generator |
 | `tables/` | every table as LaTeX (`.tex`), CSV and Markdown |
 | `figures/` | every figure as PNG and PDF (diagrams, bar charts, curves, map examples) |
 | `runs/<encoder>/<run>/` | per run: `log.csv` (every epoch), `summary.json`, `best.pth` |
-| `eval/<encoder>/` | test results per run (`*.json`, incl. per-image counts), example masks (`*_examples.npz`), `all_results.csv` |
+| `eval/<encoder>/` | test results per run (`*.json`, incl. per-image counts), example masks (`*_examples.npz`), `all_results.csv`; `decoder/<decoder run>/`: the same with a replaced decoder |
+| `latex/` | LaTeX chapter: method additions, Section 4.3, Discussion, appendix (`main.tex` builds it standalone) |
+| `REPORT.md` | the full write-up (approach, results, analysis, ideas) |
 | `logs/` | stdout of every job |
 
 Encoders: `infused_mlp1` = primary (Infused Token, MLP 1.0, the model of Table 4.12 / Section 4.3),
@@ -138,6 +152,12 @@ selected on validation, mean ± std over 3 seeds (CG-Net: fixed checkpoints).
 | Multi-scale fusion + token gate | Prompter mask (no SAM) | 0.324 ± 0.001 | 0.399 ± 0.003 | 0.944 ± 0.002 | 0.556 ± 0.001 | 0.362 ± 0.001 |
 |  | SAM + box | 0.336 ± 0.002 | 0.382 ± 0.003 | 0.940 ± 0.002 | 0.553 ± 0.001 | 0.359 ± 0.002 |
 |  | SAM + hybrid | 0.329 ± 0.004 | 0.387 ± 0.006 | 0.949 ± 0.001 | 0.555 ± 0.003 | 0.358 ± 0.005 |
+| Multi-scale fusion + token gate, CG blocks | Prompter mask (no SAM) | 0.324 ± 0.017 | 0.355 ± 0.022 | 0.913 ± 0.014 | 0.531 ± 0.006 | 0.340 ± 0.003 |
+|  | SAM + box | 0.289 ± 0.010 | 0.335 ± 0.021 | 0.913 ± 0.012 | 0.512 ± 0.008 | 0.312 ± 0.006 |
+|  | SAM + hybrid | 0.322 ± 0.017 | 0.391 ± 0.001 | 0.934 ± 0.002 | 0.549 ± 0.005 | 0.356 ± 0.009 |
+| Multi-scale fusion + token gate, shared weights | Prompter mask (no SAM) | 0.332 ± 0.006 | 0.402 ± 0.001 | 0.943 ± 0.002 | 0.559 ± 0.002 | 0.367 ± 0.003 |
+|  | SAM + box | 0.338 ± 0.006 | 0.385 ± 0.002 | 0.940 ± 0.002 | 0.554 ± 0.003 | 0.362 ± 0.003 |
+|  | SAM + hybrid | 0.333 ± 0.004 | 0.391 ± 0.005 | 0.949 ± 0.001 | 0.558 ± 0.002 | 0.362 ± 0.003 |
 | Mask-prompt generator (segmentation loss) | Prompter mask (no SAM) | 0.344 ± 0.003 | 0.413 ± 0.001 | 0.944 ± 0.000 | 0.567 ± 0.002 | 0.379 ± 0.002 |
 |  | SAM + box | 0.343 ± 0.006 | 0.391 ± 0.001 | 0.940 ± 0.001 | 0.558 ± 0.002 | 0.367 ± 0.003 |
 |  | SAM + hybrid | 0.342 ± 0.004 | 0.398 ± 0.002 | 0.949 ± 0.000 | 0.563 ± 0.002 | 0.370 ± 0.002 |
@@ -153,8 +173,8 @@ selected on validation, mean ± std over 3 seeds (CG-Net: fixed checkpoints).
 | Mask-prompt generator + raw CG-Net fields | Prompter mask (no SAM) | 0.340 ± 0.001 | 0.409 ± 0.006 | 0.942 ± 0.004 | 0.564 ± 0.004 | 0.375 ± 0.004 |
 |  | SAM + box | 0.340 ± 0.001 | 0.387 ± 0.008 | 0.938 ± 0.004 | 0.555 ± 0.004 | 0.363 ± 0.004 |
 |  | SAM + hybrid | 0.337 ± 0.003 | 0.399 ± 0.006 | 0.949 ± 0.001 | 0.561 ± 0.002 | 0.368 ± 0.003 |
-| Box head on SAM features (YOLO-style) | Prompter mask (no SAM) | 0.084 | 0.168 | 0.718 | 0.323 | 0.126 |
-|  | SAM + box | 0.095 | 0.321 | 0.887 | 0.434 | 0.208 |
+| Box head on SAM features (YOLO-style) | Prompter mask (no SAM) | 0.094 ± 0.014 | 0.156 ± 0.016 | 0.693 ± 0.035 | 0.315 ± 0.012 | 0.125 ± 0.001 |
+|  | SAM + box | 0.107 ± 0.017 | 0.303 ± 0.025 | 0.884 ± 0.004 | 0.431 ± 0.004 | 0.205 ± 0.004 |
 | Learned static prompts (4 tokens / class) | SAM + learned static prompts | 0.237 ± 0.001 | 0.324 ± 0.008 | 0.926 ± 0.005 | 0.495 ± 0.004 | 0.280 ± 0.004 |
 | Learned static prompts (16 tokens / class) | SAM + learned static prompts | 0.248 | 0.329 | 0.930 | 0.502 | 0.288 |
 
@@ -172,12 +192,14 @@ TC / AR IoU for every way of turning the prompter output into SAM prompts:
 | Logistic regression, ViT block 12 | 0.30 / 0.39 | 0.29 / 0.36 | 0.28 / 0.35 | 0.25 / 0.31 | 0.28 / 0.35 | 0.04 / 0.37 | 0.29 / 0.36 | 0.30 / 0.37 | 0.30 / 0.37 | -- |
 | Multi-scale fusion | 0.33 / 0.40 | 0.34 / 0.38 | 0.33 / 0.38 | 0.30 / 0.35 | 0.33 / 0.37 | 0.31 / 0.39 | 0.33 / 0.38 | 0.33 / 0.39 | 0.33 / 0.39 | -- |
 | Multi-scale fusion + token gate | 0.32 / 0.40 | 0.34 / 0.38 | 0.32 / 0.38 | 0.28 / 0.34 | 0.32 / 0.37 | 0.26 / 0.39 | 0.33 / 0.38 | 0.33 / 0.39 | 0.33 / 0.39 | -- |
+| Multi-scale fusion + token gate, CG blocks | 0.32 / 0.35 | 0.29 / 0.34 | 0.27 / 0.30 | 0.26 / 0.28 | 0.28 / 0.30 | 0.18 / 0.39 | 0.31 / 0.38 | 0.32 / 0.39 | 0.32 / 0.39 | -- |
+| Multi-scale fusion + token gate, shared weights | 0.33 / 0.40 | 0.34 / 0.39 | 0.32 / 0.38 | 0.29 / 0.34 | 0.33 / 0.37 | 0.23 / 0.39 | 0.33 / 0.39 | 0.33 / 0.39 | 0.33 / 0.39 | -- |
 | Mask-prompt generator (segmentation loss) | 0.34 / 0.41 | 0.34 / 0.39 | 0.32 / 0.38 | 0.30 / 0.35 | 0.32 / 0.37 | 0.30 / 0.40 | 0.34 / 0.39 | 0.34 / 0.40 | 0.34 / 0.40 | -- |
 | Mask-prompt generator (end-to-end via SAM) | 0.33 / 0.38 | 0.34 / 0.38 | 0.32 / 0.38 | 0.29 / 0.31 | 0.32 / 0.36 | 0.30 / 0.40 | 0.33 / 0.38 | 0.33 / 0.40 | 0.33 / 0.40 | -- |
 | Mask-prompt generator (two-stage) | 0.34 / 0.41 | 0.33 / 0.39 | 0.31 / 0.36 | 0.29 / 0.33 | 0.32 / 0.36 | 0.29 / 0.41 | 0.33 / 0.40 | 0.34 / 0.41 | 0.34 / 0.41 | -- |
 | Mask-prompt generator (segmentation loss, label smoothing) | 0.34 / 0.41 | 0.34 / 0.39 | 0.32 / 0.37 | 0.31 / 0.35 | 0.33 / 0.37 | 0.29 / 0.40 | 0.33 / 0.40 | 0.33 / 0.40 | 0.34 / 0.40 | -- |
 | Mask-prompt generator + raw CG-Net fields | 0.34 / 0.41 | 0.34 / 0.39 | 0.32 / 0.37 | 0.30 / 0.35 | 0.32 / 0.37 | 0.30 / 0.40 | 0.34 / 0.39 | 0.34 / 0.40 | 0.34 / 0.40 | -- |
-| Box head on SAM features (YOLO-style) | 0.08 / 0.17 | 0.10 / 0.32 | -- | -- | -- | -- | -- | -- | -- | -- |
+| Box head on SAM features (YOLO-style) | 0.09 / 0.16 | 0.11 / 0.30 | -- | -- | -- | -- | -- | -- | -- | -- |
 | Learned static prompts (4 tokens / class) | -- | -- | -- | -- | -- | -- | -- | -- | -- | 0.24 / 0.32 |
 | Learned static prompts (16 tokens / class) | -- | -- | -- | -- | -- | -- | -- | -- | -- | 0.25 / 0.33 |
 
@@ -206,6 +228,12 @@ Paired bootstrap over the test images (seeds pooled):
 | Multi-scale fusion + token gate: SAM + box vs. prompter mask | +0.011 [+0.000, +0.022] | -0.017 [-0.022, -0.011] | -0.003 [-0.009, +0.004] | 0.22 |
 | Multi-scale fusion + token gate: SAM + hybrid vs. prompter mask | +0.005 [-0.000, +0.010] | -0.012 [-0.021, -0.003] | -0.004 [-0.009, +0.002] | 0.09 |
 | Multi-scale fusion + token gate: mean(prompter, SAM hybrid) vs. prompter mask | +0.005 [+0.002, +0.009] | -0.010 [-0.018, -0.002] | -0.002 [-0.007, +0.002] | 0.14 |
+| Multi-scale fusion + token gate, CG blocks: SAM + box vs. prompter mask | -0.036 [-0.058, -0.013] | -0.019 [-0.024, -0.015] | -0.027 [-0.040, -0.016] | 0.00 |
+| Multi-scale fusion + token gate, CG blocks: SAM + hybrid vs. prompter mask | -0.003 [-0.008, +0.003] | +0.037 [+0.031, +0.044] | +0.017 [+0.013, +0.022] | 1.00 |
+| Multi-scale fusion + token gate, CG blocks: mean(prompter, SAM hybrid) vs. prompter mask | -0.001 [-0.006, +0.004] | +0.037 [+0.031, +0.043] | +0.018 [+0.014, +0.022] | 1.00 |
+| Multi-scale fusion + token gate, shared weights: SAM + box vs. prompter mask | +0.006 [-0.004, +0.016] | -0.017 [-0.022, -0.012] | -0.005 [-0.012, +0.001] | 0.04 |
+| Multi-scale fusion + token gate, shared weights: SAM + hybrid vs. prompter mask | +0.001 [-0.006, +0.007] | -0.011 [-0.021, -0.002] | -0.005 [-0.011, +0.000] | 0.03 |
+| Multi-scale fusion + token gate, shared weights: mean(prompter, SAM hybrid) vs. prompter mask | +0.002 [-0.003, +0.007] | -0.009 [-0.018, -0.000] | -0.003 [-0.009, +0.001] | 0.09 |
 | Mask-prompt generator (segmentation loss): SAM + box vs. prompter mask | -0.002 [-0.009, +0.006] | -0.022 [-0.028, -0.016] | -0.012 [-0.017, -0.007] | 0.00 |
 | Mask-prompt generator (segmentation loss): SAM + hybrid vs. prompter mask | -0.002 [-0.007, +0.003] | -0.015 [-0.024, -0.006] | -0.008 [-0.014, -0.003] | 0.00 |
 | Mask-prompt generator (segmentation loss): mean(prompter, SAM hybrid) vs. prompter mask | -0.000 [-0.005, +0.005] | -0.013 [-0.021, -0.004] | -0.006 [-0.011, -0.001] | 0.01 |
@@ -221,13 +249,16 @@ Paired bootstrap over the test images (seeds pooled):
 | Mask-prompt generator + raw CG-Net fields: SAM + box vs. prompter mask | +0.000 [-0.008, +0.008] | -0.023 [-0.028, -0.017] | -0.011 [-0.016, -0.007] | 0.00 |
 | Mask-prompt generator + raw CG-Net fields: SAM + hybrid vs. prompter mask | -0.003 [-0.007, +0.001] | -0.010 [-0.020, -0.001] | -0.007 [-0.012, -0.002] | 0.00 |
 | Mask-prompt generator + raw CG-Net fields: mean(prompter, SAM hybrid) vs. prompter mask | -0.001 [-0.004, +0.002] | -0.009 [-0.017, -0.000] | -0.005 [-0.009, -0.000] | 0.01 |
-| Box head on SAM features (YOLO-style): SAM + box vs. prompter mask | +0.011 [+0.005, +0.017] | +0.153 [+0.141, +0.165] | +0.082 [+0.075, +0.089] | 1.00 |
+| Box head on SAM features (YOLO-style): SAM + box vs. prompter mask | +0.012 [+0.007, +0.017] | +0.147 [+0.135, +0.158] | +0.079 [+0.072, +0.086] | 1.00 |
 | Mask-prompt generator (segmentation loss) vs. CG-Net (fine-tuned) (prompter masks) | -0.005 [-0.030, +0.020] | +0.031 [+0.020, +0.043] | +0.013 [-0.000, +0.027] | 0.97 |
 | Mask-prompt generator (segmentation loss) vs. CG-Net (trained from scratch on 358 images) (prompter masks) | +0.001 [-0.018, +0.023] | +0.018 [+0.009, +0.027] | +0.010 [-0.002, +0.022] | 0.95 |
 | Mask-prompt generator (segmentation loss) vs. CG-Net (re-trained on 358 images, official init.) (prompter masks) | -0.006 [-0.027, +0.015] | +0.013 [+0.003, +0.024] | +0.004 [-0.008, +0.016] | 0.72 |
 | CG-Net (trained from scratch on 358 images) vs. CG-Net (fine-tuned) (prompter masks) | -0.007 [-0.029, +0.016] | +0.013 [+0.003, +0.023] | +0.003 [-0.009, +0.016] | 0.69 |
 | Mask-prompt generator (segmentation loss) vs. Multi-scale fusion (prompter masks) | +0.011 [-0.003, +0.025] | +0.010 [+0.005, +0.016] | +0.011 [+0.003, +0.019] | 0.99 |
 | Mask-prompt generator (segmentation loss) vs. Logistic regression, ViT block 12 (prompter masks) | +0.044 [+0.025, +0.062] | +0.028 [+0.020, +0.036] | +0.036 [+0.025, +0.046] | 1.00 |
+| Multi-scale fusion + token gate, CG blocks vs. Multi-scale fusion + token gate (prompter masks) | -0.000 [-0.013, +0.014] | -0.046 [-0.060, -0.032] | -0.023 [-0.032, -0.015] | 0.00 |
+| Multi-scale fusion + token gate, shared weights vs. Multi-scale fusion + token gate (prompter masks) | +0.008 [+0.002, +0.013] | +0.003 [+0.000, +0.006] | +0.006 [+0.003, +0.009] | 1.00 |
+| Mask-prompt generator (segmentation loss) vs. Multi-scale fusion + token gate, shared weights (prompter masks) | +0.012 [-0.001, +0.026] | +0.011 [+0.005, +0.016] | +0.011 [+0.004, +0.020] | 1.00 |
 | Mask-prompt generator + raw CG-Net fields vs. Mask-prompt generator (segmentation loss) (prompter masks) | -0.004 [-0.012, +0.002] | -0.004 [-0.007, -0.001] | -0.004 [-0.008, -0.001] | 0.01 |
 | Mask-prompt generator + raw CG-Net fields vs. CG-Net (trained from scratch on 358 images) (prompter masks) | -0.003 [-0.023, +0.018] | +0.014 [+0.004, +0.024] | +0.006 [-0.006, +0.019] | 0.82 |
 | Multi-scale fusion + token gate vs. Multi-scale fusion (prompter masks) | -0.009 [-0.015, -0.003] | -0.004 [-0.005, -0.002] | -0.006 [-0.009, -0.003] | 0.00 |
@@ -253,12 +284,13 @@ Object-level detection of the prompter masks:
 | Logistic regression, ViT block 12 | 0.739 ± 0.012 | 0.419 ± 0.018 | 0.966 ± 0.004 | 0.418 ± 0.010 | 5.1 | 17.6 |
 | Multi-scale fusion | 0.670 ± 0.030 | 0.529 ± 0.061 | 0.956 ± 0.001 | 0.482 ± 0.017 | 4.0 | 17.4 |
 | Multi-scale fusion + token gate | 0.670 ± 0.020 | 0.448 ± 0.016 | 0.960 ± 0.005 | 0.444 ± 0.025 | 4.7 | 20.3 |
+| Multi-scale fusion + token gate, CG blocks | 0.698 ± 0.040 | 0.492 ± 0.073 | 0.978 ± 0.007 | 0.331 ± 0.060 | 4.2 | 20.5 |
+| Multi-scale fusion + token gate, shared weights | 0.680 ± 0.018 | 0.472 ± 0.018 | 0.956 ± 0.005 | 0.459 ± 0.013 | 4.4 | 17.7 |
 | Mask-prompt generator (segmentation loss) | 0.661 ± 0.009 | 0.563 ± 0.031 | 0.951 ± 0.001 | 0.514 ± 0.024 | 3.5 | 14.9 |
 | Mask-prompt generator (end-to-end via SAM) | 0.652 ± 0.012 | 0.521 ± 0.050 | 0.963 ± 0.007 | 0.362 ± 0.107 | 3.7 | 90.0 |
 | Mask-prompt generator (two-stage) | 0.667 ± 0.006 | 0.546 ± 0.039 | 0.962 ± 0.003 | 0.430 ± 0.008 | 3.7 | 18.0 |
 | Mask-prompt generator (segmentation loss, label smoothing) | 0.648 ± 0.015 | 0.558 ± 0.026 | 0.953 ± 0.010 | 0.495 ± 0.007 | 3.5 | 15.2 |
 | Mask-prompt generator + raw CG-Net fields | 0.657 ± 0.009 | 0.516 ± 0.013 | 0.950 ± 0.010 | 0.502 ± 0.054 | 3.8 | 14.9 |
-| Box head on SAM features (YOLO-style) | nan | nan | nan | nan | nan | nan |
 
 
 Where the IoU is lost (IoU of the prompter mask after fixing one error type):
@@ -273,6 +305,8 @@ Where the IoU is lost (IoU of the prompter mask after fixing one error type):
 | Logistic regression, ViT block 12 | TC | 0.306 ± 0.003 | 0.393 ± 0.012 | 0.401 ± 0.007 | 0.514 ± 0.002 | 0.645 ± 0.012 |
 | Multi-scale fusion | TC | 0.333 ± 0.002 | 0.405 ± 0.011 | 0.461 ± 0.018 | 0.560 ± 0.011 | 0.651 ± 0.005 |
 | Multi-scale fusion + token gate | TC | 0.325 ± 0.001 | 0.395 ± 0.004 | 0.446 ± 0.009 | 0.542 ± 0.008 | 0.657 ± 0.005 |
+| Multi-scale fusion + token gate, CG blocks | TC | 0.328 ± 0.017 | 0.405 ± 0.004 | 0.436 ± 0.030 | 0.539 ± 0.004 | 0.657 ± 0.035 |
+| Multi-scale fusion + token gate, shared weights | TC | 0.332 ± 0.006 | 0.405 ± 0.015 | 0.450 ± 0.005 | 0.548 ± 0.008 | 0.656 ± 0.012 |
 | Mask-prompt generator (segmentation loss) | TC | 0.345 ± 0.005 | 0.420 ± 0.002 | 0.481 ± 0.015 | 0.585 ± 0.009 | 0.636 ± 0.012 |
 | Mask-prompt generator (end-to-end via SAM) | TC | 0.337 ± 0.008 | 0.410 ± 0.005 | 0.474 ± 0.012 | 0.577 ± 0.010 | 0.637 ± 0.019 |
 | Mask-prompt generator (two-stage) | TC | 0.340 ± 0.005 | 0.415 ± 0.013 | 0.470 ± 0.003 | 0.573 ± 0.014 | 0.641 ± 0.019 |
@@ -286,6 +320,8 @@ Where the IoU is lost (IoU of the prompter mask after fixing one error type):
 | Logistic regression, ViT block 12 | AR | 0.385 ± 0.001 | 0.463 ± 0.002 | 0.390 ± 0.002 | 0.468 ± 0.002 | 0.785 ± 0.004 |
 | Multi-scale fusion | AR | 0.403 ± 0.004 | 0.468 ± 0.009 | 0.411 ± 0.005 | 0.478 ± 0.011 | 0.818 ± 0.017 |
 | Multi-scale fusion + token gate | AR | 0.399 ± 0.003 | 0.462 ± 0.009 | 0.407 ± 0.001 | 0.471 ± 0.007 | 0.824 ± 0.016 |
+| Multi-scale fusion + token gate, CG blocks | AR | 0.355 ± 0.022 | 0.438 ± 0.023 | 0.356 ± 0.023 | 0.440 ± 0.024 | 0.706 ± 0.035 |
+| Multi-scale fusion + token gate, shared weights | AR | 0.402 ± 0.001 | 0.469 ± 0.004 | 0.411 ± 0.002 | 0.479 ± 0.002 | 0.815 ± 0.009 |
 | Mask-prompt generator (segmentation loss) | AR | 0.413 ± 0.001 | 0.479 ± 0.002 | 0.423 ± 0.001 | 0.490 ± 0.002 | 0.817 ± 0.004 |
 | Mask-prompt generator (end-to-end via SAM) | AR | 0.378 ± 0.019 | 0.451 ± 0.018 | 0.383 ± 0.020 | 0.456 ± 0.017 | 0.801 ± 0.053 |
 | Mask-prompt generator (two-stage) | AR | 0.409 ± 0.002 | 0.485 ± 0.003 | 0.415 ± 0.003 | 0.491 ± 0.002 | 0.789 ± 0.013 |
@@ -303,12 +339,14 @@ Size and training cost:
 | Logistic regression, ViT block 12 | 1,538 | 2.0 | 39 |
 | Multi-scale fusion | 1,406,474 | 82.6 | 38 |
 | Multi-scale fusion + token gate | 1,415,180 | 46.0 | 39 |
+| Multi-scale fusion + token gate, CG blocks | 1,306,724 | 151.1 | 8 |
+| Multi-scale fusion + token gate, shared weights | 392,198 | 45.8 | 32 |
 | Mask-prompt generator (segmentation loss) | 671,138 | 3.7 | 29 |
 | Mask-prompt generator (end-to-end via SAM) | 671,138 | 26.4 | 23 |
 | Mask-prompt generator (two-stage) | 671,138 | 12.4 | 4 |
 | Mask-prompt generator (segmentation loss, label smoothing) | 671,138 | 4.2 | 29 |
 | Mask-prompt generator + raw CG-Net fields | 686,306 | 5.9 | 29 |
-| Box head on SAM features (YOLO-style) | 608,778 | 100.2 | 26 |
+| Box head on SAM features (YOLO-style) | 608,778 | 68.6 | 20 |
 | Learned static prompts (4 tokens / class) | 2,048 | 12.6 | 48 |
 | Learned static prompts (16 tokens / class) | 8,192 | 14.2 | 48 |
 
@@ -317,13 +355,16 @@ Inference cost (`04_sam_feature_prompters/speed.csv`):
 
 | Model | Parameters | GFLOPs / image | Latency (ms, A100, batch 1) |
 |---|---|---|---|
-| CG-Net | 494,232 | 22.93 | 8.89 |
+| CG-Net | 494,232 | 22.93 | 9.41 |
 | Logistic regression | 1,538 | 0.01 | 0.05 |
-| Multi-scale fusion | 1,406,474 | 702.36 | 36.13 |
-| Multi-scale fusion + token gate | 1,415,180 | 702.89 | 38.12 |
-| Mask-prompt generator | 671,138 | 5.74 | 0.89 |
-| (frozen ClimateSAM encoder, for reference) | 95,987,456 | 973.25 | 122.39 |
-| (one SAM decoder call, one box, for reference) | 5,269,508 | 16.80 | 3.39 |
+| Multi-scale fusion | 1,406,474 | 702.36 | 36.36 |
+| Multi-scale fusion + token gate | 1,415,180 | 702.89 | 38.48 |
+| Multi-scale fusion + token gate, CG blocks | 1,306,724 | 452.44 | 62.83 |
+| Multi-scale fusion + token gate, shared weights | 392,198 | 612.43 | 35.38 |
+| Mask-prompt generator | 671,138 | 5.74 | 0.94 |
+| Mask-prompt generator + raw fields | 686,306 | 7.14 | 1.14 |
+| (frozen ClimateSAM encoder, for reference) | 95,987,456 | 973.25 | 123.15 |
+| (one SAM decoder call, one box, for reference) | 5,269,508 | 16.80 | 3.55 |
 
 
 ![](figures/sam_minus_prompter.png)
@@ -358,6 +399,39 @@ Architecture of the mask-prompt generator and of the benchmark:
 |  | SAM, adapted decoder | 0.347 | 0.405 | 0.376 | 0.65 / 0.60 | 0.94 / 0.64 |
 
 
+Prompt-robust decoders (mean FG IoU; ground-truth prompts with controlled errors and real prompters):
+
+| Decoder | GT box | GT box +20% | GT box + 1 false | GT box + mask | MPG: box | MPG: hybrid | CG-Net: box | CG-Net: hybrid |
+|---|---|---|---|---|---|---|---|---|
+| Phase-1 decoder | 0.674 | 0.474 | 0.576 | 0.877 | 0.367 | 0.370 | 0.355 | 0.367 |
+| adapted to MPG hybrid prompts (OOF) | 0.644 | 0.468 | 0.557 | 0.851 | 0.359 | 0.375 | 0.342 | 0.365 |
+| adapted to MPG boxes (OOF) | 0.634 | 0.551 | 0.609 | 0.803 | 0.372 | 0.364 | 0.366 | 0.367 |
+| prompt-robust, box | 0.630 | 0.559 | 0.609 | 0.838 | 0.371 | 0.360 | 0.363 | 0.368 |
+| prompt-robust, box (seed 1) | 0.636 | 0.564 | 0.608 | 0.847 | 0.372 | 0.364 | 0.365 | 0.369 |
+| prompt-robust, hybrid | 0.592 | 0.511 | 0.524 | 0.856 | 0.332 | 0.375 | 0.320 | 0.367 |
+| prompt-robust, hybrid (seed 1) | 0.548 | 0.527 | 0.503 | 0.867 | 0.317 | 0.376 | 0.309 | 0.369 |
+| prompt-robust, hybrid, corrupted GT only (selected: epoch 0) | 0.674 | 0.474 | 0.576 | 0.877 | 0.367 | 0.370 | 0.355 | 0.367 |
+| prompt-robust, hybrid, corrupted GT only (last epoch) | 0.517 | 0.468 | 0.477 | 0.881 | 0.291 | 0.360 | 0.287 | 0.367 |
+
+
+![](figures/robust_decoder.png)
+
+Ground-truth prompts with controlled errors, every decoder (TC / AR IoU):
+
+| Ground-truth prompt | MLP 1.0 | MLP 0.5 | adapted to MPG hybrid prompts (OOF) | adapted to MPG boxes (OOF) | prompt-robust, box | prompt-robust, box (seed 1) | prompt-robust, hybrid | prompt-robust, hybrid (seed 1) | prompt-robust, hybrid, corrupted GT only (selected: epoch 0) | prompt-robust, hybrid, corrupted GT only (last epoch) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| tight box | 0.72 / 0.62 | 0.73 / 0.65 | 0.70 / 0.59 | 0.68 / 0.59 | 0.68 / 0.58 | 0.68 / 0.59 | 0.72 / 0.46 | 0.70 / 0.39 | 0.72 / 0.62 | 0.71 / 0.32 |
+| box enlarged 20% | 0.46 / 0.48 | 0.44 / 0.49 | 0.45 / 0.49 | 0.59 / 0.52 | 0.60 / 0.52 | 0.61 / 0.52 | 0.54 / 0.48 | 0.61 / 0.44 | 0.46 / 0.48 | 0.62 / 0.32 |
+| box shrunk 20% | 0.43 / 0.32 | 0.43 / 0.31 | 0.48 / 0.29 | 0.46 / 0.37 | 0.38 / 0.34 | 0.43 / 0.36 | 0.43 / 0.20 | 0.42 / 0.18 | 0.43 / 0.32 | 0.43 / 0.16 |
+| box, 25% of objects not prompted | 0.55 / 0.48 | 0.55 / 0.50 | 0.54 / 0.45 | 0.50 / 0.46 | 0.50 / 0.45 | 0.50 / 0.46 | 0.54 / 0.34 | 0.52 / 0.30 | 0.55 / 0.48 | 0.52 / 0.24 |
+| box + 1 false box per class | 0.57 / 0.58 | 0.58 / 0.58 | 0.56 / 0.55 | 0.64 / 0.58 | 0.66 / 0.56 | 0.65 / 0.56 | 0.60 / 0.45 | 0.62 / 0.39 | 0.57 / 0.58 | 0.64 / 0.32 |
+| box + 3 false boxes per class | 0.41 / 0.48 | 0.41 / 0.47 | 0.41 / 0.47 | 0.60 / 0.54 | 0.63 / 0.50 | 0.63 / 0.50 | 0.46 / 0.41 | 0.54 / 0.36 | 0.41 / 0.48 | 0.55 / 0.31 |
+| mask logits  ± 10 | 0.77 / 0.92 | 0.23 / 0.90 | 0.73 / 0.88 | 0.62 / 0.88 | 0.15 / 0.86 | 0.11 / 0.90 | 0.54 / 0.90 | 0.00 / 0.92 | 0.77 / 0.92 | 0.00 / 0.92 |
+| mask eroded 5 px | 0.61 / 0.86 | 0.16 / 0.86 | 0.57 / 0.82 | 0.48 / 0.80 | 0.09 / 0.79 | 0.06 / 0.85 | 0.39 / 0.84 | 0.00 / 0.86 | 0.61 / 0.86 | 0.00 / 0.84 |
+| mask dilated 5 px | 0.85 / 0.89 | 0.32 / 0.88 | 0.83 / 0.89 | 0.76 / 0.90 | 0.21 / 0.89 | 0.16 / 0.88 | 0.72 / 0.90 | 0.00 / 0.90 | 0.85 / 0.89 | 0.00 / 0.91 |
+| box + mask logits  ± 10 | 0.87 / 0.88 | 0.86 / 0.87 | 0.87 / 0.83 | 0.84 / 0.77 | 0.82 / 0.86 | 0.84 / 0.86 | 0.88 / 0.83 | 0.86 / 0.87 | 0.87 / 0.88 | 0.88 / 0.88 |
+
+
 Second checkpoint:
 
 | Prompter, prompts, training prompts | Output | TC IoU | AR IoU | Mean FG IoU | TC recall / prec. | AR recall / prec. |
@@ -371,6 +445,102 @@ Second checkpoint:
 | Mask-prompt generator, hybrid, out-of-fold | prompter mask | 0.337 | 0.414 | 0.376 |  |  |
 |  | SAM, Phase-1 decoder | 0.339 | 0.413 | 0.376 | 0.62 / 0.56 | 0.92 / 0.63 |
 |  | SAM, adapted decoder | 0.338 | 0.416 | 0.377 | 0.63 / 0.55 | 0.94 / 0.62 |
+
+
+## 4b. Evaluation-only improvements (`06_posthoc/`)
+
+| Prompter | Variant | TC IoU | AR IoU | Mean FG IoU | Δ FG vs. seed 0 [95% CI] |
+|---|---|---|---|---|---|
+| CG-Net (trained from scratch on 358 images) | single seed (mean of seeds) | 0.343 | 0.394 | 0.369 | -- |
+|  | single seed, calibrated (mean of seeds) | 0.342 | 0.397 | 0.370 | -- |
+|  | ensemble | 0.352 | 0.408 | 0.380 | +0.005 [-0.002, +0.012] |
+|  | ensemble, calibrated | 0.354 | 0.410 | 0.382 | +0.007 [+0.001, +0.013] |
+|  | ensemble, calibrated, post-processed | 0.351 | 0.410 | 0.381 | +0.006 [-0.003, +0.015] |
+|  | SAM hybrid, round 1 | 0.343 | 0.392 | 0.368 | -0.007 [-0.018, +0.003] |
+|  | SAM hybrid, round 2 | 0.334 | 0.394 | 0.364 | -0.011 [-0.022, +0.000] |
+|  | SAM hybrid, round 3 | 0.323 | 0.394 | 0.359 | -0.016 [-0.028, -0.003] |
+|  | thresholds TC -1.00 / AR -0.75; min. blob 800 / 800 px; max. TC latitude 90° |  |  |  |  |
+| Logistic regression, ViT block 12 | single seed (mean of seeds) | 0.301 | 0.385 | 0.343 | -- |
+|  | single seed, calibrated (mean of seeds) | 0.300 | 0.385 | 0.343 | -- |
+|  | ensemble | 0.302 | 0.386 | 0.344 | -0.001 [-0.002, +0.001] |
+|  | ensemble, calibrated | 0.302 | 0.385 | 0.344 | -0.001 [-0.003, +0.002] |
+|  | ensemble, calibrated, post-processed | 0.291 | 0.390 | 0.341 | -0.004 [-0.016, +0.009] |
+|  | SAM hybrid, round 1 | 0.292 | 0.368 | 0.330 | -0.014 [-0.027, -0.002] |
+|  | SAM hybrid, round 2 | 0.285 | 0.368 | 0.326 | -0.018 [-0.031, -0.005] |
+|  | SAM hybrid, round 3 | 0.275 | 0.368 | 0.322 | -0.023 [-0.037, -0.008] |
+|  | thresholds TC +0.25 / AR +0.25; min. blob 800 / 1600 px; max. TC latitude 45° |  |  |  |  |
+| Multi-scale fusion | single seed (mean of seeds) | 0.333 | 0.403 | 0.368 | -- |
+|  | single seed, calibrated (mean of seeds) | 0.333 | 0.404 | 0.369 | -- |
+|  | ensemble | 0.344 | 0.408 | 0.376 | +0.011 [+0.006, +0.017] |
+|  | ensemble, calibrated | 0.342 | 0.408 | 0.375 | +0.010 [+0.005, +0.015] |
+|  | ensemble, calibrated, post-processed | 0.342 | 0.409 | 0.375 | +0.011 [+0.006, +0.016] |
+|  | SAM hybrid, round 1 | 0.336 | 0.385 | 0.361 | -0.004 [-0.010, +0.002] |
+|  | SAM hybrid, round 2 | 0.329 | 0.389 | 0.359 | -0.006 [-0.013, +0.000] |
+|  | SAM hybrid, round 3 | 0.321 | 0.389 | 0.355 | -0.010 [-0.018, -0.002] |
+|  | thresholds TC +2.75 / AR +0.00; min. blob 50 / 400 px; max. TC latitude 90° |  |  |  |  |
+| Multi-scale fusion + token gate | single seed (mean of seeds) | 0.324 | 0.399 | 0.362 | -- |
+|  | single seed, calibrated (mean of seeds) | 0.323 | 0.401 | 0.362 | -- |
+|  | ensemble | 0.333 | 0.403 | 0.368 | +0.006 [+0.003, +0.009] |
+|  | ensemble, calibrated | 0.329 | 0.405 | 0.367 | +0.005 [+0.001, +0.009] |
+|  | ensemble, calibrated, post-processed | 0.319 | 0.405 | 0.362 | +0.000 [-0.010, +0.011] |
+|  | SAM hybrid, round 1 | 0.316 | 0.391 | 0.354 | -0.008 [-0.020, +0.003] |
+|  | SAM hybrid, round 2 | 0.308 | 0.393 | 0.351 | -0.011 [-0.024, +0.001] |
+|  | SAM hybrid, round 3 | 0.298 | 0.392 | 0.345 | -0.017 [-0.031, -0.004] |
+|  | thresholds TC +1.75 / AR -0.25; min. blob 800 / 400 px; max. TC latitude 90° |  |  |  |  |
+| Mask-prompt generator (segmentation loss) | single seed (mean of seeds) | 0.344 | 0.413 | 0.379 | -- |
+|  | single seed, calibrated (mean of seeds) | 0.343 | 0.412 | 0.378 | -- |
+|  | ensemble | 0.353 | 0.418 | 0.385 | +0.006 [+0.001, +0.010] |
+|  | ensemble, calibrated | 0.349 | 0.417 | 0.383 | +0.003 [-0.002, +0.009] |
+|  | ensemble, calibrated, post-processed | 0.349 | 0.418 | 0.384 | +0.004 [-0.004, +0.012] |
+|  | SAM hybrid, round 1 | 0.343 | 0.396 | 0.369 | -0.010 [-0.020, +0.000] |
+|  | SAM hybrid, round 2 | 0.334 | 0.397 | 0.366 | -0.014 [-0.025, -0.003] |
+|  | SAM hybrid, round 3 | 0.321 | 0.396 | 0.359 | -0.021 [-0.033, -0.009] |
+|  | thresholds TC +2.00 / AR +0.25; min. blob 800 / 200 px; max. TC latitude 90° |  |  |  |  |
+| Mask-prompt generator (segmentation loss) + CG-Net (trained from scratch on 358 images) | single seed (mean of seeds) | 0.344 | 0.404 | 0.374 | -- |
+|  | single seed, calibrated (mean of seeds) | 0.342 | 0.405 | 0.374 | -- |
+|  | ensemble | 0.363 | 0.416 | 0.389 | +0.010 [-0.000, +0.019] |
+|  | ensemble, calibrated | 0.365 | 0.417 | 0.391 | +0.011 [+0.002, +0.020] |
+|  | ensemble, calibrated, post-processed | 0.358 | 0.417 | 0.388 | +0.008 [-0.004, +0.019] |
+|  | SAM hybrid, round 1 | 0.351 | 0.389 | 0.370 | -0.010 [-0.023, +0.002] |
+|  | SAM hybrid, round 2 | 0.343 | 0.391 | 0.367 | -0.013 [-0.026, +0.000] |
+|  | SAM hybrid, round 3 | 0.333 | 0.392 | 0.362 | -0.018 [-0.031, -0.004] |
+|  | thresholds TC -0.75 / AR -0.25; min. blob 800 / 200 px; max. TC latitude 90° |  |  |  |  |
+| Mask-prompt generator (end-to-end via SAM) | single seed (mean of seeds) | 0.335 | 0.378 | 0.356 | -- |
+|  | single seed, calibrated (mean of seeds) | 0.331 | 0.383 | 0.357 | -- |
+|  | ensemble | 0.342 | 0.400 | 0.371 | +0.014 [+0.009, +0.019] |
+|  | ensemble, calibrated | 0.338 | 0.400 | 0.369 | +0.012 [+0.007, +0.017] |
+|  | ensemble, calibrated, post-processed | 0.337 | 0.401 | 0.369 | +0.013 [+0.005, +0.020] |
+|  | SAM hybrid, round 1 | 0.330 | 0.404 | 0.367 | +0.010 [+0.002, +0.018] |
+|  | SAM hybrid, round 2 | 0.325 | 0.402 | 0.363 | +0.007 [-0.002, +0.016] |
+|  | SAM hybrid, round 3 | 0.316 | 0.400 | 0.358 | +0.001 [-0.008, +0.011] |
+|  | thresholds TC +1.50 / AR +0.00; min. blob 800 / 1600 px; max. TC latitude 90° |  |  |  |  |
+| Mask-prompt generator (two-stage) | single seed (mean of seeds) | 0.338 | 0.409 | 0.374 | -- |
+|  | single seed, calibrated (mean of seeds) | 0.338 | 0.412 | 0.375 | -- |
+|  | ensemble | 0.349 | 0.415 | 0.382 | +0.009 [+0.003, +0.015] |
+|  | ensemble, calibrated | 0.347 | 0.417 | 0.382 | +0.009 [+0.003, +0.016] |
+|  | ensemble, calibrated, post-processed | 0.343 | 0.418 | 0.380 | +0.008 [+0.000, +0.015] |
+|  | SAM hybrid, round 1 | 0.337 | 0.395 | 0.366 | -0.007 [-0.017, +0.005] |
+|  | SAM hybrid, round 2 | 0.329 | 0.398 | 0.364 | -0.009 [-0.020, +0.002] |
+|  | SAM hybrid, round 3 | 0.319 | 0.398 | 0.358 | -0.014 [-0.026, -0.002] |
+|  | thresholds TC +1.75 / AR +1.25; min. blob 800 / 200 px; max. TC latitude 90° |  |  |  |  |
+| Mask-prompt generator (segmentation loss, label smoothing) | single seed (mean of seeds) | 0.338 | 0.412 | 0.375 | -- |
+|  | single seed, calibrated (mean of seeds) | 0.338 | 0.412 | 0.375 | -- |
+|  | ensemble | 0.349 | 0.418 | 0.383 | +0.013 [+0.009, +0.018] |
+|  | ensemble, calibrated | 0.348 | 0.417 | 0.383 | +0.013 [+0.008, +0.017] |
+|  | ensemble, calibrated, post-processed | 0.351 | 0.418 | 0.384 | +0.015 [+0.009, +0.020] |
+|  | SAM hybrid, round 1 | 0.341 | 0.398 | 0.370 | -0.000 [-0.008, +0.008] |
+|  | SAM hybrid, round 2 | 0.332 | 0.398 | 0.365 | -0.005 [-0.014, +0.004] |
+|  | SAM hybrid, round 3 | 0.320 | 0.397 | 0.359 | -0.011 [-0.021, -0.001] |
+|  | thresholds TC +0.75 / AR +0.25; min. blob 400 / 1600 px; max. TC latitude 90° |  |  |  |  |
+| Mask-prompt generator + raw CG-Net fields | single seed (mean of seeds) | 0.340 | 0.409 | 0.375 | -- |
+|  | single seed, calibrated (mean of seeds) | 0.339 | 0.411 | 0.375 | -- |
+|  | ensemble | 0.347 | 0.416 | 0.382 | +0.011 [+0.007, +0.016] |
+|  | ensemble, calibrated | 0.344 | 0.416 | 0.380 | +0.010 [+0.004, +0.015] |
+|  | ensemble, calibrated, post-processed | 0.347 | 0.418 | 0.382 | +0.012 [+0.004, +0.020] |
+|  | SAM hybrid, round 1 | 0.340 | 0.397 | 0.369 | -0.001 [-0.011, +0.009] |
+|  | SAM hybrid, round 2 | 0.333 | 0.398 | 0.365 | -0.005 [-0.016, +0.006] |
+|  | SAM hybrid, round 3 | 0.321 | 0.396 | 0.358 | -0.012 [-0.024, +0.001] |
+|  | thresholds TC +1.75 / AR +0.25; min. blob 800 / 1600 px; max. TC latitude 90° |  |  |  |  |
 
 
 ## 5. Robustness: second frozen checkpoint (Infused Token, MLP 0.5)
@@ -434,14 +604,13 @@ Same protocol; multi-scale models 1 seed.
 - *Where prompters fail*: AR — extent of rivers already detected (perfect shapes of detected ARs would give ~0.8 IoU);
   TC — missed cyclones and false blobs (perfect detection would give ~0.55–0.6 TC IoU).
 - *Efficiency*: a 0.67 M-parameter head at 64×64 on the frozen features beats the 1.41 M-parameter multi-scale
-  fusion model that runs at 1024×1024 (5.7 vs. 702 GFLOPs, 0.9 vs. 36 ms per image), and beats
-  CG-Net on AR; even a linear probe on the last ViT block is close to CG-Net. The token gate adds nothing: the gate
+  fusion model that runs at 1024×1024 (5.7 vs. 702 GFLOPs, 0.9 vs. 36 ms per image), and beats a CG-Net trained under
+  the same protocol on AR (overall: tie); even a linear probe on the last ViT block is close to CG-Net. The token gate adds nothing: the gate
   inputs are fixed decoder tokens, i.e. a learned per-class channel weighting. The adapted encoder is a strong representation for detection; SAM's decoder adds shape refinement only when
   the prompt is already right.
 - *Recommendation for the pipeline*: use the prompter's own mask as the prompt-free output, or SAM with hybrid prompts
-  when SAM-quality boundaries are wanted — the two are within ~0.01 IoU. To make SAM *improve* on the prompter, the
-  decoder must be trained with realistic (erroneous) prompts from the start of Phase 1, or the detection step must
-  improve; decoder fine-tuning afterwards is not enough.
+  when SAM-quality boundaries are wanted — the two are within ~0.01 IoU. Decoder fine-tuning afterwards, even for
+  robustness to corrupted prompts, is not enough to make SAM improve on the prompter; the detection step must improve.
 
 ## Bugs found in the original code (details in `04_sam_feature_prompters/README.md`)
 
@@ -465,8 +634,14 @@ cd ClimateSAM
 bash prompter_bench/run_queue.sh infused_mlp1 light; bash prompter_bench/run_queue.sh infused_mlp1 heavy   # 04 training
 bash prompter_bench/run_extra.sh infused_mlp1                                # 05 + label smoothing
 bash prompter_bench/run_learned_prompt.sh infused_mlp1                       # learned static prompts
+bash prompter_bench/run_queue3.sh light 0; bash prompter_bench/run_heavy2.sh   # re-trained CG-Net, token-gate variants
+bash prompter_bench/run_fields.sh; bash prompter_bench/run_dethead2.sh        # MPG + raw fields, box head on SAM features
+bash prompter_bench/run_robust.sh; bash prompter_bench/run_robust2.sh; bash prompter_bench/run_robust_eval.sh   # robust decoders
+.venv/bin/python prompter_bench/posthoc.py --methods mpg_seg msf_seg 'mpg_seg+cgnet_scratch_seg'   # 06
 .venv/bin/python prompter_bench/evaluate.py --encoder infused_mlp1           # test evaluation of everything
 .venv/bin/python prompter_bench/speed.py                                     # parameters / FLOPs / latency
-.venv/bin/python prompter_bench/make_report.py                               # tables, figures, this README
+.venv/bin/python prompter_bench/make_report.py                               # tables, this README
+.venv/bin/python prompter_bench/figures.py                                   # figures (+ single panels)
+.venv/bin/python prompter_bench/wandb_log_existing.py                        # wandb (offline): old runs + test tables
 .venv/bin/python prompter_bench/diagrams.py                                  # architecture diagrams
 ```

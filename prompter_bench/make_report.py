@@ -181,7 +181,8 @@ def main_tables(encoder, ev, dec, runs):
     own = ev[ev['output'] == 'own']
     m2, s2, n2 = mean_std(own, ['method'], obj_cols + ['TC objects', 'AR objects'])
     body = [[METHODS[k]] + [fmt(m2.loc[k, c], s2.loc[k, c], n2.loc[k]) for c in obj_cols] +
-            [f"{m2.loc[k, 'TC objects'] / 61:.1f}", f"{m2.loc[k, 'AR objects'] / 61:.1f}"] for k in order if k in m2.index]
+            [f"{m2.loc[k, 'TC objects'] / 61:.1f}", f"{m2.loc[k, 'AR objects'] / 61:.1f}"] for k in order
+            if k in m2.index and not np.isnan(m2.loc[k, 'TC recall'])]  # the box head has no mask to count objects in
     gt_obj = (f"{m2.loc['oracle_gt', 'TC objects'] / 61:.1f} TC and {m2.loc['oracle_gt', 'AR objects'] / 61:.1f} AR"
               if 'oracle_gt' in m2.index else 'the ground-truth number of')
     write_table(f'object_level_{tag}', ['Prompter'] + obj_cols + ['TC obj./img', 'AR obj./img'], body,
@@ -626,7 +627,8 @@ DECODERS = {  # decoder run -> display name (Phase 1 = the frozen decoder of the
     'robust_decoder_box_s1': 'prompt-robust, box (seed 1)',
     'robust_decoder_hybrid_s0': 'prompt-robust, hybrid',
     'robust_decoder_hybrid_s1': 'prompt-robust, hybrid (seed 1)',
-    'robust_decoder_hybrid_gtonly_s0': 'prompt-robust, hybrid, corrupted GT only',
+    'robust_decoder_hybrid_gtonly_s0': 'prompt-robust, hybrid, corrupted GT only (selected: epoch 0)',
+    'robust_decoder_hybrid_gtonly_s0_last': 'prompt-robust, hybrid, corrupted GT only (last epoch)',
 }
 ORACLE_ROWS = [  # (study, prompt in oracle_sweep_*.csv, display name)
     ('mask_format', 'box', 'tight box'),

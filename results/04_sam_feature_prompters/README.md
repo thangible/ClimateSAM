@@ -24,6 +24,11 @@ They were re-implemented behind one interface (`prompter_bench/prompters.py`); t
 | Logistic regression, ViT block 12 | last block | same | 1.5 k | the obvious fix: the last block carries the semantics |
 | Multi-scale fusion | all 12 blocks | thesis Figure 3.9 (`model/prompt_generator.py`), 4 groups of 3 blocks, nearest upsampling to 1024², deep supervision | 1.41 M | 2-channel head (see bug 2 below) |
 | Multi-scale fusion + token gate | all 12 blocks | `model/prompt_generator_token.py`: the fused features gated per channel by the decoder's refined TC / AR HQ tokens, two binary heads (these produce the prompts) + the multiclass head as auxiliary output | 1.42 M | the gate inputs are fixed vectors (the decoder is frozen), so the gate is a learned per-class channel weighting |
+| Multi-scale fusion + token gate, CG blocks | all 12 blocks | `model/prompt_generator_token_cgblock.py` (thesis `train_generator_token_cg.py`) | 1.31 M | 2 seeds (≈1.5–3.5 h per seed) |
+| Multi-scale fusion + token gate, shared weights | all 12 blocks | `model/prompt_generator_sp_token.py`: one reduction / fusion shared by the four block groups | 0.39 M | |
+| CG-Net, re-trained | TMQ, U850, V850, PSL | CG-Net re-trained on the 358 training images with its Jaccard loss, selected on validation: from the official weights (lr 1e-4, 2 seeds) or from scratch (lr 1e-3, 3 seeds) | 494 k | the fair CG-Net baseline |
+| Box head on SAM features | neck embedding + HQ tokens | YOLO-style `TokenGatedDetectionHead` (`train_script/official/train_det_head.py`), trained on GT boxes, objectness threshold chosen on validation; its boxes prompt SAM (`prompter_bench/train_det_head_bench.py`) | 0.61 M | 2 seeds |
+| Mask-prompt generator + raw fields | as MPG + the four CG-Net fields | MPG with the fields added at 64² (before the ConvNeXt blocks) and 256² (before the head), zero-initialised | 0.69 M | tests whether the raw fields add information |
 | **Mask-prompt generator** (new) | neck embedding + blocks 6 and 12 | 1×1 projections → 3 ConvNeXt blocks at 64×64 (dilation 1/2/4) → 2 transposed convs to 256×256 → 2 logits (`model/mask_prompt_generator.py`, `../figures/diagram_mask_prompt_generator.png`) | 0.67 M | outputs directly at SAM's dense-prompt resolution |
 
 Training modes of the mask-prompt generator (`../figures/diagram_training_modes.png`):
@@ -67,14 +72,20 @@ Prompter masks (no SAM), mean over 3 seeds, test set:
 |---|---|---|---|---|
 | CG-Net, official weights | 494 k | 0.327 | 0.333 | 0.330 |
 | CG-Net, fine-tuned | 494 k | 0.349 | 0.382 | 0.366 |
+| CG-Net, re-trained from official weights (2 seeds) | 494 k | 0.350 | 0.399 | 0.375 |
+| CG-Net, trained from scratch | 494 k | 0.343 | 0.394 | 0.369 |
 | Logistic regression, ViT block 1 | 1.5 k | 0.195 | 0.319 | 0.257 |
 | Logistic regression, ViT block 12 | 1.5 k | 0.301 | 0.385 | 0.343 |
 | Multi-scale fusion | 1.41 M | 0.333 | 0.403 | 0.368 |
 | Multi-scale fusion + token gate | 1.42 M | 0.324 | 0.399 | 0.362 |
+| Multi-scale fusion + token gate, CG blocks (2 seeds) | 1.31 M | 0.324 | 0.355 | 0.340 |
+| Multi-scale fusion + token gate, shared weights | 0.39 M | 0.332 | 0.402 | 0.367 |
 | **Mask-prompt generator** | 0.67 M | **0.344** | **0.413** | **0.379** |
 | Mask-prompt generator, label smoothing | 0.67 M | 0.338 | 0.412 | 0.375 |
 | Mask-prompt generator, end-to-end via SAM | 0.67 M | 0.335 | 0.378 | 0.356 |
 | Mask-prompt generator, two-stage | 0.67 M | 0.338 | 0.409 | 0.374 |
+| Mask-prompt generator + raw CG-Net fields | 0.69 M | 0.340 | 0.409 | 0.375 |
+| Box head on SAM features, SAM + its boxes (2 seeds) | 0.61 M | 0.107 | 0.303 | 0.205 |
 
 SAM prompted by these masks (`../tables/prompt_conversion_*`, `../tables/bootstrap_*`,
 `../figures/sam_minus_prompter.png`):
@@ -90,6 +101,14 @@ Significance (paired bootstrap over the 61 test images, seeds pooled): the mask-
 CG-Net on AR (+0.031, 95 % CI [+0.020, +0.043]) with equal TC (−0.005 [−0.030, +0.020]), multi-scale fusion on mean
 FG IoU (+0.011 [+0.003, +0.019]) and the block-12 linear probe (+0.036 [+0.025, +0.046]). The token gate lowers
 multi-scale fusion by −0.006 [−0.009, −0.003]; label smoothing −0.004 [−0.007, −0.000].
+
+Against CG-Net **re-trained under the same protocol**, the generator's advantage shrinks to the ARs: +0.013
+[+0.003, +0.024] (official init.) and +0.018 [+0.009, +0.027] (scratch); TC is equal, and the mean FG difference
+(+0.004 / +0.010) is not significant. CG-Net needs 23 GFLOPs per image, the frozen encoder + MPG ≈ 980. CG blocks
+lower the token-gated MSF by −0.023 [−0.032, −0.015] (AR −0.046), shared weights raise it by +0.006
+[+0.003, +0.009]; MPG stays +0.011 [+0.004, +0.020] above the shared-weight variant. Adding the raw fields to MPG
+costs −0.004 [−0.008, −0.001]: the encoder already sees all 16 channels. The box head on the SAM features is the
+weakest image-dependent prompter (SAM with its boxes: 9–17 TC objects per image, 17–29 % of them correct).
 
 Object level (`../tables/object_level_*`): all prompters find 91–97 % of the ARs but only 64–77 % of the TCs; the
 precision of the predicted blobs is 0.4–0.6 (logistic regression: 0.27–0.42, i.e. many fragments). Error decomposition
