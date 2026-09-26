@@ -36,7 +36,10 @@ same protocol (0.375 mean FG IoU instead of 0.366 for the stored checkpoint) its
 (+0.013 to +0.018, significant); the overall difference is not significant. An ensemble of both families gives the best
 mask of the study (0.389). A decoder trained on corrupted prompts becomes robust to synthetic box errors but gains only
 +0.005 with real prompts and stays below the prompter. The error analysis shows that the remaining errors are the extent
-of ARs that were detected and the detection of TCs — precisely the information a prompt would have to contain.
+of ARs that were detected and the detection of TCs — precisely the information a prompt would have to contain. A
+re-evaluation of the thesis' own checkpoints (Section 3.12) shows that the Phase-1 validation skipped the input
+adapter, which makes the nonlinear adapters look far worse than they are, and that all Phase-1 numbers were selected on
+the test set.
 
 ---
 
@@ -610,6 +613,60 @@ All free parameters tuned on the 40 validation images (`prompter_bench/posthoc.p
   (+0.010 [+0.004, +0.016]). SAM-feature and raw-field prompters make partly different TC errors. (Six models vs. three;
   the gain over the MPG ensemble, +0.004 [−0.005, +0.012], is not significant.)
 
+### 3.12 Re-evaluation of the thesis' own results (Chapter 4 checkpoints and logs)
+
+The saved checkpoints of Chapter 4 were evaluated again with the thesis' own pipeline (details, all tables and figures:
+`08_thesis_recheck/`). Available: the four Infused Token Phase-1 models of the appendix table and all Phase-2 prompter
+checkpoints; the Concat / Single Token and LoRA checkpoints are not on this machine (for Single Token and Single LoRA the
+author's training logs were read instead).
+
+![Figure 18](figures/thesis_recheck_phase1.png)
+*Figure 18 — Phase-1 checkpoints with ground-truth prompts: value in the thesis (ring), re-run with the thesis'
+evaluation code (grey), re-run with the input adapter applied (red). Random prompts: mean and range of three draws.*
+
+**The Phase-1 validation skips the input adapter.** `train_adaptation.validate_one_epoch` encodes images with
+`ClimateSAM.set_infer_img()`, which feeds the first three raw channels to the encoder (the same bug as in
+`test_prompt_effect.py`, Section 3.2). For the linear adapter this changes little (0.00–0.02; the adapter keeps its
+identity weights for TMQ / U850 / V850), and the linear rows of the appendix table reproduce within ±0.015. The
+nonlinear adapter, however, produces low-contrast images (values 50–170 instead of 0–255, Figure 19); its encoder was
+evaluated on inputs it never saw. With the adapter applied, the nonlinear models gain +0.04 to +0.13 mean FG IoU (AR
++0.09 to +0.14; paired bootstrap, all intervals above zero), and the linear adapter's advantage shrinks from +0.06 to
++0.17 (thesis) to **+0.005 to +0.042** (not significant for MLP 0.5 with random prompts). The large linear-vs-nonlinear
+gap of Table 4.6 and its "spatial blurring" explanation are an evaluation artefact; a small AR advantage of the linear
+adapter remains.
+
+![Figure 19](figures/thesis_recheck_adapter_inputs.png)
+*Figure 19 — What the encoder sees (test image 17): the raw channels used at evaluation (a–c) vs. the linear (d–f) and
+nonlinear (g–i) adapter outputs the encoders were trained on.*
+
+![Figure 20](figures/thesis_recheck_maps_nonlinear_17.png)
+*Figure 20 — The nonlinear model (MLP 1.0, ground-truth boxes) evaluated as in the thesis (c) and with its adapter (d).*
+
+**Every Phase-1 number is selected on the test set, and Single LoRA collapses on TC.** The training script validates on
+the 61 test images every five epochs and saves the epoch with the best mean test IoU. For the token adapters the curves
+plateau (selected vs. last epoch ≤ 0.01). For Single LoRA, TC IoU on the test set falls from 0.63 (epoch 6) to 0.10
+(epoch 50) at rank 32 and from 0.59 to 0.12 at rank 64 (Figure 21): the LoRA rows of Tables 4.6 / 4.8 describe the best
+early test epoch, and the rank-32-vs-64 argument of Section 4.2.2 has to be qualified (both collapse).
+
+![Figure 21](figures/thesis_recheck_training_logs.png)
+*Figure 21 — Test IoU logged during the author's Phase-1 training runs; ring = saved checkpoint.*
+
+**Other checks.** "Random" prompt rows cannot be reproduced exactly (a new random point / box mixture per evaluation;
+TC spread 0.03 across draws). Table 4.7 is the adapter of the NOSMOOTH run (exact match), not of the smoothed run whose
+IoUs Figure 4.2 quotes. The parameter counts of Table 4.11 are exact. The text around Tables 4.2–4.4 contradicts the
+tables (focal weight 10 vs. 1; AR focal parameters).
+
+**The author's Phase-2 prompters.** The MSF run whose encoder still exists (`generator_128_vit_b_bbox`) reproduces its
+log exactly (mask TC 0.304 / AR 0.401 vs. logged 0.305 / 0.402), so the benchmark evaluation is faithful. The other
+generators were trained on an encoder file (`best_weights/infused_token_vitb_mlp1_best.pth`) that was overwritten after
+the runs; with the current file their TC IoU is far below the logged values (e.g. 0.157 vs. 0.349), so they cannot be
+verified. Where they can be evaluated, the conclusions of this report hold: SAM does not improve on the author's
+prompters, and the same architectures trained under the protocol are equal or better (Figure 22).
+
+![Figure 22](figures/thesis_recheck_phase2.png)
+*Figure 22 — The author's prompter checkpoints: logged best value (ring), re-run mask (grey), re-run SAM with the prompt
+type used in training (squares), and the same architecture trained under the benchmark protocol (red).*
+
 ---
 
 ## 4. Discussion
@@ -708,6 +765,10 @@ which a human annotator could provide) but not as a refinement stage after an au
   prompts (robust to synthetic box errors, +0.005 with real prompts), nor iterative refinement changes this.
 - **RQ5.** ARs are found (> 90 %) but their extent is wrong; TCs are missed (one third) and falsely detected (about
   half of the predicted blobs). These are errors that a prompt-conditioned decoder cannot repair.
+- **Re-check of Chapter 4.** The linear Phase-1 results reproduce; the nonlinear ones are an evaluation artefact
+  (skipped input adapter; correct: linear only +0.005 to +0.042 better); all Phase-1 numbers are selected on the test
+  set and Single LoRA's TC IoU collapses during training; the author's Phase-2 generators are only verifiable where their
+  encoder still exists, and there they confirm the benchmark.
 
 ---
 
@@ -742,8 +803,10 @@ SAM refinement (loses every round). Still open, ranked by expected benefit relat
 
 ## Appendix A — Bugs found in the original code
 
-1. `test_prompt_effect.py` decodes images via `ClimateSAM.set_infer_img()`, which feeds the first three raw channels
-   to the encoder and skips the learned input adapter (`encode_images()` applies it). Effect: −0.00…−0.03 IoU.
+1. `test_prompt_effect.py` **and the Phase-1 validation in `train_adaptation.py`** decode images via
+   `ClimateSAM.set_infer_img()`, which feeds the first three raw channels to the encoder and skips the learned input
+   adapter (`encode_images()` applies it). Effect: −0.00…−0.03 IoU for the linear adapter, −0.04…−0.13 mean FG IoU for
+   the nonlinear adapter (Section 3.12).
 2. Multi-scale generators (`model/prompt_generator*.py` + `compute_generator_loss`): three output channels, of which
    only TC and AR are supervised (as independent sigmoids); the untrained background channel takes part in the final
    3-channel argmax.
@@ -756,6 +819,8 @@ SAM refinement (loses every round). Still open, ranked by expected benefit relat
    statistics (used here).
 7. The fine-tuned CG-Net (`exp/cgnet_weight.pth`) was trained on all 398 training images; its outputs on training
    images are optimistic.
+8. The encoder file `exp/best_weights/infused_token_vitb_mlp1_best.pth` was overwritten after the Phase-2 generators
+   were trained on it (5 April, 15:40); the files `best_generator_token_cg_vit_b_256_*` contain 128-channel models.
 
 ## Appendix B — Figure index
 
@@ -786,6 +851,11 @@ deficiency with a palette validator.
 | 16 | `second_checkpoint` | — |
 | 17 | `maps_test_image_17` (and `_45`) | `_gt`, `_cgnet`, `_msf`, `_mpg`, `_mpg_sam_box`, `_mpg_sam_hybrid`, `_cgnet_sam_box`, `_static` |
 | B1 | `exploratory_runs` | `_sam`, `_generator` |
+| 18 | `thesis_recheck_phase1` | `_tc`, `_ar` |
+| 19 | `thesis_recheck_adapter_inputs` | one per image (raw / linear / nonlinear × R, G, B) |
+| 20 | `thesis_recheck_maps_nonlinear_17` (and `_45`) | `_gt`, `_linear`, `_nonlinear_thesis`, `_nonlinear_fixed` |
+| 21 | `thesis_recheck_training_logs` | `_tc`, `_ar` |
+| 22 | `thesis_recheck_phase2` (maps: `thesis_recheck_maps_prompters_17`, `_45`) | `_tc`, `_ar` |
 
 ![Figure B1](figures/exploratory_runs.png)
 *Figure B1 — First exploratory runs of the mask-prompt generator (different checkpoint, BCE + Tversky loss, selection on
@@ -810,6 +880,9 @@ bash prompter_bench/run_fields.sh; bash prompter_bench/run_dethead2.sh         #
 bash prompter_bench/run_robust.sh; bash prompter_bench/run_robust2.sh          # prompt-robust decoders
 bash prompter_bench/run_robust_eval.sh                                         # oracle study + prompters with each decoder
 .venv/bin/python prompter_bench/posthoc.py --methods mpg_seg msf_seg 'mpg_seg+cgnet_scratch_seg'   # Section 3.11
+.venv/bin/python prompter_bench/phase1_recheck.py; .venv/bin/python prompter_bench/phase1_examples.py   # Section 3.12, Phase 1
+.venv/bin/python prompter_bench/build_cache.py infused_mlp1_best infused_05_retrain; .venv/bin/python prompter_bench/phase2_recheck.py
+.venv/bin/python prompter_bench/recheck_report.py                              # Section 3.12 tables + figures
 .venv/bin/python prompter_bench/speed.py                                       # FLOPs / latency
 .venv/bin/python prompter_bench/make_report.py                                 # tables, README
 .venv/bin/python prompter_bench/figures.py; .venv/bin/python prompter_bench/diagrams.py   # figures

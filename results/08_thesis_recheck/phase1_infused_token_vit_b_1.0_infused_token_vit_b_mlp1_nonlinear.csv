@@ -1,0 +1,11 @@
+checkpoint,thesis_row,adapter,mlp_ratio,prompt,seed,path,TC IoU,AR IoU,BG IoU,Mean IoU,Mean FG IoU,thesis TC IoU,thesis AR IoU
+infused_token_vit_b_1.0_infused_token_vit_b_mlp1_nonlinear,"Infused Token, Nonlinear, 1.0",nonlinear,1.0,bbox,0,original,0.7327,0.4388,0.9585,0.71,0.5857,0.6987,0.4446
+infused_token_vit_b_1.0_infused_token_vit_b_mlp1_nonlinear,"Infused Token, Nonlinear, 1.0",nonlinear,1.0,bbox,0,fixed,0.7212,0.5564,0.9611,0.7462,0.6388,0.6987,0.4446
+infused_token_vit_b_1.0_infused_token_vit_b_mlp1_nonlinear,"Infused Token, Nonlinear, 1.0",nonlinear,1.0,point,0,original,0.3941,0.3137,0.9349,0.5476,0.3539,0.3308,0.3134
+infused_token_vit_b_1.0_infused_token_vit_b_mlp1_nonlinear,"Infused Token, Nonlinear, 1.0",nonlinear,1.0,point,0,fixed,0.5204,0.44,0.9531,0.6378,0.4802,0.3308,0.3134
+infused_token_vit_b_1.0_infused_token_vit_b_mlp1_nonlinear,"Infused Token, Nonlinear, 1.0",nonlinear,1.0,random,0,original,0.5407,0.3492,0.9444,0.6114,0.4449,0.4468,0.3605
+infused_token_vit_b_1.0_infused_token_vit_b_mlp1_nonlinear,"Infused Token, Nonlinear, 1.0",nonlinear,1.0,random,0,fixed,0.6432,0.4922,0.9564,0.6973,0.5677,0.4468,0.3605
+infused_token_vit_b_1.0_infused_token_vit_b_mlp1_nonlinear,"Infused Token, Nonlinear, 1.0",nonlinear,1.0,random,1,original,0.5126,0.3567,0.9447,0.6047,0.4347,0.4468,0.3605
+infused_token_vit_b_1.0_infused_token_vit_b_mlp1_nonlinear,"Infused Token, Nonlinear, 1.0",nonlinear,1.0,random,1,fixed,0.6189,0.4859,0.9558,0.6869,0.5524,0.4468,0.3605
+infused_token_vit_b_1.0_infused_token_vit_b_mlp1_nonlinear,"Infused Token, Nonlinear, 1.0",nonlinear,1.0,random,2,original,0.5172,0.3636,0.9456,0.6088,0.4404,0.4468,0.3605
+infused_token_vit_b_1.0_infused_token_vit_b_mlp1_nonlinear,"Infused Token, Nonlinear, 1.0",nonlinear,1.0,random,2,fixed,0.6061,0.4957,0.9568,0.6862,0.5509,0.4468,0.3605

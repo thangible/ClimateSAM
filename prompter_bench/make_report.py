@@ -736,16 +736,16 @@ def robust_decoder_table(encoder='infused_mlp1'):
 
 
 def render_readme():
-    """results/README.template.md -> results/README.md, with {{table:NAME}} replaced by tables/NAME.md."""
-    tpl = os.path.join(RESULTS, 'README.template.md')
-    if not os.path.exists(tpl):
-        return
-    text = open(tpl).read()
-    for name in re.findall(r'\{\{table:([\w.-]+)\}\}', text):
-        f = os.path.join(TABLES, f'{name}.md')
-        text = text.replace(f'{{{{table:{name}}}}}', open(f).read() if os.path.exists(f) else f'*(table {name} not generated yet)*')
-    with open(os.path.join(RESULTS, 'README.md'), 'w') as f:
-        f.write('<!-- generated from README.template.md by prompter_bench/make_report.py -->\n' + text)
+    """Every results/**/README.template.md -> README.md next to it, with {{table:NAME}} replaced by tables/NAME.md."""
+    for tpl in [os.path.join(RESULTS, 'README.template.md')] + sorted(glob.glob(os.path.join(RESULTS, '*', 'README.template.md'))):
+        if not os.path.exists(tpl):
+            continue
+        text = open(tpl).read()
+        for name in re.findall(r'\{\{table:([\w.-]+)\}\}', text):
+            f = os.path.join(TABLES, f'{name}.md')
+            text = text.replace(f'{{{{table:{name}}}}}', open(f).read() if os.path.exists(f) else f'*(table {name} not generated yet)*')
+        with open(os.path.join(os.path.dirname(tpl), 'README.md'), 'w') as f:
+            f.write('<!-- generated from README.template.md by prompter_bench/make_report.py -->\n' + text)
 
 
 def main():

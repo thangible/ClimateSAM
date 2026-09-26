@@ -1,0 +1,116 @@
+% ---------------------------------------------------------------------------------------------------------------
+% Re-evaluation of the Chapter 4 results from the saved checkpoints and training logs (results/08_thesis_recheck).
+% Can be used as an appendix section, or its paragraphs can replace the affected text of Sections 4.2.1 / 4.2.2.
+% Requires: graphicx, booktabs, adjustbox. \ResultsDir must point to the results/ directory.
+% ---------------------------------------------------------------------------------------------------------------
+
+\section{Re-evaluation of the Chapter~4 Results}
+\label{sec:recheck}
+
+The saved checkpoints of Chapter~4 were evaluated again with the thesis' own evaluation pipeline: the ClimateNet test
+images with prompts derived from the ground truth (box, point or a random choice per image), \texttt{ClimateSAM.\allowbreak infer},
+and TC and AR scored as two independent binary problems. Available were the four Infused Token models of the appendix
+table (linear and nonlinear input adapter, MLP ratio 1.0 and 0.5) and all Phase-2 prompter checkpoints; the Concat
+Token, Single Token and LoRA checkpoints are not available, and for Single Token and Single LoRA the training logs were
+used instead.
+
+\subsection{The Phase-1 validation skips the input adapter}
+
+The validation routine of the Phase-1 training script encodes the images with \texttt{ClimateSAM.\allowbreak set\_\allowbreak infer\_\allowbreak img()},
+which passes the first three raw channels (TMQ, U850, V850) to the encoder and does not apply the learned input adapter;
+training uses \texttt{encode\_\allowbreak images()}, which does. Table~\ref{tab:thesis_recheck_phase1} and
+Figure~\ref{fig:recheck_phase1} compare the reported values with a re-run of the original evaluation and with a re-run in
+which the adapter is applied.
+
+\input{\ResultsDir/tables/thesis_recheck_phase1}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{\ResultsDir/figures/thesis_recheck_phase1.pdf}
+\caption{Phase-1 checkpoints with ground-truth prompts: value reported in Table~4.12 / appendix Table~1 (ring),
+re-run with the original evaluation (grey, input adapter skipped) and with the input adapter applied (red). Random
+prompts: mean and range over three prompt draws.}
+\label{fig:recheck_phase1}
+\end{figure}
+
+For the linear adapter the reported box and point values reproduce within about $\pm0.015$ IoU, and applying the adapter
+changes them by at most 0.02: the adapter keeps its identity weights for TMQ, U850 and V850 (Table~4.7), so the raw
+channels have the same spatial structure as its output. The nonlinear adapter, in contrast, maps the inputs to
+low-contrast images (Figure~\ref{fig:recheck_adapter_inputs}); its encoder was trained on these images but evaluated on
+the raw channels. With the adapter applied, the nonlinear models gain 0.04--0.13 mean FG IoU and 0.09--0.14 AR IoU, and
+the advantage of the linear adapter shrinks from 0.06--0.17 to 0.005--0.042 mean FG IoU
+(Table~\ref{tab:thesis_recheck_adapter_bootstrap}), with the remaining gain almost entirely in AR. The large gap of
+Table~4.6 is therefore caused by the evaluation and not by spatial blurring in the nonlinear adapter.
+Figure~\ref{fig:recheck_maps_nonlinear} shows the effect on one test image.
+
+\input{\ResultsDir/tables/thesis_recheck_adapter_bootstrap}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{\ResultsDir/figures/thesis_recheck_adapter_inputs.pdf}
+\caption{Input of the image encoder for test image 17: the raw channels used at evaluation (a--c) and the outputs of
+the linear (d--f) and nonlinear (g--i) input adapters on which the respective encoders were trained (grey scale 0--255).}
+\label{fig:recheck_adapter_inputs}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{\ResultsDir/figures/thesis_recheck_maps_nonlinear_17.pdf}
+\caption{Infused Token (MLP ratio 1.0) with ground-truth box prompts on test image 17: linear adapter as evaluated in
+the thesis (b), nonlinear adapter as evaluated in the thesis (c) and with its adapter applied (d).}
+\label{fig:recheck_maps_nonlinear}
+\end{figure}
+
+\subsection{Checkpoint selection on the test set}
+
+The Phase-1 training script validates on the 61 test images every five epochs and saves the epoch with the best mean
+of TC and AR IoU. Figure~\ref{fig:recheck_training_logs} shows the logged test IoU of the training runs. For the
+token-based adapters the curves plateau and the selected epoch differs from the last one by at most 0.01 IoU. For
+Single LoRA the TC IoU collapses during training, from 0.63 at epoch~6 to 0.10 at epoch~50 for rank~32 and from 0.59 to
+0.12 for rank~64; the LoRA values of Tables~4.6 and~4.8 therefore describe the best early test epoch, and both ranks,
+not only rank~64, are unstable for TCs.
+
+\input{\ResultsDir/tables/thesis_recheck_training_logs}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{\ResultsDir/figures/thesis_recheck_training_logs.pdf}
+\caption{Test IoU logged during the Phase-1 training runs (every five epochs); ring: saved checkpoint.}
+\label{fig:recheck_training_logs}
+\end{figure}
+
+\subsection{Further checks}
+
+The random-prompt rows cannot be reproduced exactly, because every evaluation draws a new mixture of point and box
+prompts (TC spread of 0.03 across three draws). The adapter weights of Table~4.7 are those of the run without label
+smoothing, not of the smoothed run whose IoUs Figure~4.2 quotes. The parameter counts of Table~4.11 are exact for all
+Infused Token configurations.
+
+\subsection{Phase-2 prompter checkpoints}
+
+The prompter checkpoints of Section~4.3.3 were evaluated with the encoder each was trained with and with their own
+decision rule (three-class argmax), Table~\ref{tab:thesis_recheck_phase2} and Figure~\ref{fig:recheck_phase2}. The
+multi-scale fusion run whose encoder is unchanged reproduces its logged values exactly (mask TC 0.304 / AR 0.401 versus
+0.305 / 0.402). The other generators were trained on an encoder file that was overwritten after the runs; with the
+current file their TC IoU is far below the logged values, so they cannot be verified. Where they can be evaluated, SAM
+prompted by them is not better than their masks, and the same architectures trained under the protocol of
+Section~\ref{sec:prompting_protocol} are equal or better.
+
+\input{\ResultsDir/tables/thesis_recheck_phase2}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{\ResultsDir/figures/thesis_recheck_phase2.pdf}
+\caption{The Phase-2 prompter checkpoints of the thesis: best logged value (ring), re-run mask (grey), re-run SAM with
+the prompt type used in training (squares), and the same architecture trained under the benchmark protocol (red).}
+\label{fig:recheck_phase2}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\linewidth]{\ResultsDir/figures/thesis_recheck_maps_prompters_17.pdf}
+\caption{Test image 17: the thesis' multi-scale fusion checkpoint (a) and SAM prompted by its boxes (b), the thesis'
+logistic regression on ViT block~1 (c), and multi-scale fusion (d) and the mask-prompt generator (e, f) trained under
+the benchmark protocol.}
+\label{fig:recheck_maps_prompters}
+\end{figure}

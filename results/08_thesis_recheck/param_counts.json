@@ -1,0 +1,46 @@
+[
+ {
+  "adapter": "linear",
+  "mlp_ratio": 0.5,
+  "trainable input_adapter": 51,
+  "trainable mask_decoder": 1211168,
+  "trainable image_encoder": 3167744,
+  "trainable": 4378451,
+  "frozen": 93735472,
+  "total": 98113923,
+  "% trainable": 4.46
+ },
+ {
+  "adapter": "linear",
+  "mlp_ratio": 1.0,
+  "trainable input_adapter": 51,
+  "trainable mask_decoder": 1211168,
+  "trainable image_encoder": 6316544,
+  "trainable": 7527251,
+  "frozen": 93735472,
+  "total": 101262723,
+  "% trainable": 7.43
+ },
+ {
+  "adapter": "nonlinear",
+  "mlp_ratio": 0.5,
+  "trainable input_adapter": 5283,
+  "trainable mask_decoder": 1211168,
+  "trainable image_encoder": 3167744,
+  "trainable": 4383683,
+  "frozen": 93735472,
+  "total": 98119155,
+  "% trainable": 4.47
+ },
+ {
+  "adapter": "nonlinear",
+  "mlp_ratio": 1.0,
+  "trainable input_adapter": 5283,
+  "trainable mask_decoder": 1211168,
+  "trainable image_encoder": 6316544,
+  "trainable": 7532483,
+  "frozen": 93735472,
+  "total": 101267955,
+  "% trainable": 7.44
+ }
+]

@@ -55,6 +55,14 @@ data. Tables below are generated from the raw outputs (`prompter_bench/make_repo
    object post-processing tuned on validation (no gain on test); iterative SAM refinement (loses every round); more
    ViT blocks as input (exploratory). Seed ensembles help a little (+0.006 for MPG).
 
+8. **Re-evaluation of the thesis' own Chapter-4 results** (`08_thesis_recheck/`): the linear Phase-1 models reproduce;
+   the **nonlinear** results are an evaluation artefact — the Phase-1 validation (`set_infer_img`) skips the input
+   adapter, and with the adapter applied the nonlinear models gain +0.04 to +0.13 mean FG IoU, so the linear adapter is
+   only +0.005 to +0.042 better (not +0.06 to +0.17). All Phase-1 checkpoints were selected on the test set, and Single
+   LoRA's TC IoU collapses during training (0.63 → 0.10). Of the author's Phase-2 generators only the one whose encoder
+   still exists can be verified (it reproduces its log exactly); the others were trained on an encoder file that was
+   overwritten later.
+
 ## Folder guide
 
 | Folder | Content |
@@ -65,6 +73,7 @@ data. Tables below are generated from the raw outputs (`prompter_bench/make_repo
 | `03_cgnet_yolo_boxes/` | CG-Net with a YOLO box head as prompter |
 | `04_sam_feature_prompters/` | main comparison of all prompters (designs, bugs found, results) |
 | `05_decoder_adaptation/` | fine-tuning the decoder on generated prompts (in-sample vs. out-of-fold) and the prompt-robust decoder |
+| `08_thesis_recheck/` | re-evaluation of the thesis' own checkpoints and training logs (Phase 1 + Phase 2), consistency checks |
 | `06_posthoc/` | evaluation-only: seed / cross-family ensembles, threshold calibration, post-processing, iterative SAM refinement |
 | `07_exploratory_runs/` | first mask-prompt-generator runs incl. failed designs, analysis of the old generator |
 | `tables/` | every table as LaTeX (`.tex`), CSV and Markdown |

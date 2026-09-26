@@ -24,9 +24,10 @@
 \label{app:bugs}
 
 \begin{enumerate}
-  \item \texttt{test\_\allowbreak prompt\_\allowbreak effect.\allowbreak py} encodes images with \texttt{ClimateSAM.\allowbreak set\_\allowbreak infer\_\allowbreak img()}, which feeds the
-  first three raw channels to the encoder and skips the learned input adapter (\texttt{encode\_\allowbreak images()} applies it).
-  Effect: $-0.00$ to $-0.03$ IoU.
+  \item \texttt{test\_prompt\_effect.py} and the Phase-1 validation in \texttt{train\_adaptation.py} encode images with
+  \texttt{ClimateSAM.set\_infer\_img()}, which feeds the first three raw channels to the encoder and skips the learned
+  input adapter (\texttt{encode\_images()} applies it). Effect: $-0.00$ to $-0.03$ IoU for the linear adapter,
+  $-0.04$ to $-0.13$ mean FG IoU for the nonlinear adapter (Section~\ref{sec:recheck}).
   \item The multi-scale generators predict three channels, of which only TC and AR are supervised (as independent
   sigmoids) by \texttt{compute\_\allowbreak generator\_\allowbreak loss}; the untrained background channel takes part in the final argmax.
   \item \texttt{LogisticRegressionPrompter} classifies the output of the first ViT block instead of the last.
@@ -36,4 +37,6 @@
   \item The official ClimateNet CG-Net checkpoint predicts background everywhere in evaluation mode, because its stored
   BatchNorm running statistics do not match its weights; it works with batch statistics.
   \item The fine-tuned CG-Net was trained on all 398 training images, so its outputs on training images are optimistic.
+  \item The encoder file used by most Phase-2 prompter runs was overwritten after these runs, and two checkpoint files
+  named after 256-channel runs contain 128-channel models (Section~\ref{sec:recheck}).
 \end{enumerate}

@@ -6,6 +6,7 @@
 | `section_4_3.tex` | Section 4.3 with 4.3.1 Prompt Analysis, 4.3.2 SAM with CG-Net as Prompter, 4.3.3 Generator from SAM Inputs, error analysis, decoder adaptation, evaluation-only improvements, static prompts, second checkpoint, examples, summary | Chapter 4 |
 | `discussion.tex` | why SAM cannot improve on its prompter, why a small generator wins, prompt design, implications, limitations, future work | Discussion |
 | `appendix.tex` | complete tables, second example, issues found in the original code | Appendix |
+| `recheck.tex` | re-evaluation of the Chapter-4 checkpoints and logs (skipped input adapter, test-set selection, LoRA collapse, Phase-2 checkpoints) | Appendix, or to correct Sections 4.2.1 / 4.2.2 |
 | `main.tex` | standalone build of all parts, for checking (`tectonic main.tex` or `pdflatex` twice) | — |
 
 In the thesis:

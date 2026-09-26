@@ -54,9 +54,9 @@ def seed_everything(seed):
 # ------------------------------------------------------------
 # MODEL
 # ------------------------------------------------------------
-def load_climatesam(ckpt_name, mlp_ratio, device, sam_type='vit_b'):
+def load_climatesam(ckpt_name, mlp_ratio, device, sam_type='vit_b', adapter='linear'):
     """ckpt_name is relative to exp/ without .pth, e.g. 'best_weights/infused_token_vitb_mlp1_best'."""
-    climatesam = ClimateSAM(model_type=sam_type, mlp_ratio=mlp_ratio).to(device)
+    climatesam = ClimateSAM(model_type=sam_type, mlp_ratio=mlp_ratio, input_adapter_type=adapter).to(device)
     ckpt = torch.load(os.path.join(ROOT, 'exp', f'{ckpt_name}.pth'), map_location=device)
     for name in ('image_encoder', 'mask_decoder', 'input_adapter'):
         getattr(climatesam, name).load_state_dict(ckpt[name])
@@ -99,7 +99,7 @@ def cache_dir(tag):
 
 
 @torch.no_grad()
-def build_feature_cache(climatesam, tag, device, sam_type='vit_b', batch_size=4):
+def build_feature_cache(climatesam, tag, device, sam_type='vit_b', batch_size=4, splits=('train', 'test')):
     """Encode the train and test sets once; features are stored as float16 memmaps."""
     out = cache_dir(tag)
     if os.path.exists(os.path.join(out, 'done.json')):
@@ -107,6 +107,8 @@ def build_feature_cache(climatesam, tag, device, sam_type='vit_b', batch_size=4)
     os.makedirs(out, exist_ok=True)
     L, D = NUM_LAYERS[sam_type], VIT_DIM[sam_type]
     for split, train_flag in (('train', True), ('test', False)):
+        if split not in splits:
+            continue
         ds = ClimateDataset(data_dir=DATA_DIR, train_flag=train_flag, augmented=False, generate_prompt=False)
         n = len(ds)
         emb = np.lib.format.open_memmap(os.path.join(out, f'{split}_emb.npy'), 'w+', np.float16, (n, 256, 64, 64))
@@ -129,7 +131,7 @@ def build_feature_cache(climatesam, tag, device, sam_type='vit_b', batch_size=4)
         with open(os.path.join(out, f'{split}_names.json'), 'w') as f:
             json.dump(names, f)
     with open(os.path.join(out, 'done.json'), 'w') as f:
-        json.dump({'tag': tag}, f)
+        json.dump({'tag': tag, 'splits': list(splits)}, f)
 
 
 class FeatureCache:

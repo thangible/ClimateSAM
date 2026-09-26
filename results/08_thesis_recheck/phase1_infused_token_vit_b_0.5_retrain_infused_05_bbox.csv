@@ -1,0 +1,11 @@
+checkpoint,thesis_row,adapter,mlp_ratio,prompt,seed,path,TC IoU,AR IoU,BG IoU,Mean IoU,Mean FG IoU,thesis TC IoU,thesis AR IoU
+infused_token_vit_b_0.5_retrain_infused_05_bbox,,linear,0.5,bbox,0,original,0.7523,0.6608,0.9741,0.7958,0.7066,,
+infused_token_vit_b_0.5_retrain_infused_05_bbox,,linear,0.5,bbox,0,fixed,0.7572,0.6664,0.975,0.7996,0.7118,,
+infused_token_vit_b_0.5_retrain_infused_05_bbox,,linear,0.5,point,0,original,0.3079,0.2371,0.9504,0.4985,0.2725,,
+infused_token_vit_b_0.5_retrain_infused_05_bbox,,linear,0.5,point,0,fixed,0.3052,0.2386,0.9507,0.4981,0.2719,,
+infused_token_vit_b_0.5_retrain_infused_05_bbox,,linear,0.5,random,0,original,0.5877,0.4619,0.9621,0.6705,0.5248,,
+infused_token_vit_b_0.5_retrain_infused_05_bbox,,linear,0.5,random,0,fixed,0.5904,0.4643,0.9627,0.6725,0.5274,,
+infused_token_vit_b_0.5_retrain_infused_05_bbox,,linear,0.5,random,1,original,0.5401,0.4396,0.9607,0.6468,0.4899,,
+infused_token_vit_b_0.5_retrain_infused_05_bbox,,linear,0.5,random,1,fixed,0.543,0.4397,0.9611,0.648,0.4914,,
+infused_token_vit_b_0.5_retrain_infused_05_bbox,,linear,0.5,random,2,original,0.4937,0.4419,0.9607,0.6321,0.4678,,
+infused_token_vit_b_0.5_retrain_infused_05_bbox,,linear,0.5,random,2,fixed,0.4957,0.4425,0.9612,0.6331,0.4691,,
