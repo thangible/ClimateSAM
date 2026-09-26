@@ -220,6 +220,5 @@ bash prompter_bench/run_robust.sh; bash prompter_bench/run_robust2.sh; bash prom
 .venv/bin/python prompter_bench/speed.py                                     # parameters / FLOPs / latency
 .venv/bin/python prompter_bench/make_report.py                               # tables, this README
 .venv/bin/python prompter_bench/figures.py                                   # figures (+ single panels)
-.venv/bin/python prompter_bench/wandb_log_existing.py                        # wandb (offline): old runs + test tables
 .venv/bin/python prompter_bench/diagrams.py                                  # architecture diagrams
 ```

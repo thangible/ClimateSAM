@@ -16,5 +16,11 @@
     "BG IoU": 0.8865847913443575,
     "Mean IoU": 0.434253965933124,
     "Mean FG IoU": 0.2080885532275072
+  },
+  "args": {
+    "encoder": "infused_mlp1",
+    "seed": 0,
+    "epochs": 60,
+    "lr": 0.001
   }
 }

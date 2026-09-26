@@ -21,8 +21,7 @@
     "val_every": 2,
     "name": "cgnet_scratch_seg_s0",
     "smooth": false,
-    "exclude_fold": null,
-    "wandb": true
+    "exclude_fold": null
   },
   "val_own_TC IoU": 0.37344373078445103,
   "val_own_AR IoU": 0.40322492320197617,

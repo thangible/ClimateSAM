@@ -30,7 +30,7 @@ from common import (RESULTS, CLASSES, SegMetrics, FeatureCache, load_climatesam,
                     make_prompts, binary_to_score, score_to_prompt, to_sam_frame, seed_everything, fold_of, MIN_OBJECT_PX,
                     IMG_H, IMG_W, LOWRES)
 from build_cache import ENCODERS
-from train import Batches, class_loss, wandb_init
+from train import Batches, class_loss
 from train_decoder import TRAINABLE
 from evaluate import kind_for
 import prompters
@@ -173,7 +173,6 @@ def main():
     ap.add_argument('--lr', type=float, default=3e-4)
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--no_real', action='store_true', help='only corrupted ground-truth prompts (no out-of-fold prompts)')
-    ap.add_argument('--wandb', action='store_true')
     args = ap.parse_args()
 
     seed_everything(args.seed)
@@ -184,7 +183,6 @@ def main():
     name = f'robust_decoder_{args.mode}{"_gtonly" if args.no_real else ""}_s{args.seed}'
     out_dir = os.path.join(RESULTS, 'runs', args.encoder, name)
     os.makedirs(out_dir, exist_ok=True)
-    run = wandb_init(args, name, args.encoder, 'robust_decoder')
 
     train_cache, val_cache = FeatureCache(args.encoder, 'train'), FeatureCache(args.encoder, 'val')
     # out-of-fold generator logits for the training images, generator seed 0 for the validation images
@@ -247,8 +245,6 @@ def main():
         rows.append(row)
         if row['val_Mean FG IoU'] > best['val_Mean FG IoU']:
             best, best_state = dict(row), {k: v.clone() for k, v in dec.state_dict().items()}
-        if run:
-            run.log(row, step=epoch)
         print(f"[{name}] epoch {epoch} loss {row['train_loss']:.4f} val FG {row['val_Mean FG IoU']:.4f} "
               f"(TC {row['val_TC IoU']:.3f} AR {row['val_AR IoU']:.3f})", flush=True)
         with open(os.path.join(out_dir, 'log.csv'), 'w', newline='') as f:
@@ -261,12 +257,10 @@ def main():
     torch.save({k: v for k, v in dec.state_dict().items() if k.split('.')[0] in TRAINABLE}, os.path.join(out_dir, 'last_decoder.pth'))
     summary = {'name': name, 'mode': args.mode, 'seed': args.seed, 'real_prompts': not args.no_real,
                'trainable_params': sum(p.numel() for p in params), 'best_epoch': best['epoch'],
-               'train_time_min': (time.time() - t0) / 60, **{k: v for k, v in best.items() if k.startswith('val_')}}
+               'train_time_min': (time.time() - t0) / 60, **{k: v for k, v in best.items() if k.startswith('val_')},
+               'args': vars(args)}
     with open(os.path.join(out_dir, 'summary.json'), 'w') as f:
         json.dump(summary, f, indent=2)
-    if run:
-        run.summary.update(summary)
-        run.finish()
     print(json.dumps(summary, indent=2))
 
 

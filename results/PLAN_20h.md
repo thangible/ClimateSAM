@@ -24,7 +24,8 @@ level, error decomposition, per-image counts for the bootstrap. B3 additionally:
 ## Writing / logging (in parallel with the runs)
 
 - D  wandb: every run logged in **offline mode** (no API key on this machine) under project `climatesam-section-4.3`;
-     upload with `wandb login` then `wandb sync wandb/offline-run-*`.
+     upload with `wandb login` then `wandb sync wandb/offline-run-*`. *(Dropped afterwards: all logs live in git, see
+     the status table.)*
 - E  LaTeX: `results/latex/` — additions to the Approach (MPG architecture, training modes, evaluation protocol for the
      empty Section 3.6), Section 4.3 results, Discussion; tables `\input` from `results/tables/`, figures from
      `results/figures/*.pdf`.
@@ -47,6 +48,6 @@ level, error decomposition, per-image counts for the bootstrap. B3 additionally:
 | C1–C3 | done for all prompters | seed ensemble +0.006–0.011; calibration / post-processing / SAM refinement: no gain |
 | new | MPG + raw fields, 3 seeds | 0.375, −0.004 vs. MPG |
 | new | MPG + CG-Net ensemble | 0.389, best mask of the study |
-| D | 92 offline wandb runs (new runs + 65 earlier runs + `test_results` tables) | upload: `wandb login && wandb sync wandb/offline-run-*` |
+| D | replaced by git: every logged value is in `results/runs/*/log.csv` + `summary.json` (arguments of the robust-decoder and box-head runs recovered from their offline wandb runs); wandb removed from the code | |
 | E | `results/latex/` complete, compiles (32 pages standalone) | |
 | F | REPORT.md, README, folder READMEs, tables, figures updated | |

@@ -7,7 +7,7 @@ run() {
   name=$1; shift
   if [ -f results/runs/$ENC/$name/summary.json ]; then echo "skip $name"; return; fi
   echo "$(date +%H:%M) start $ENC/$name"
-  .venv/bin/python -u prompter_bench/train.py --encoder $ENC --name $name --wandb "$@" > results/logs/train_${ENC}_${name}.log 2>&1 || echo "FAILED $ENC/$name"
+  .venv/bin/python -u prompter_bench/train.py --encoder $ENC --name $name "$@" > results/logs/train_${ENC}_${name}.log 2>&1 || echo "FAILED $ENC/$name"
   echo "$(date +%H:%M) done $ENC/$name"
 }
 if [ "$1" = heavy ]; then

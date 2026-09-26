@@ -10,5 +10,13 @@
   "val_AR IoU": 0.4064122221508121,
   "val_BG IoU": 0.94891643601328,
   "val_Mean IoU": 0.5764048094384466,
-  "val_Mean FG IoU": 0.39014899615102994
+  "val_Mean FG IoU": 0.39014899615102994,
+  "args": {
+    "encoder": "infused_mlp1",
+    "mode": "hybrid",
+    "epochs": 25,
+    "lr": 0.0003,
+    "seed": 1,
+    "no_real": false
+  }
 }

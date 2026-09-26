@@ -7,7 +7,7 @@ run() {  # run <name> <args>
   name=$1; shift
   if [ -f results/runs/$ENC/$name/summary.json ]; then echo "skip $name"; return; fi
   echo "$(date +%H:%M) start $ENC/$name"
-  .venv/bin/python -u prompter_bench/train_robust_decoder.py --encoder $ENC --wandb "$@" > results/logs/robust_${name}.log 2>&1 || echo "FAILED $ENC/$name"
+  .venv/bin/python -u prompter_bench/train_robust_decoder.py --encoder $ENC "$@" > results/logs/robust_${name}.log 2>&1 || echo "FAILED $ENC/$name"
   echo "$(date +%H:%M) done $ENC/$name"
 }
 run robust_decoder_hybrid_s0 --mode hybrid --seed 0

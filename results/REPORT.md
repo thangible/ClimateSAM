@@ -819,7 +819,7 @@ Raw data: per-epoch logs `results/runs/<checkpoint>/<run>/log.csv`, checkpoints 
 per-image counts `results/eval/<checkpoint>/<run>.json`, all tables `results/tables/`.
 Hardware: one NVIDIA A100 80 GB.
 
-**wandb.** Runs are logged offline (no API key on the training machine) to the project `climatesam-section-4.3`: every
-run trained with `--wandb` has its own run; the earlier runs were logged afterwards from their `log.csv`
-(`prompter_bench/wandb_log_existing.py runs`, tag `logged-after-training`), and one run `test_results` holds every test
-table (`wandb_log_existing.py tables`). Upload with `wandb login` and then `wandb sync wandb/offline-run-*`.
+**Logs (no wandb).** Everything is versioned in git instead of an experiment tracker: per run
+`results/runs/<checkpoint>/<run>/log.csv` (every logged epoch: losses, learning rate, validation metrics),
+`summary.json` (all arguments, selected epoch, validation metrics, training time) and the checkpoint; test results with
+per-image counts in `results/eval/`; job output in `results/logs/`; every table in `results/tables/`.

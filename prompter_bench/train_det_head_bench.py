@@ -18,7 +18,7 @@ import torch.nn.functional as F
 from common import (ROOT, RESULTS, CLASSES, SegMetrics, ObjectMetrics, FeatureCache, load_climatesam, sam_decode,
                     union_logits, upsample, to_sam_frame, seed_everything, IMG_H, IMG_W)
 from build_cache import ENCODERS
-from train import Batches, wandb_init
+from train import Batches
 from train_robust_decoder import components
 import prompters
 sys.path.append(os.path.join(ROOT, 'train_script', 'official'))
@@ -74,7 +74,6 @@ def main():
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--epochs', type=int, default=60)
     ap.add_argument('--lr', type=float, default=1e-3)
-    ap.add_argument('--wandb', action='store_true')
     args = ap.parse_args()
     seed_everything(args.seed)
     device = torch.device('cuda')
@@ -83,7 +82,6 @@ def main():
     name = f'det_head_s{args.seed}'
     out_dir = os.path.join(RESULTS, 'runs', args.encoder, name)
     os.makedirs(out_dir, exist_ok=True)
-    run = wandb_init(args, name, args.encoder, 'det_head')
 
     train = Batches(FeatureCache(args.encoder, 'train'), [0], device)
     val = Batches(FeatureCache(args.encoder, 'val'), [0], device)
@@ -118,8 +116,6 @@ def main():
                 best = dict(row)
                 torch.save({'state_dict': head.state_dict()}, os.path.join(out_dir, 'best.pth'))
         rows.append(row)
-        if run:
-            run.log(row, step=epoch)
         print(f"[{name}] epoch {epoch} loss {row['train_loss']:.4f}" + (f" val FG {row['val_Mean FG IoU']:.4f}" if 'val_Mean FG IoU' in row else ''), flush=True)
         keys = list(dict.fromkeys(k for r in rows for k in r))
         with open(os.path.join(out_dir, 'log.csv'), 'w', newline='') as f:
@@ -139,12 +135,9 @@ def main():
         json.dump(res, f)
     summary = {'name': name, 'seed': args.seed, 'trainable_params': sum(p.numel() for p in head.parameters()),
                'best_epoch': best['epoch'], 'train_time_min': (time.time() - t0) / 60, 'threshold': thr,
-               **{k: v for k, v in best.items() if k.startswith('val_')}, 'test_sam_bbox': seg.compute()}
+               **{k: v for k, v in best.items() if k.startswith('val_')}, 'test_sam_bbox': seg.compute(), 'args': vars(args)}
     with open(os.path.join(out_dir, 'summary.json'), 'w') as f:
         json.dump(summary, f, indent=2)
-    if run:
-        run.summary.update({k: v for k, v in summary.items() if not isinstance(v, dict)})
-        run.finish()
     print(json.dumps(summary, indent=2))
 
 

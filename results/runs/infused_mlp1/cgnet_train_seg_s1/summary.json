@@ -21,8 +21,7 @@
     "val_every": 2,
     "name": "cgnet_train_seg_s1",
     "smooth": false,
-    "exclude_fold": null,
-    "wandb": true
+    "exclude_fold": null
   },
   "val_own_TC IoU": 0.41047496768708214,
   "val_own_AR IoU": 0.48090250896735787,

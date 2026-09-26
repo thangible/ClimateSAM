@@ -21,8 +21,7 @@
     "val_every": 2,
     "name": "mpg_fields_seg_s1",
     "smooth": false,
-    "exclude_fold": null,
-    "wandb": true
+    "exclude_fold": null
   },
   "val_own_TC IoU": 0.36119026073781013,
   "val_own_AR IoU": 0.4049038147841178,

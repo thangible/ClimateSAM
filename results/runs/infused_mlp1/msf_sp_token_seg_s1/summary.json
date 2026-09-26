@@ -21,8 +21,7 @@
     "val_every": 2,
     "name": "msf_sp_token_seg_s1",
     "smooth": false,
-    "exclude_fold": null,
-    "wandb": true
+    "exclude_fold": null
   },
   "val_own_TC IoU": 0.35051038213226315,
   "val_own_AR IoU": 0.3990096415864015,

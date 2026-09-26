@@ -28,17 +28,6 @@ from loss_function import calculate_tversky_loss, calculate_focal_loss
 from model.prompt.cgnet import jaccard_loss
 import prompters
 
-WANDB_PROJECT = 'climatesam-section-4.3'
-
-
-def wandb_init(args, name, encoder, kind):
-    """Offline wandb run (no API key on this machine): upload later with `wandb sync wandb/offline-run-*`."""
-    if not getattr(args, 'wandb', False):
-        return None
-    import wandb
-    os.environ.setdefault('WANDB_MODE', 'offline')
-    return wandb.init(project=WANDB_PROJECT, name=f'{encoder}/{name}', group=kind, config=vars(args), dir=RESULTS.rsplit('/results', 1)[0],
-                      reinit=True, mode='offline')
 
 LOSS = {  # Table 4.4
     'TC': dict(t_alpha=0.3, t_beta=0.7, f_alpha=0.95, f_gamma=5.0),
@@ -238,7 +227,6 @@ def main():
     ap.add_argument('--name', default=None)
     ap.add_argument('--smooth', action='store_true', help='Gaussian label smoothing of the targets (Section 3.5)')
     ap.add_argument('--exclude_fold', type=int, default=None, help='leave this fold (of 5) out of the train split')
-    ap.add_argument('--wandb', action='store_true', help='log to wandb (offline mode)')
     args = ap.parse_args()
     global USE_SMOOTH
     USE_SMOOTH = args.smooth
@@ -266,7 +254,6 @@ def main():
     with_cgnet = prompters.needs_fields(args.arch)
     train = Batches(train_cache, layers, device, with_cgnet)
     val = Batches(FeatureCache(args.encoder, 'val'), layers, device, with_cgnet)
-    run = wandb_init(args, name, args.encoder, args.arch)
     optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=args.lr, weight_decay=1e-4)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=args.lr * 0.01)
     select = 'val_sam_Mean FG IoU' if args.mode == 'sam' else 'val_own_Mean FG IoU'
@@ -286,8 +273,6 @@ def main():
                 torch.save({'state_dict': model.state_dict(), 'arch': args.arch, 'mode': args.mode, 'encoder': args.encoder,
                             'epoch': epoch, 'val': best}, os.path.join(out_dir, 'best.pth'))
         rows.append(row)
-        if run:
-            run.log(row, step=epoch)
         keys = sorted({k for r in rows for k in r}, key=lambda k: (k != 'epoch', k))
         with open(log_path, 'w', newline='') as f:
             w = csv.DictWriter(f, fieldnames=keys)
@@ -301,9 +286,6 @@ def main():
                'args': vars(args), **{k: v for k, v in best.items() if k.startswith('val_')}}
     with open(os.path.join(out_dir, 'summary.json'), 'w') as f:
         json.dump(summary, f, indent=2)
-    if run:
-        run.summary.update({k: v for k, v in summary.items() if not isinstance(v, dict)})
-        run.finish()
     print(json.dumps(summary, indent=2))
 
 
